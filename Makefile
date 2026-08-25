@@ -1,5 +1,6 @@
 .PHONY: help venv install bootstrap run dev test links prices snapshot monthly \
-        docker docker-app docker-logs docker-stop docker-shell docker-prices bundle clean
+        docker docker-app docker-logs docker-stop docker-shell docker-prices \
+        docker-links bundle clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -46,11 +47,19 @@ docker-logs:     ## Follow container logs
 docker-stop:     ## Stop the containers
 	docker compose down
 
+# `docker compose exec` bypasses the entrypoint, so it would land as root and
+# leave root-owned WAL files next to the database. Pass the same uid the server
+# runs as.
+DOCKER_EXEC = docker compose exec --user $$(id -u):$$(id -g)
+
 docker-shell:    ## Shell inside the running container
-	docker compose exec app bash
+	$(DOCKER_EXEC) app bash
 
 docker-prices:   ## Run a price refresh inside the container
-	docker compose exec app flask prices
+	$(DOCKER_EXEC) app flask prices
+
+docker-links:    ## Resolve Cardmarket links inside the container
+	$(DOCKER_EXEC) app flask resolve-links
 
 bundle:          ## Produce dist/*.bundle for handover
 	./scripts/make-bundle.sh

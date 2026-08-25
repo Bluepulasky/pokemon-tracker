@@ -52,6 +52,10 @@ services:
     command: ["scheduler"]
     depends_on:
       - app
+    # Inherits the image's HEALTHCHECK, which probes the web port. This container
+    # serves nothing, so without this it reports unhealthy forever.
+    healthcheck:
+      disable: true
     volumes:
       - ${DATA_PATH:-./data}:/srv/data
       - ${MEDIA_PATH:-./media}:/srv/media

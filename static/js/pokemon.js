@@ -153,6 +153,12 @@ async function setDetail(r) {
   const sort = r.params.get('sort') || 'number';
   const filter = r.params.get('filter') || 'all';
 
+  const counts = {
+    all: s.slots.length,
+    owned: s.slots.filter((x) => x.owned).length,
+    missing: s.slots.filter((x) => !x.owned).length,
+  };
+
   let slots = [...s.slots];
   if (filter === 'owned') slots = slots.filter((x) => x.owned);
   if (filter === 'missing') slots = slots.filter((x) => !x.owned);
@@ -165,11 +171,11 @@ async function setDetail(r) {
     ${progressBar(p.owned, p.target)}
 
     <div class="toolbar">
-      <select id="f-filter">
-        <option value="all"${filter === 'all' ? ' selected' : ''}>Todas</option>
-        <option value="owned"${filter === 'owned' ? ' selected' : ''}>Solo poseídas</option>
-        <option value="missing"${filter === 'missing' ? ' selected' : ''}>Solo faltantes</option>
-      </select>
+      <div class="chips seg" id="f-filter">
+        ${[['all', 'Todas'], ['owned', 'Poseídas'], ['missing', 'Faltantes']]
+          .map(([k, label]) => `<span class="chip${filter === k ? ' on' : ''}"
+             data-filter="${k}">${label}<b>${counts[k]}</b></span>`).join('')}
+      </div>
       <select id="f-sort">
         <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
         <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
@@ -181,10 +187,13 @@ async function setDetail(r) {
 
     <div class="card-grid">${slots.map(slotHtml).join('')}</div>`;
 
-  const nav = () => { location.hash = `#/set/${r.id}?sort=${
-    view().querySelector('#f-sort').value}&filter=${view().querySelector('#f-filter').value}`; };
-  view().querySelector('#f-sort').onchange = nav;
-  view().querySelector('#f-filter').onchange = nav;
+  const nav = (f) => {
+    location.hash = `#/set/${r.id}?sort=${view().querySelector('#f-sort').value}&filter=${f}`;
+  };
+  view().querySelector('#f-sort').onchange = () => nav(filter);
+  view().querySelectorAll('#f-filter .chip').forEach((chip) => {
+    chip.onclick = () => nav(chip.dataset.filter);
+  });
   wireCardClicks();
 }
 
@@ -198,9 +207,12 @@ const sorter = (key) => ({
 
 function slotHtml(slot) {
   const art = cardArt(slot);
+  // Missing cards show their art too, dimmed and hatched by CSS, so the set
+  // reads as a complete checklist. Catalog art is served from local disk, so
+  // this costs no third-party requests.
   return `<div class="card${slot.owned ? '' : ' missing'}" data-card="${esc(slot.card_id)}">
     <div class="art">
-      ${slot.owned && art
+      ${art
         ? `<img src="${esc(art)}" alt="${esc(slot.label)}" loading="lazy">`
         : placeholder(slot.number, slot.official_set_id)}
       ${slot.owned ? '<span class="badge own">✓</span>' : ''}

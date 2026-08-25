@@ -58,6 +58,16 @@ database and photos end up owned by root on the host.
 Two containers come up: `app` (the web UI) and `scheduler` (the monthly price refresh).
 Skip the scheduler with `make docker-app` and use host cron instead if you prefer.
 
+**Running a command inside the container** — use the make targets, or pass the user
+explicitly. `docker compose exec` bypasses the entrypoint and would otherwise run as
+root, leaving root-owned files beside the database:
+
+```bash
+make docker-prices                                        # correct
+docker compose exec --user $(id -u):$(id -g) app flask prices   # same thing
+docker compose run --rm app flask prices                  # also fine (uses the entrypoint)
+```
+
 ## What it does
 
 | Feature | Where |
