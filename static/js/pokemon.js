@@ -359,8 +359,10 @@ function itemHtml(i) {
      In "All" mode an unowned slot has no physical copy, so it renders as the
      grey hatched placeholder rather than art the user does not have. */
   const owned = i.owned !== false;
-  const primary = i.photos?.find((p) => p.is_primary) || i.photos?.[0];
-  const src = owned ? (primary ? photoUrl(primary) : cardArt(i)) : cardArt(i);
+  // display_photo is the best-conditioned copy of this card across every row,
+  // so a Damaged scan never stands in for a Near Mint one you also own.
+  const shown = i.display_photo || i.photos?.find((p) => p.is_primary) || i.photos?.[0];
+  const src = owned ? (shown ? photoUrl(shown) : cardArt(i)) : cardArt(i);
   const v = i.value || {};
   return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}">
     <div class="art">

@@ -157,6 +157,17 @@ is the best structural signal available and is still only a starting point; grou
 cards in a slot is how you state the truth.
 
 Rebuild with `flask rebuild-printings` (also run by `import-catalog` and `bootstrap`).
+## Photos
+
+Add them from the card modal, per variant. On a phone the picker opens the **photo
+library**, not the camera — most card photos already exist in the gallery, and jumping
+straight to the camera hides them behind an extra tap.
+
+In the grid a card is represented by the photo of its **best-conditioned** copy. If you
+own a Near Mint and a Heavily Played Ninetales, the grid shows the Near Mint one
+regardless of which row is being rendered. Without a photo the order is catalog art, then
+placeholder.
+
 ## The Cartas view
 
 Two modes over the same filter bar:

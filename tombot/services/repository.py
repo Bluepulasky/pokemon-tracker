@@ -873,6 +873,36 @@ class PokemonRepo:
             (item_id,),
         )
 
+    def best_photos_for_cards(self, card_ids: Sequence[str]) -> dict[str, dict]:
+        """Best photo to represent each card in a grid.
+
+        A card owned in several conditions should show the nicest copy, not
+        whichever row happens to sort first — seeing a Damaged scan when a Near
+        Mint one exists misrepresents the collection. Ranked by condition, then
+        by the primary flag within that condition.
+
+        One query for the whole page rather than one per card.
+        """
+        if not card_ids:
+            return {}
+        ids = list(dict.fromkeys(card_ids))
+        rows = self._all(
+            f"""SELECT i.card_id, i.condition, p.*
+                FROM collection_photos p
+                JOIN collection_items i ON i.id = p.item_id
+                WHERE i.card_id IN ({",".join("?" * len(ids))})
+                ORDER BY i.card_id,
+                         CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1
+                                          WHEN 'MP' THEN 2 WHEN 'HP' THEN 3
+                                          ELSE 4 END,
+                         p.is_primary DESC, p.position""",
+            ids,
+        )
+        best: dict[str, dict] = {}
+        for r in rows:
+            best.setdefault(r["card_id"], r)      # ORDER BY put the winner first
+        return best
+
     def get_photo(self, photo_id: int) -> dict | None:
         return self._one("SELECT * FROM collection_photos WHERE id=?", (photo_id,))
 
