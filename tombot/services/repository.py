@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -36,29 +37,62 @@ class PokemonRepo:
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._local = threading.local()
 
     # ------------------------------------------------------------------ conn
     def connect(self) -> sqlite3.Connection:
+        """This thread's connection, opened once and reused.
+
+        Opening a fresh connection per query cost 362 connections for a single
+        collection page, each re-running the four PRAGMAs below. `journal_mode =
+        WAL` needs a brief exclusive lock, so with a writer active (a catalog
+        import, a price run) those all queued on the lock and the app stalled.
+        One connection per thread removes that contention entirely.
+        """
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            return conn
         conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        # SQLite defaults foreign_keys OFF; without this every FK is decorative.
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")      # price job must not block reads
-        conn.execute("PRAGMA busy_timeout = 5000")
-        conn.execute("PRAGMA synchronous = NORMAL")
+        try:
+            conn.row_factory = sqlite3.Row
+            # SQLite defaults foreign_keys OFF; without this every FK is decorative.
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")  # writers must not block readers
+            conn.execute("PRAGMA busy_timeout = 5000")
+            conn.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            conn.close()        # a half-configured connection must not leak
+            raise
+        self._local.conn = conn
         return conn
+
+    def close(self) -> None:
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     @contextmanager
     def tx(self):
+        """Transaction scope, re-entrant.
+
+        Several repo methods call others (get_collection_item -> get_photos), so
+        nested blocks must join the outer transaction rather than commit half of
+        it and leave the rest uncommitted.
+        """
         conn = self.connect()
+        depth = getattr(self._local, "depth", 0)
+        self._local.depth = depth + 1
         try:
             yield conn
-            conn.commit()
+            if depth == 0:
+                conn.commit()
         except Exception:
-            conn.rollback()
+            if depth == 0:
+                conn.rollback()
             raise
         finally:
-            conn.close()
+            self._local.depth = depth
 
     def _all(self, sql: str, params: Sequence = ()) -> list[dict]:
         with self.tx() as c:
@@ -166,6 +200,48 @@ class PokemonRepo:
     def set_card_image_local(self, card_id: str, rel_path: str) -> None:
         with self.tx() as c:
             c.execute("UPDATE cards SET image_local=? WHERE id=?", (rel_path, card_id))
+
+    def set_card_market_url(self, card_id: str, url: str) -> None:
+        """Store the resolved Cardmarket product URL alongside the other external ids."""
+        with self.tx() as c:
+            c.execute(
+                "UPDATE cards SET external_ids_json = "
+                "json_set(COALESCE(external_ids_json, '{}'), '$.cardmarket_direct', ?), "
+                "updated_at = datetime('now') WHERE id = ?",
+                (url, card_id),
+            )
+
+    def set_card_market_urls(self, pairs: list[tuple[str, str]]) -> int:
+        """Store many resolved URLs in ONE transaction.
+
+        The per-card version below is fine for a handful, but a full catalog run
+        is 1100+ writes: taken one transaction at a time it holds the write lock
+        almost continuously and starves concurrent reads, which makes the web UI
+        hang while an import is running.
+        """
+        if not pairs:
+            return 0
+        with self.tx() as c:
+            c.executemany(
+                "UPDATE cards SET external_ids_json = "
+                "json_set(COALESCE(external_ids_json, '{}'), '$.cardmarket_direct', ?), "
+                "updated_at = datetime('now') WHERE id = ?",
+                [(url, cid) for cid, url in pairs],
+            )
+        return len(pairs)
+
+    def cards_missing_market_url(self, limit: int = 5000) -> list[dict]:
+        return self._all(
+            "SELECT id FROM cards "
+            "WHERE json_extract(external_ids_json, '$.cardmarket_direct') IS NULL "
+            "LIMIT ?", (limit,)
+        )
+
+    def count_market_urls(self) -> int:
+        return self._scalar(
+            "SELECT COUNT(*) FROM cards "
+            "WHERE json_extract(external_ids_json, '$.cardmarket_direct') IS NOT NULL"
+        ) or 0
 
     def cards_missing_local_image(self, limit: int = 5000) -> list[dict]:
         return self._all(
@@ -375,7 +451,7 @@ class PokemonRepo:
     def get_collection_item(self, item_id: int) -> dict | None:
         row = self._one(
             "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
-            "c.image_small_url, c.image_local "
+            "c.image_small_url, c.image_local, c.external_ids_json "
             "FROM collection_items i JOIN cards c ON c.id=i.card_id WHERE i.id=?",
             (item_id,),
         )
@@ -397,9 +473,12 @@ class PokemonRepo:
 
     def items_by_card(self, card_id: str) -> list[dict]:
         rows = self._all(
-            "SELECT * FROM collection_items WHERE card_id=? "
-            "ORDER BY CASE condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
-            "WHEN 'HP' THEN 3 ELSE 4 END, variant",
+            "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
+            "c.image_small_url, c.image_local, c.external_ids_json "
+            "FROM collection_items i JOIN cards c ON c.id = i.card_id "
+            "WHERE i.card_id=? "
+            "ORDER BY CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
+            "WHEN 'HP' THEN 3 ELSE 4 END, i.variant",
             (card_id,),
         )
         for r in rows:
@@ -441,7 +520,8 @@ class PokemonRepo:
         ) or 0
         rows = self._all(
             f"""SELECT i.*, c.name, c.number, c.rarity, c.official_set_id,
-                       c.image_small_url, c.image_local, os.name AS set_name
+                       c.image_small_url, c.image_local, c.external_ids_json,
+                       os.name AS set_name
                 FROM collection_items i
                 JOIN cards c ON c.id = i.card_id
                 JOIN official_sets os ON os.id = c.official_set_id

@@ -276,6 +276,51 @@ Missing from §23 and needed: `GET /api/collection/<id>`, slot/set-membership ed
 pagination (`page`, `page_size`) on every list endpoint, and a documented error envelope
 (`{"error": {"code", "message"}}`). Full surface in §6.
 
+### 2.17 🟠 Cardmarket links need resolving, not constructing
+
+Added after the fact — the spec asks (§10/§14) to associate each card with external
+price identifiers but never says what a user-facing marketplace link looks like.
+
+`cardmarket.url` in the pokemontcg.io payload is a **prices.pokemontcg.io redirector**,
+not a Cardmarket address. The real product slug is Cardmarket-internal and not derivable
+from the card data:
+
+```
+base1-4  ->  .../Singles/Base-Set/Charizard-V2-BS4
+gym1-2   ->  .../Singles/Gym-Heroes/Brocks-Rhydon-GH2
+ex7-95   ->  .../Singles/EX-Team-Rocket-Returns/R-Energy-TRR95
+```
+
+That `V2` disambiguator is Cardmarket's own versioning, so constructing the URL produces
+broken links. **Decision:** read the Location header once per card (`flask resolve-links`)
+and store it in `external_ids_json.cardmarket_direct`. Only the redirector is contacted —
+the redirect is never followed into Cardmarket, which blocks automated requests. The
+redirector stays as a live fallback so a card always has a working link.
+
+Verified on the live site: `minCondition=2` selects "Near Mint" in the product page filter
+panel. `language=<n>` was accepted in the query string but checked no box, so language
+filtering is deliberately not used — an over-filtered page can come back empty and read as
+a broken link.
+
+### 2.18 🔴 A connection per query made the app collapse under a concurrent writer
+
+Found by running the resolver against the live UI. `PokemonRepo` opened a fresh SQLite
+connection for **every** query — 362 of them to render one collection page — each
+re-running `PRAGMA journal_mode = WAL`, which needs a brief exclusive lock. With any
+writer active (a catalog import, a price refresh, the link resolver) every one of those
+queued on the lock, requests piled up, and the UI hung. Connections were also leaked when
+a PRAGMA failed, because `connect()` ran outside the `try` in `tx()`.
+
+**Decision:** one connection per thread, opened once and reused, with re-entrant
+transactions so nested repo calls join the outer transaction instead of committing half
+of it. Bulk writes commit in batches rather than per row.
+
+Measured: 362 connections -> 1 per page; collection endpoint 0.19s -> 0.012s; 40
+concurrent requests all clean where the app previously stopped responding entirely.
+
+Also switched the default `make run` to **gunicorn** — the same server the container
+already used. The Flask dev server is single-process and was masking this.
+
 ### 2.16 Smaller notes
 
 - No `created_at`/`updated_at` anywhere in §24 → added everywhere.

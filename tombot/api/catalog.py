@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from . import cfg, page_response, paginate_args, repo, svc
 from .. import ApiError
+from ..services.market import attach, market_url
 
 bp = Blueprint("catalog", __name__, url_prefix="/api")
 
@@ -38,7 +39,7 @@ def list_cards():
         rarity=request.args.get("rarity", ""),
         page=page, page_size=size,
     )
-    return page_response(rows, total, page, size)
+    return page_response(attach(rows, locale=cfg().CARDMARKET_LOCALE), total, page, size)
 
 
 @bp.get("/cards/<card_id>")
@@ -48,6 +49,7 @@ def get_card(card_id):
         raise ApiError("carta no encontrada", "not_found", 404)
     card["items"] = repo().items_by_card(card_id)
     card["prices"] = repo().get_prices_for_card(card_id)
+    card["market_url"] = market_url(card, locale=cfg().CARDMARKET_LOCALE)
     return jsonify(card)
 
 
@@ -73,4 +75,6 @@ def import_catalog():
     result = svc("importer").import_sets(set_ids)
     if body.get("cache_images", True):
         result["images"] = svc("importer").cache_images()
+    if body.get("resolve_links", True):
+        result["market_links"] = svc("importer").resolve_market_links()
     return jsonify(result)

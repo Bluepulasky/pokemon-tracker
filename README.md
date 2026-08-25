@@ -91,6 +91,11 @@ Multipliers live in the `price_modifiers` table and are editable. Cards with no 
 data show `—`, never `€0`, so a low total reads as missing data rather than a cheap
 collection.
 
+Every card links out to its Cardmarket product page from the modal. Those URLs are
+resolved once (`flask resolve-links`) and stored, because the slug is Cardmarket-internal
+and not derivable — `Charizard-V2-BS4`, `Brocks-Rhydon-GH2`. Set `CARDMARKET_LOCALE`
+(default `es`) to pick the site language.
+
 Refresh monthly — that matches how often upstream updates Cardmarket data:
 
 ```cron
@@ -103,6 +108,7 @@ Refresh monthly — that matches how often upstream updates Cardmarket data:
 flask init-db                        # schema + default modifiers
 flask import-catalog [--sets a,b]    # catalog import, resumable
 flask seed-sets [--rebuild]          # personal sets from seed_sets.py
+flask resolve-links                  # Cardmarket product URLs, resumable
 flask prices [--all]                 # refresh prices for owned cards
 flask snapshot                       # collection snapshot for history charts
 flask monthly                        # prices + snapshot (cron target)

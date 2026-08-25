@@ -7,6 +7,7 @@ collection_items or photos.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -37,6 +38,51 @@ class CatalogImporter:
                 result["failed"].append({"set": sid, "error": str(e)})
         self.repo.set_meta("last_catalog_import", str(result["cards"]))
         return result
+
+    def resolve_market_links(self, limit: int = 5000, workers: int = 8,
+                             batch: int = 100, progress=None) -> dict:
+        """Resolve and store each card's Cardmarket product URL.
+
+        Only prices.pokemontcg.io is contacted — the redirect is read, never
+        followed into Cardmarket. Resumable: already-resolved cards are skipped,
+        so a partial run just needs re-running.
+
+        Writes are committed in batches. Committing per card holds the SQLite
+        write lock almost continuously across a 1100-card run and makes
+        concurrent reads (i.e. the web UI) block until they time out.
+        """
+        todo = self.repo.cards_missing_market_url(limit)
+        if not todo:
+            return {"resolved": 0, "failed": 0,
+                    "total_with_links": self.repo.count_market_urls()}
+
+        ok = fail = 0
+        pending: list[tuple[str, str]] = []
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(self.source.resolve_market_url, r["id"]): r["id"]
+                       for r in todo}
+            for i, fut in enumerate(as_completed(futures), 1):
+                card_id = futures[fut]
+                try:
+                    url = fut.result()
+                except Exception as e:
+                    log.debug("resolve failed for %s: %s", card_id, e)
+                    url = None
+                if url:
+                    pending.append((card_id, url))
+                    ok += 1
+                else:
+                    fail += 1
+                if len(pending) >= batch:
+                    self.repo.set_card_market_urls(pending)
+                    pending.clear()
+                    if progress:
+                        progress(i, len(todo))
+
+        self.repo.set_card_market_urls(pending)
+        return {"resolved": ok, "failed": fail,
+                "total_with_links": self.repo.count_market_urls()}
 
     def cache_images(self, limit: int = 5000) -> dict:
         """Download catalog thumbnails locally so the grid does not depend on a

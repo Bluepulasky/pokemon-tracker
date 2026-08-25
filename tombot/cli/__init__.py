@@ -49,6 +49,27 @@ def import_catalog(set_ids, images):
         click.secho("re-run to retry the failed sets (import is idempotent)", fg="yellow")
 
 
+@click.command("resolve-links")
+@click.option("--limit", type=int, default=5000)
+@with_appcontext
+def resolve_links(limit):
+    """Resolve each card's Cardmarket product URL. Resumable; safe to re-run."""
+    with click.progressbar(length=100, label="resolving") as bar:
+        state = {"pct": 0}
+
+        def progress(done, total):
+            pct = int(100 * done / total)
+            bar.update(pct - state["pct"])
+            state["pct"] = pct
+
+        r = current_app.extensions["importer"].resolve_market_links(
+            limit, progress=progress)
+    click.echo(f"resolved {r['resolved']}, failed {r['failed']}, "
+               f"{r['total_with_links']} cards now have a Cardmarket link")
+    if r["failed"]:
+        click.secho("re-run to retry the failures", fg="yellow")
+
+
 @click.command("seed-sets")
 @click.option("--rebuild/--no-rebuild", default=True, help="Materialise slots from rules")
 @with_appcontext
@@ -123,9 +144,11 @@ def bootstrap(ctx):
     ctx.invoke(init_db)
     ctx.invoke(import_catalog, set_ids="", images=True)
     ctx.invoke(seed_sets, rebuild=True)
+    ctx.invoke(resolve_links, limit=5000)
     click.secho("bootstrap complete", fg="green")
 
 
 def register(app):
-    for cmd in (init_db, import_catalog, seed_sets, prices, snapshot, monthly, bootstrap):
+    for cmd in (init_db, import_catalog, seed_sets, resolve_links,
+                prices, snapshot, monthly, bootstrap):
         app.cli.add_command(cmd)

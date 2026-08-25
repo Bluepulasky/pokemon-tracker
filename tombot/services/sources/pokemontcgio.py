@@ -113,6 +113,32 @@ class PokemonTcgIoSource:
             "source": "pokemontcgio",
         }
 
+    # ----------------------------------------------------------- market links
+    def resolve_market_url(self, card_id: str) -> str | None:
+        """Resolve the per-card Cardmarket product URL.
+
+        `cardmarket.url` in the payload is a prices.pokemontcg.io redirector, not
+        a Cardmarket address. The real slug is Cardmarket-internal and not
+        derivable — 'Charizard-V2-BS4', 'Brocks-Rhydon-GH2' — so it has to be
+        read once from the Location header and stored.
+
+        Only the redirector is contacted; the redirect is never followed into
+        Cardmarket, which blocks automated requests anyway.
+        """
+        url = f"https://prices.pokemontcg.io/cardmarket/{card_id}"
+        for attempt in range(3):
+            try:
+                r = self.session.get(url, timeout=self.timeout,
+                                     allow_redirects=False, stream=True)
+                loc = r.headers.get("Location")
+                r.close()
+                if loc and "cardmarket.com" in loc:
+                    return loc.split("?", 1)[0]      # drop the utm_* tracking params
+            except requests.RequestException as e:
+                log.debug("market url resolve failed for %s: %s", card_id, e)
+            time.sleep(1 + attempt)
+        return None
+
     # ---------------------------------------------------------------- prices
     def fetch_prices(self, card_ids: list[str]) -> dict[str, dict]:
         """Batched by id. 800 owned cards is ~4 calls, not 800 (spec §11/§30)."""

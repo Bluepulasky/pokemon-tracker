@@ -52,6 +52,8 @@ export async function openCard(cardId) {
               ? `<span class="tag" style="color:var(--good)">En colección · ${items.reduce((a, i) => a + i.quantity, 0)} física(s)</span>`
               : '<span class="tag">No poseída</span>'}
           </div>
+          ${card.market_url ? `<a class="mkm" href="${esc(card.market_url)}"
+             target="_blank" rel="noopener noreferrer">Ver en Cardmarket ↗</a>` : ''}
         </div>
         <button class="close" aria-label="Cerrar">&times;</button>
       </div>
@@ -89,6 +91,8 @@ function variantCard(item) {
       <small>${v.basis === 'unpriced' ? 'sin precio'
                 : v.basis === 'variant_fallback' ? 'aprox.'
                 : `${eur(v.unit)} × ${item.quantity}`}</small></div>
+    ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
+       target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
     <div class="btn-row">
       <button class="btn ghost act-photo">Foto</button>
       <button class="btn ghost act-edit">Editar</button>

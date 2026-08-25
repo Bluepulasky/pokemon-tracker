@@ -1,4 +1,4 @@
-.PHONY: help venv install bootstrap run test prices snapshot monthly docker bundle clean
+.PHONY: help venv install bootstrap run dev test links prices snapshot monthly docker bundle clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -12,11 +12,17 @@ install: venv    ## Install dependencies
 bootstrap:       ## init-db + import catalog + seed personal sets (first run)
 	FLASK_APP=app.py .venv/bin/flask bootstrap
 
-run:             ## Start the dev server on :8080
-	FLASK_APP=app.py .venv/bin/flask run --port 8080
+run:             ## Serve on :8080 (gunicorn — same server the container uses)
+	.venv/bin/gunicorn -w 2 --threads 4 -b 127.0.0.1:8080 --timeout 120 app:app
+
+dev:             ## Flask dev server with auto-reload (single-process; use for debugging only)
+	FLASK_APP=app.py FLASK_DEBUG=1 .venv/bin/flask run --port 8080
 
 test:            ## Run the test suite
 	.venv/bin/python -m pytest tests/ -q
+
+links:           ## Resolve Cardmarket product URLs (resumable)
+	FLASK_APP=app.py .venv/bin/flask resolve-links
 
 prices:          ## Refresh prices for cards in the collection
 	FLASK_APP=app.py .venv/bin/flask prices

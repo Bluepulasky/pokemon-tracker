@@ -4,6 +4,7 @@ from . import cfg, paginate_args, repo, svc
 from .. import ApiError
 from ..config import CONDITIONS, LANGUAGES, VARIANTS
 from ..services.images import ImageError, delete_files, process_upload
+from ..services.market import market_url
 
 bp = Blueprint("collection", __name__, url_prefix="/api/collection")
 
@@ -22,8 +23,11 @@ def _validate(body: dict) -> None:
 def _priced(rows):
     pricing = svc("pricing")
     mods = repo().get_modifiers()
+    locale = cfg().CARDMARKET_LOCALE
     for r in rows:
         r["value"] = pricing.estimate_item(r, mods)
+        # The row is a join over cards, so it already carries external_ids_json.
+        r["market_url"] = market_url(r, locale=locale)
     return rows
 
 

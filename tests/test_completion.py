@@ -128,3 +128,44 @@ def test_rebuild_preserves_manual_slots(repo):
     manual = [s for s in slots if s["source"] == "manual"]
     assert len(manual) == 1 and manual[0]["label"] == "Manual"
     assert len(slots) == 2, "rule rebuild must skip cards already held by a manual slot"
+
+
+def test_market_url_prefers_resolved_direct_link(repo):
+    """PLAN.md §2.17: the payload's cardmarket.url is a redirector, not a
+    Cardmarket address. Once resolved, the direct URL must win."""
+    from tombot.services.market import market_url
+
+    card = repo.get_card("base1-4")
+    assert market_url(card) == "https://prices.pokemontcg.io/cardmarket/base1-4", \
+        "unresolved cards must still yield a working link"
+
+    repo.set_card_market_url(
+        "base1-4",
+        "https://cardmarket.com/en/Pokemon/Products/Singles/Base-Set/Charizard-V2-BS4")
+    card = repo.get_card("base1-4")
+    url = market_url(card, locale="es")
+    assert url == ("https://cardmarket.com/es/Pokemon/Products/Singles/"
+                   "Base-Set/Charizard-V2-BS4")
+
+
+def test_market_urls_written_in_one_transaction(repo):
+    """Committing per card starves concurrent readers over a 1100-card run."""
+    pairs = [("base1-4", "https://cardmarket.com/en/a"),
+             ("base1-2", "https://cardmarket.com/en/b")]
+    assert repo.set_card_market_urls(pairs) == 2
+    assert repo.count_market_urls() == 2
+
+
+def test_nested_tx_does_not_commit_early(repo):
+    """get_collection_item calls get_photos; a nested block must join the outer
+    transaction, not commit half of it."""
+    import sqlite3
+    try:
+        with repo.tx() as c:
+            c.execute("INSERT INTO collection_items(card_id, quantity) VALUES ('base1-4', 1)")
+            with repo.tx() as inner:
+                inner.execute("SELECT 1")          # nested read must not commit
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+    assert repo.collection_totals()["item_rows"] == 0, "outer rollback must undo everything"

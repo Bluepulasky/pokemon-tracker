@@ -47,6 +47,9 @@ class Config:
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine
 
+    # Cardmarket locale for outbound product links (en/es/fr/it/de).
+    CARDMARKET_LOCALE = os.environ.get("CARDMARKET_LOCALE", "es")
+
     # averageSellPrice is steadier than trendPrice, which can be 3x off on thin markets.
     PRICE_BASIS = os.environ.get("PRICE_BASIS", "averageSellPrice")
     PRICE_STALE_DAYS = int(os.environ.get("PRICE_STALE_DAYS", "25"))
