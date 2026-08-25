@@ -169,3 +169,32 @@ def test_nested_tx_does_not_commit_early(repo):
     except RuntimeError:
         pass
     assert repo.collection_totals()["item_rows"] == 0, "outer rollback must undo everything"
+
+
+def test_partial_catalog_is_not_treated_as_complete(repo):
+    """A half-imported catalog must be detected as incomplete.
+
+    The original guard asked "are there any cards at all", so an import that
+    salvaged one set out of twelve — routine when the upstream is throwing
+    500s — permanently suppressed every later retry, and the install could
+    never repair itself.
+    """
+    # base1 is imported but short: the fixture loaded 3 cards, the set has 102.
+    gaps = repo.catalog_gaps(["base1"])
+    assert len(gaps) == 1
+    assert gaps[0]["set"] == "base1"
+    assert gaps[0]["why"] == "incomplete"
+    assert gaps[0]["have"] == 3 and gaps[0]["expected"] == 102
+
+
+def test_never_imported_set_is_a_gap(repo):
+    gaps = repo.catalog_gaps(["base1", "gym1"])
+    assert {g["set"]: g["why"] for g in gaps}["gym1"] == "never imported"
+
+
+def test_complete_set_is_not_a_gap(repo):
+    """Guard against the opposite failure: re-importing a complete catalog on
+    every start would hammer a flaky upstream for no reason."""
+    with repo.tx() as c:
+        c.execute("UPDATE official_sets SET total = 3 WHERE id = 'base1'")
+    assert repo.catalog_gaps(["base1"]) == []

@@ -38,33 +38,23 @@ run_as_app() {                      # same, but returns instead of exec'ing
 }
 
 # --- first run -------------------------------------------------------------
+# `flask bootstrap` is itself idempotent and decides whether the catalog needs
+# importing, so this just delegates rather than duplicating that check here.
 bootstrap() {
-    # init-db is idempotent and instant; always safe to run.
-    run_as_app flask init-db
-
     if [ "${AUTO_BOOTSTRAP:-1}" != "1" ]; then
-        log "AUTO_BOOTSTRAP=0 — skipping catalog import"
+        log "AUTO_BOOTSTRAP=0 — skipping setup; run 'make docker-bootstrap' yourself"
+        run_as_app flask init-db
         return
     fi
 
-    local count
-    count=$(run_as_app python -c "
-from tombot.config import Config
-from tombot.services.repository import PokemonRepo
-print(PokemonRepo(Config.DB_PATH).count_cards())
-" 2>/dev/null || echo 0)
-
-    if [ "$count" -gt 0 ]; then
-        log "catalog present ($count cards) — skipping import"
-        return
+    log "setting up (first run imports ~1,100 cards; the upstream API is flaky,"
+    log "anything that fails is retried on the next start)"
+    if run_as_app flask bootstrap; then
+        log "setup complete"
+    else
+        log "WARN: setup incomplete — retry with: docker compose restart app"
+        log "                            or: make docker-bootstrap"
     fi
-
-    log "empty catalog: importing ~1,100 cards. This takes a few minutes and the"
-    log "upstream API is flaky; failed sets are retried on the next start."
-    run_as_app flask import-catalog   || log "WARN: catalog import incomplete — re-run 'make links' / restart to retry"
-    run_as_app flask seed-sets        || log "WARN: set seeding incomplete"
-    run_as_app flask resolve-links    || log "WARN: Cardmarket link resolution incomplete"
-    log "bootstrap done"
 }
 
 case "${1:-serve}" in
