@@ -285,6 +285,29 @@ class PokemonRepo:
     def count_cards(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM cards") or 0
 
+    def catalog_gaps(self, required_set_ids: Sequence[str]) -> list[dict]:
+        """Required official sets that are absent or short on cards.
+
+        Completeness has to be per set. A previous "do we have any cards at all"
+        check meant that when an import salvaged one set out of twelve — routine,
+        given how often the upstream 500s — every later start saw a non-empty
+        catalog and skipped the retry forever.
+        """
+        gaps = []
+        for sid in required_set_ids:
+            row = self._one(
+                """SELECT os.id, os.total,
+                          (SELECT COUNT(*) FROM cards c WHERE c.official_set_id = os.id) AS have
+                   FROM official_sets os WHERE os.id = ?""",
+                (sid,),
+            )
+            if not row:
+                gaps.append({"set": sid, "have": 0, "expected": None, "why": "never imported"})
+            elif row["total"] and (row["have"] or 0) < row["total"]:
+                gaps.append({"set": sid, "have": row["have"], "expected": row["total"],
+                             "why": "incomplete"})
+        return gaps
+
     # --------------------------------------------------------- personal sets
     def upsert_collection_set(self, s: dict) -> None:
         with self.tx() as c:

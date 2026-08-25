@@ -7,10 +7,13 @@ collection_items or photos.
 from __future__ import annotations
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
+
+from .sources.pokemontcgio import RateLimited
 
 log = logging.getLogger(__name__)
 
@@ -22,8 +25,9 @@ class CatalogImporter:
         self.config = config
 
     def import_sets(self, set_ids: list[str]) -> dict:
-        result = {"sets": {}, "cards": 0, "failed": []}
-        for sid in set_ids:
+        result = {"sets": {}, "cards": 0, "failed": [], "rate_limited": False,
+                  "not_attempted": []}
+        for i, sid in enumerate(set_ids):
             try:
                 meta = self.source.fetch_set(sid)
                 self.repo.upsert_official_set(meta)
@@ -32,6 +36,14 @@ class CatalogImporter:
                 result["sets"][sid] = n
                 result["cards"] += n
                 log.info("imported %s: %d cards", sid, n)
+            except RateLimited as e:
+                # Grinding through the remaining sets just burns an allowance
+                # that is already spent, and buries the real cause in a wall of
+                # generic failures. Stop and report it as what it is.
+                log.error("rate limited during import: %s", e)
+                result["rate_limited"] = True
+                result["not_attempted"] = list(set_ids[i:])
+                break
             except Exception as e:
                 # One flaky set must not lose the sets already imported.
                 log.error("import failed for %s: %s", sid, e)
@@ -39,7 +51,7 @@ class CatalogImporter:
         self.repo.set_meta("last_catalog_import", str(result["cards"]))
         return result
 
-    def resolve_market_links(self, limit: int = 5000, workers: int = 8,
+    def resolve_market_links(self, limit: int = 5000, workers: int | None = None,
                              batch: int = 100, progress=None) -> dict:
         """Resolve and store each card's Cardmarket product URL.
 
@@ -51,28 +63,41 @@ class CatalogImporter:
         write lock almost continuously across a 1100-card run and makes
         concurrent reads (i.e. the web UI) block until they time out.
         """
+        workers = workers or getattr(self.config, "LINK_RESOLVE_WORKERS", 3)
         todo = self.repo.cards_missing_market_url(limit)
         if not todo:
-            return {"resolved": 0, "failed": 0,
-                    "total_with_links": self.repo.count_market_urls()}
+            return {"resolved": 0, "failed": 0, "rate_limited": False,
+                    "remaining": 0, "total_with_links": self.repo.count_market_urls()}
 
         ok = fail = 0
         pending: list[tuple[str, str]] = []
+        stop = threading.Event()
+
+        def resolve(card_id: str):
+            if stop.is_set():
+                return None
+            return self.source.resolve_market_url(card_id)
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(self.source.resolve_market_url, r["id"]): r["id"]
-                       for r in todo}
+            futures = {pool.submit(resolve, r["id"]): r["id"] for r in todo}
             for i, fut in enumerate(as_completed(futures), 1):
                 card_id = futures[fut]
                 try:
                     url = fut.result()
+                except RateLimited as e:
+                    if not stop.is_set():
+                        log.error("rate limited resolving links: %s", e)
+                    stop.set()
+                    for f in futures:
+                        f.cancel()
+                    url = None
                 except Exception as e:
                     log.debug("resolve failed for %s: %s", card_id, e)
                     url = None
                 if url:
                     pending.append((card_id, url))
                     ok += 1
-                else:
+                elif not stop.is_set():
                     fail += 1
                 if len(pending) >= batch:
                     self.repo.set_card_market_urls(pending)
@@ -80,8 +105,9 @@ class CatalogImporter:
                     if progress:
                         progress(i, len(todo))
 
-        self.repo.set_card_market_urls(pending)
-        return {"resolved": ok, "failed": fail,
+        self.repo.set_card_market_urls(pending)      # keep partial progress
+        return {"resolved": ok, "failed": fail, "rate_limited": stop.is_set(),
+                "remaining": len(self.repo.cards_missing_market_url(limit)),
                 "total_with_links": self.repo.count_market_urls()}
 
     def cache_images(self, limit: int = 5000) -> dict:

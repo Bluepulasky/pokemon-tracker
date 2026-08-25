@@ -44,10 +44,34 @@ def import_catalog(set_ids, images):
     for f in result["failed"]:
         click.secho(f"  {f['set']:<8} FAILED: {f['error']}", fg="red")
     click.echo(f"total: {result['cards']} cards")
+
+    if result.get("rate_limited"):
+        _rate_limit_notice(result.get("not_attempted", []))
+        return
+
     if images:
         click.echo(f"images: {current_app.extensions['importer'].cache_images()}")
     if result["failed"]:
         click.secho("re-run to retry the failed sets (import is idempotent)", fg="yellow")
+
+
+def _rate_limit_notice(not_attempted=()):
+    """Rate limiting is an operator problem, not a bug — say what to do about it."""
+    cfg = current_app.extensions["config"]
+    click.secho("\nSTOPPED: upstream rate limit reached.", fg="red", bold=True)
+    if not_attempted:
+        click.echo(f"  not attempted: {', '.join(sorted(not_attempted))}")
+    if cfg.POKEMONTCG_API_KEY:
+        click.echo("  An API key is configured, so this is the 20,000/day ceiling")
+        click.echo("  or a short burst limit. Wait and re-run — progress is kept.")
+    else:
+        click.secho("  No POKEMONTCG_API_KEY is set, so the limit is 1,000 "
+                    "requests/day.", fg="yellow")
+        click.echo("  Get a free key at https://dev.pokemontcg.io/ (raises it to "
+                   "20,000/day),")
+        click.echo("  put it in .env, then: docker compose up -d && make "
+                   "docker-bootstrap")
+    click.echo("  Nothing is lost — re-running resumes from where it stopped.")
 
 
 @click.command("resolve-links")
@@ -67,7 +91,11 @@ def resolve_links(limit):
             limit, progress=progress)
     click.echo(f"resolved {r['resolved']}, failed {r['failed']}, "
                f"{r['total_with_links']} cards now have a Cardmarket link")
-    if r["failed"]:
+    if r.get("rate_limited"):
+        click.secho(f"stopped early: rate limited, {r['remaining']} cards left",
+                    fg="yellow")
+        _rate_limit_notice()
+    elif r["failed"]:
         click.secho("re-run to retry the failures", fg="yellow")
 
 
@@ -184,15 +212,52 @@ def _bool_env(name: str) -> bool:
 
 
 @click.command("bootstrap")
+@click.option("--force-catalog", is_flag=True,
+              help="Re-import every set even if the catalog looks complete")
 @click.pass_context
 @with_appcontext
-def bootstrap(ctx):
-    """init-db + import-catalog + seed-sets. One command for a fresh install."""
+def bootstrap(ctx, force_catalog):
+    """Set up or repair the install: schema, catalog, personal sets, links.
+
+    This is the repair command as much as the install command, so it must make
+    progress on every run. It checks the catalog per set rather than asking
+    "are there any cards", because a partial import is the normal outcome when
+    the upstream is throwing 500s, and treating that as done leaves the app
+    permanently half-built.
+
+    Set seeding and link resolution always run: both are idempotent, both are
+    cheap when there is nothing to do, and neither depends on the import having
+    succeeded.
+    """
     ctx.invoke(init_db)
-    ctx.invoke(import_catalog, set_ids="", images=True)
+    repo = _repo()
+
+    required = required_official_sets()
+    gaps = repo.catalog_gaps(required)
+
+    if force_catalog:
+        click.echo(f"--force-catalog: re-importing all {len(required)} sets")
+        ctx.invoke(import_catalog, set_ids=",".join(required), images=True)
+    elif gaps:
+        for g in gaps:
+            expected = g["expected"] if g["expected"] is not None else "?"
+            click.echo(f"  {g['set']:<8} {g['have']}/{expected}  {g['why']}")
+        click.echo(f"importing {len(gaps)} incomplete set(s)")
+        ctx.invoke(import_catalog, set_ids=",".join(g["set"] for g in gaps), images=True)
+    else:
+        click.echo(f"catalog complete ({repo.count_cards()} cards across "
+                   f"{len(required)} sets)")
+
     ctx.invoke(seed_sets, rebuild=True)
     ctx.invoke(resolve_links, limit=5000)
-    click.secho("bootstrap complete", fg="green")
+
+    remaining = repo.catalog_gaps(required)
+    if remaining:
+        click.secho(f"{len(remaining)} set(s) still incomplete: "
+                    f"{', '.join(g['set'] for g in remaining)}", fg="yellow")
+        click.secho("re-run to retry — imports resume where they left off", fg="yellow")
+    else:
+        click.secho("bootstrap complete", fg="green")
 
 
 def register(app):

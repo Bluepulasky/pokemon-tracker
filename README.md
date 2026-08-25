@@ -55,18 +55,72 @@ browser needs it once: `localStorage.setItem('app_token', '<value>')`.
 **File ownership** — set `PUID`/`PGID` to your own `id -u` / `id -g`, otherwise the
 database and photos end up owned by root on the host.
 
+**Get the free API key first.** Without `POKEMONTCG_API_KEY` the upstream allowance is
+1,000 requests/day; the catalog and its images use most of that, and resolving Cardmarket
+links costs one request per card on top. A keyless install can run out of quota partway
+and end up with sets missing. A free key from https://dev.pokemontcg.io/ raises it to
+20,000/day.
+
+If setup does hit the limit it stops and says so rather than grinding on, keeps
+everything it already imported, and resumes from there when re-run:
+
+```
+STOPPED: upstream rate limit reached.
+  not attempted: gym1, gym2, neo1, neo2
+  No POKEMONTCG_API_KEY is set, so the limit is 1,000 requests/day.
+  ...
+  Nothing is lost — re-running resumes from where it stopped.
+```
+
+Cardmarket links are **not** resolved during setup for the same reason — that is ~1,100
+requests for links that already work via redirect. Run `make docker-links` once the
+catalog is settled.
+
 Two containers come up: `app` (the web UI) and `scheduler` (the monthly price refresh).
 Skip the scheduler with `make docker-app` and use host cron instead if you prefer.
 
-**Running a command inside the container** — use the make targets, or pass the user
-explicitly. `docker compose exec` bypasses the entrypoint and would otherwise run as
-root, leaving root-owned files beside the database:
+### Running flask commands in the container
+
+**You normally do not need to.** The container runs `init-db`, `import-catalog`,
+`seed-sets` and `resolve-links` itself on first start — `docker compose up -d` is the
+whole setup. Watch it happen with `make docker-logs`.
+
+Run them by hand when you want to retry something that failed, rebuild the sets after
+editing the rules, or refresh prices off-schedule:
 
 ```bash
-make docker-prices                                        # correct
-docker compose exec --user $(id -u):$(id -g) app flask prices   # same thing
-docker compose run --rm app flask prices                  # also fine (uses the entrypoint)
+make docker-bootstrap   # schema + catalog + sets + links, all idempotent
+make docker-initdb      # schema only
+make docker-sets        # rebuild personal sets from seed_sets.py
+make docker-links       # resolve Cardmarket product URLs
+make docker-prices      # refresh prices
+make docker-shell       # a shell, for anything else
 ```
+
+Every one of those is safe to re-run. `import-catalog` skips sets it already has,
+`seed-sets` preserves hand-edited slots, and none of them touch your collection.
+
+**If you are not using make**, pass the user explicitly. `docker compose exec` bypasses
+the entrypoint and runs as root, which leaves root-owned WAL files beside the database:
+
+```bash
+docker compose exec --user $(id -u):$(id -g) app flask seed-sets   # correct
+docker compose run  --rm app flask seed-sets                       # also correct
+docker compose exec app flask seed-sets                            # runs as root — avoid
+```
+
+### Trying the UI before you own anything
+
+A fresh install has a full catalog and 919 empty set slots, which is correct but hard to
+judge. To fill the collection with sample cards:
+
+```bash
+make docker-demo         # ~180 records across 10 sets, deterministic
+make docker-demo-clear   # remove them again
+```
+
+`docker-demo-clear` deletes **all** collection items and photos, so do not run it once
+you have entered real cards. Neither command touches the catalog or the personal sets.
 
 ## What it does
 

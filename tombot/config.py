@@ -46,6 +46,11 @@ class Config:
     POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine
+    HTTP_MAX_BACKOFF = int(os.environ.get("HTTP_MAX_BACKOFF", "30"))
+
+    # Link resolution is one request per card. Kept low deliberately: without an
+    # API key the whole daily allowance is 1,000 requests.
+    LINK_RESOLVE_WORKERS = int(os.environ.get("LINK_RESOLVE_WORKERS", "3"))
 
     # Cardmarket locale for outbound product links (en/es/fr/it/de).
     CARDMARKET_LOCALE = os.environ.get("CARDMARKET_LOCALE", "es")
