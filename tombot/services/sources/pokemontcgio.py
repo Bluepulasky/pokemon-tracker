@@ -19,6 +19,17 @@ import requests
 
 log = logging.getLogger(__name__)
 
+
+class RateLimited(RuntimeError):
+    """The upstream quota is exhausted.
+
+    Distinct from a transient failure on purpose. A 500 is worth retrying in a
+    few seconds; a spent daily quota is not worth retrying at all — without an
+    API key the allowance is 1,000 requests/day, so the only useful responses
+    are to stop, say so plainly, and point at the free key.
+    """
+
+
 CARD_FIELDS = ("id,name,supertype,subtypes,types,number,artist,rarity,"
                "images,cardmarket,tcgplayer,set")
 
@@ -34,8 +45,21 @@ class PokemonTcgIoSource:
         if config.POKEMONTCG_API_KEY:
             self.session.headers["X-Api-Key"] = config.POKEMONTCG_API_KEY
         self.session.headers["User-Agent"] = "tombot-pokemon-tracker/0.1"
+        self.max_backoff = getattr(config, "HTTP_MAX_BACKOFF", 30)
+        self.has_api_key = bool(config.POKEMONTCG_API_KEY)
 
     # ------------------------------------------------------------------ http
+    @staticmethod
+    def _retry_after(response) -> float | None:
+        """Seconds to wait per the server, if it said."""
+        raw = response.headers.get("Retry-After")
+        if not raw:
+            return None
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            return None          # HTTP-date form; not worth parsing for this
+
     def _get(self, path: str, params: dict | None = None) -> dict:
         url = f"{self.base}{path}"
         last = None
@@ -44,15 +68,22 @@ class PokemonTcgIoSource:
                 r = self.session.get(url, params=params, timeout=self.timeout)
                 if r.status_code == 200 and r.content:
                     return r.json()
-                if r.status_code == 429:
-                    wait = min(60, 5 * 2 ** attempt)
-                    log.warning("rate limited, sleeping %ss", wait)
-                    time.sleep(wait)
-                    continue
+                if r.status_code in (429, 403):
+                    # 403 is what this API returns once the daily allowance is
+                    # gone, so it has to be treated as a quota signal too.
+                    retry_after = self._retry_after(r)
+                    if retry_after is not None and retry_after <= self.max_backoff:
+                        log.warning("rate limited, server asked for %ss", retry_after)
+                        time.sleep(retry_after)
+                        continue
+                    raise RateLimited(
+                        f"upstream rate limit hit on {path}"
+                        + (f"; server asked for {retry_after:.0f}s" if retry_after
+                           else " (daily quota is the likely cause)"))
                 last = f"HTTP {r.status_code}"
             except requests.RequestException as e:      # timeouts, DNS, resets
                 last = str(e)
-            wait = min(30, 2 ** attempt)
+            wait = min(self.max_backoff, 2 ** attempt)
             log.warning("%s %s failed (%s), retry %d/%d in %ss",
                         path, params, last, attempt + 1, self.retries, wait)
             time.sleep(wait)
@@ -130,10 +161,18 @@ class PokemonTcgIoSource:
             try:
                 r = self.session.get(url, timeout=self.timeout,
                                      allow_redirects=False, stream=True)
-                loc = r.headers.get("Location")
+                status, loc = r.status_code, r.headers.get("Location")
+                retry_after = self._retry_after(r)
                 r.close()
                 if loc and "cardmarket.com" in loc:
                     return loc.split("?", 1)[0]      # drop the utm_* tracking params
+                if status in (429, 403):
+                    # Previously this looked identical to "no link exists", so a
+                    # rate limit silently marked cards unresolvable and the run
+                    # kept hammering for another thousand cards.
+                    raise RateLimited(
+                        f"rate limited resolving market URL for {card_id}"
+                        + (f"; server asked for {retry_after:.0f}s" if retry_after else ""))
             except requests.RequestException as e:
                 log.debug("market url resolve failed for %s: %s", card_id, e)
             time.sleep(1 + attempt)

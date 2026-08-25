@@ -55,6 +55,27 @@ browser needs it once: `localStorage.setItem('app_token', '<value>')`.
 **File ownership** — set `PUID`/`PGID` to your own `id -u` / `id -g`, otherwise the
 database and photos end up owned by root on the host.
 
+**Get the free API key first.** Without `POKEMONTCG_API_KEY` the upstream allowance is
+1,000 requests/day; the catalog and its images use most of that, and resolving Cardmarket
+links costs one request per card on top. A keyless install can run out of quota partway
+and end up with sets missing. A free key from https://dev.pokemontcg.io/ raises it to
+20,000/day.
+
+If setup does hit the limit it stops and says so rather than grinding on, keeps
+everything it already imported, and resumes from there when re-run:
+
+```
+STOPPED: upstream rate limit reached.
+  not attempted: gym1, gym2, neo1, neo2
+  No POKEMONTCG_API_KEY is set, so the limit is 1,000 requests/day.
+  ...
+  Nothing is lost — re-running resumes from where it stopped.
+```
+
+Cardmarket links are **not** resolved during setup for the same reason — that is ~1,100
+requests for links that already work via redirect. Run `make docker-links` once the
+catalog is settled.
+
 Two containers come up: `app` (the web UI) and `scheduler` (the monthly price refresh).
 Skip the scheduler with `make docker-app` and use host cron instead if you prefer.
 
