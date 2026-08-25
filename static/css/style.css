@@ -1,0 +1,277 @@
+/* TomBot Pokémon Tracker — minimal dark UI, mobile-first (spec §26/§31). */
+
+:root {
+  --bg: #0e1013;
+  --bg-2: #161a20;
+  --bg-3: #1e242c;
+  --line: #2a323c;
+  --fg: #e8edf4;
+  --fg-dim: #8b97a8;
+  --fg-faint: #5b6675;
+  --accent: #ffcb05;          /* Pokémon yellow */
+  --accent-2: #3b6cf6;
+  --good: #3ecf8e;
+  --warn: #f5a524;
+  --bad: #f0526d;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 8px 30px rgba(0,0,0,.45);
+  --header-h: 56px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+a { color: inherit; text-decoration: none; }
+button, input, select { font: inherit; color: inherit; }
+
+/* ---------------------------------------------------------------- topbar */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 18px;
+  height: var(--header-h); padding: 0 16px;
+  background: rgba(14,16,19,.88);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -.02em; }
+.brand em { font-style: normal; color: var(--fg-dim); font-weight: 500; }
+.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+              box-shadow: 0 0 0 3px rgba(255,203,5,.18); }
+.tabs { display: flex; gap: 2px; }
+.tabs a {
+  padding: 7px 13px; border-radius: 999px; color: var(--fg-dim);
+  font-size: 14px; font-weight: 500; white-space: nowrap; transition: .15s;
+}
+.tabs a:hover { color: var(--fg); background: var(--bg-2); }
+.tabs a.active { color: var(--bg); background: var(--accent); font-weight: 600; }
+
+.search-wrap { margin-left: auto; position: relative; }
+#global-search {
+  width: 220px; padding: 8px 12px; background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: 999px; outline: none;
+}
+#global-search:focus { border-color: var(--accent-2); width: 280px; }
+.search-results {
+  position: absolute; right: 0; top: 42px; width: 340px; max-height: 60vh; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 6px;
+}
+.search-results .row { display: flex; gap: 10px; align-items: center; padding: 8px;
+                       border-radius: var(--radius-sm); cursor: pointer; }
+.search-results .row:hover { background: var(--bg-3); }
+.search-results img { width: 30px; border-radius: 3px; }
+.search-results .meta { font-size: 12px; color: var(--fg-dim); }
+
+/* ------------------------------------------------------------------ view */
+.view { max-width: 1400px; margin: 0 auto; padding: 24px 16px 80px; }
+.loading, .empty { padding: 60px 20px; text-align: center; color: var(--fg-faint); }
+
+h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 4px; }
+h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--fg-dim);
+     text-transform: uppercase; font-weight: 600; font-size: 12px; letter-spacing: .08em; }
+.sub { color: var(--fg-dim); font-size: 14px; margin: 0 0 20px; }
+
+/* ------------------------------------------------------------------ stats */
+.stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.stat {
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px;
+}
+.stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-faint); }
+.stat .v { font-size: 26px; font-weight: 650; letter-spacing: -.03em; margin-top: 6px; }
+.stat .v small { font-size: 13px; font-weight: 500; color: var(--fg-dim); letter-spacing: 0; }
+.stat.accent .v { color: var(--accent); }
+
+.bar { height: 6px; background: var(--bg-3); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px;
+           transition: width .4s ease; }
+.bar.good > i { background: var(--good); }
+
+/* ------------------------------------------------------------- set cards */
+.set-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.set-card {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; cursor: pointer; transition: .15s;
+}
+.set-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+.set-card .name { font-weight: 600; margin-bottom: 2px; }
+.set-card .count { color: var(--fg-dim); font-size: 13px; }
+.set-card .pct { float: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ card grid */
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 16px 0 20px; padding: 12px; background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.toolbar select, .toolbar input {
+  padding: 7px 10px; background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); outline: none;
+}
+.toolbar .spacer { margin-left: auto; color: var(--fg-dim); font-size: 13px; }
+
+.card-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 14vw, 150px), 1fr));
+}
+.card {
+  position: relative; cursor: pointer; border-radius: var(--radius-sm);
+  transition: transform .12s;
+}
+.card:hover { transform: translateY(-3px); }
+.card .art {
+  position: relative; aspect-ratio: 245 / 342; border-radius: var(--radius-sm);
+  overflow: hidden; background: var(--bg-3); border: 1px solid var(--line);
+}
+.card .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card.missing .art img { filter: grayscale(1) brightness(.4); }
+
+/* Missing cards are a CSS placeholder, not an image — zero network cost for the
+   part of a set you do not own yet (spec §5, PLAN.md §2.16). */
+.placeholder {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 5px;
+  /* Spec §5 asks for a grey card with clearly readable text — the number is the
+     only way to identify a card you do not own yet, so it must stay legible. */
+  background: repeating-linear-gradient(45deg, #39414e, #39414e 9px, #414a58 9px, #414a58 18px);
+  color: #c3ccd9; text-align: center; padding: 8px;
+}
+.placeholder .n { font-size: clamp(16px, 2.4vw, 22px); font-weight: 800; color: #f2f5f9;
+                  letter-spacing: -.02em; }
+.placeholder .s { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+                  color: #97a3b3; font-weight: 600; }
+
+.card .label { margin-top: 6px; font-size: 12px; line-height: 1.3; }
+.card .label .nm { display: block; white-space: nowrap; overflow: hidden;
+                   text-overflow: ellipsis; font-weight: 500; }
+.card .label .no { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.card.missing .label .nm { color: var(--fg-dim); }
+
+.badge {
+  position: absolute; border-radius: 999px; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; line-height: 1.5; backdrop-filter: blur(6px);
+}
+.badge.qty { top: 6px; right: 6px; background: rgba(255,203,5,.92); color: #1a1400; }
+.badge.own { top: 6px; left: 6px; background: rgba(62,207,142,.92); color: #04221a; }
+.badge.val { bottom: 6px; left: 6px; background: rgba(14,16,19,.8); color: var(--fg);
+             font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- modal */
+.modal-root {
+  position: fixed; inset: 0; z-index: 100; display: flex;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
+}
+/* An explicit display value beats the [hidden] attribute's UA display:none, so
+   without this the overlay stays on top of the page and eats every click. */
+.modal-root[hidden] { display: none; }
+.modal {
+  width: min(760px, 100%); max-height: 90vh; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--shadow);
+}
+.modal-head { display: flex; gap: 16px; padding: 20px; border-bottom: 1px solid var(--line); }
+.modal-head .art { width: 130px; flex: none; border-radius: var(--radius-sm); overflow: hidden;
+                   aspect-ratio: 245/342; background: var(--bg-3); }
+.modal-head .art img { width: 100%; height: 100%; object-fit: cover; }
+.modal-head h3 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.02em; }
+.modal-head .meta { color: var(--fg-dim); font-size: 13px; }
+.modal-head .close { margin-left: auto; align-self: start; background: none; border: 0;
+                     color: var(--fg-dim); font-size: 22px; cursor: pointer; line-height: 1; }
+.modal-body { padding: 20px; }
+
+/* Variants strip: horizontally swipeable on mobile (spec §6). */
+.variants { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px;
+            scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.variant-card {
+  flex: none; width: 200px; scroll-snap-align: start;
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 12px;
+}
+.variant-card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
+       background: var(--bg); border: 1px solid var(--line); color: var(--fg-dim); }
+.variant-card .photos { display: flex; gap: 6px; overflow-x: auto; margin: 8px 0; }
+.variant-card .photos img { width: 52px; aspect-ratio: 245/342; object-fit: cover;
+                            border-radius: 4px; border: 1px solid var(--line); }
+.variant-card .price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.variant-card .price small { color: var(--fg-faint); font-weight: 400; }
+
+.form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.field { flex: 1 1 140px; }
+.field label { display: block; font-size: 11px; text-transform: uppercase;
+               letter-spacing: .06em; color: var(--fg-faint); margin-bottom: 5px; }
+.field select, .field input {
+  width: 100%; padding: 9px 11px; background: var(--bg-3);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); outline: none;
+}
+.field select:focus, .field input:focus { border-color: var(--accent-2); }
+
+.btn {
+  padding: 10px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-3); cursor: pointer; font-weight: 600; transition: .15s;
+}
+.btn:hover { border-color: var(--fg-faint); }
+.btn.primary { background: var(--accent); color: #1a1400; border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--bad); border-color: rgba(240,82,109,.35); }
+.btn.ghost { background: none; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+        background: var(--bg-3); cursor: pointer; font-size: 13px; }
+.chip.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
+
+.note { font-size: 12px; color: var(--fg-faint); margin-top: 8px; }
+.hr { height: 1px; background: var(--line); margin: 20px 0; }
+
+/* ------------------------------------------------------------- missing */
+.missing-list { display: grid; gap: 6px; }
+.missing-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+               background: var(--bg-2); border: 1px solid var(--line);
+               border-radius: var(--radius-sm); cursor: pointer; }
+.missing-row:hover { border-color: var(--accent-2); }
+.missing-row .n { color: var(--fg-faint); font-variant-numeric: tabular-nums;
+                  min-width: 44px; font-size: 13px; }
+.missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
+
+/* --------------------------------------------------------------- chart */
+.chart { width: 100%; height: 180px; }
+.chart path.line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.chart path.area { fill: url(#grad); stroke: none; }
+.chart .axis { stroke: var(--line); stroke-width: 1; }
+.chart text { fill: var(--fg-faint); font-size: 10px; }
+
+/* --------------------------------------------------------------- toast */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--fg);
+  padding: 11px 18px; border-radius: 999px; box-shadow: var(--shadow); z-index: 200;
+  font-size: 14px;
+}
+.toast.err { border-color: var(--bad); color: var(--bad); }
+
+/* --------------------------------------------------------------- mobile */
+@media (max-width: 720px) {
+  .topbar { gap: 10px; padding: 0 12px; flex-wrap: wrap; height: auto; padding-top: 10px; }
+  .brand em { display: none; }
+  .search-wrap { order: 3; width: 100%; margin: 0 0 10px; }
+  #global-search, #global-search:focus { width: 100%; }
+  .search-results { width: 100%; }
+  .tabs { order: 2; margin-left: auto; overflow-x: auto; }
+  .tabs a { padding: 6px 10px; font-size: 13px; }
+  .view { padding: 16px 12px 60px; }
+  .modal-root { padding: 0; align-items: flex-end; }
+  .modal { max-height: 92vh; border-radius: 16px 16px 0 0; }
+  .modal-head .art { width: 92px; }
+  .stat .v { font-size: 22px; }
+}

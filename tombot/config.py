@@ -1,0 +1,88 @@
+"""Environment-driven configuration. Nothing here reads the database."""
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _path(name: str, default: Path) -> Path:
+    return Path(os.environ.get(name, str(default))).expanduser().resolve()
+
+
+class Config:
+    # --- storage -----------------------------------------------------------
+    DATA_DIR = _path("DATA_DIR", BASE_DIR / "data")
+    MEDIA_DIR = _path("MEDIA_DIR", BASE_DIR / "media")
+    DB_PATH = Path(os.environ.get("DB_PATH", "")) if os.environ.get("DB_PATH") else DATA_DIR / "pokemon.db"
+
+    CATALOG_IMG_DIR = MEDIA_DIR / "catalog"
+    COLLECTION_IMG_DIR = MEDIA_DIR / "collection"
+    THUMB_DIR = MEDIA_DIR / "thumbs"
+
+    # --- http --------------------------------------------------------------
+    HOST = os.environ.get("HOST", "127.0.0.1")   # not 0.0.0.0: see PLAN.md §2.7
+    PORT = int(os.environ.get("PORT", "8080"))
+    DEBUG = _bool("DEBUG", False)
+
+    # Optional shared secret. Unset => no auth (spec §31). Set => X-App-Token required.
+    APP_TOKEN = os.environ.get("APP_TOKEN") or None
+
+    # --- uploads -----------------------------------------------------------
+    MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "25"))
+    MAX_CONTENT_LENGTH = MAX_UPLOAD_MB * 1024 * 1024
+    IMAGE_MAX_EDGE = int(os.environ.get("IMAGE_MAX_EDGE", "1600"))
+    THUMB_MAX_EDGE = int(os.environ.get("THUMB_MAX_EDGE", "400"))
+    JPEG_QUALITY = int(os.environ.get("JPEG_QUALITY", "85"))
+
+    # --- catalog / price source -------------------------------------------
+    # Cardmarket's own API is application-gated; pokemontcg.io republishes
+    # Cardmarket EUR prices with no account needed. See PLAN.md §2.2.
+    SOURCE = os.environ.get("SOURCE", "pokemontcgio")
+    POKEMONTCG_API_KEY = os.environ.get("POKEMONTCG_API_KEY") or None
+    POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
+    HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
+    HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine
+
+    # averageSellPrice is steadier than trendPrice, which can be 3x off on thin markets.
+    PRICE_BASIS = os.environ.get("PRICE_BASIS", "averageSellPrice")
+    PRICE_STALE_DAYS = int(os.environ.get("PRICE_STALE_DAYS", "25"))
+
+    # --- scheduler ---------------------------------------------------------
+    SCHEDULER_ENABLED = _bool("SCHEDULER_ENABLED", False)
+    SCHEDULER_CRON_DAY = int(os.environ.get("SCHEDULER_CRON_DAY", "1"))
+    SCHEDULER_CRON_HOUR = int(os.environ.get("SCHEDULER_CRON_HOUR", "4"))
+
+    @classmethod
+    def ensure_dirs(cls) -> None:
+        for d in (cls.DATA_DIR, cls.MEDIA_DIR, cls.CATALOG_IMG_DIR,
+                  cls.COLLECTION_IMG_DIR, cls.THUMB_DIR):
+            d.mkdir(parents=True, exist_ok=True)
+
+
+# Domain vocabularies — single source of truth for API validation and the UI.
+CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"]
+CONDITION_LABELS = {
+    "NM": "Near Mint", "LP": "Lightly Played", "MP": "Moderately Played",
+    "HP": "Heavily Played", "DMG": "Damaged",
+}
+CONDITION_ORDER = {c: i for i, c in enumerate(CONDITIONS)}   # 0 = best
+
+LANGUAGES = ["es", "en", "pt", "other"]
+LANGUAGE_LABELS = {"es": "Español", "en": "Inglés", "pt": "Portugués", "other": "Otro"}
+
+VARIANTS = ["normal", "holo", "reverse", "first_edition", "shadowless", "other"]
+VARIANT_LABELS = {
+    "normal": "Normal", "holo": "Holo", "reverse": "Reverse Holo",
+    "first_edition": "1st Edition", "shadowless": "Shadowless", "other": "Otra",
+}
+
+DEFAULT_MODIFIERS = [
+    ("condition", "NM", 1.00), ("condition", "LP", 0.85), ("condition", "MP", 0.70),
+    ("condition", "HP", 0.50), ("condition", "DMG", 0.35),
+    ("language", "en", 1.00), ("language", "es", 0.90),
+    ("language", "pt", 0.85), ("language", "other", 0.85),
+]

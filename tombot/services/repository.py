@@ -1,0 +1,625 @@
+"""PokemonRepo — the only module in the app that issues SQL.
+
+Spec §22/§31: Flask routes must never touch SQLite directly. Services call the
+repo too; nothing else opens a connection.
+"""
+from __future__ import annotations
+
+import json
+import re
+import sqlite3
+from contextlib import contextmanager
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Iterable, Sequence
+
+SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+SCHEMA_VERSION = "1"
+
+
+def _number_sort(number: str) -> float:
+    """Sort key for card numbers.
+
+    Numbers are strings ('4', 'H12', 'SH1', 'TG04'); sorting lexically puts #10
+    before #2. Prefixed numbers sort after plain ones so promos land at the end.
+    """
+    if not number:
+        return 999999.0
+    m = re.search(r"(\d+)", number)
+    if not m:
+        return 999998.0
+    n = float(m.group(1))
+    return n + 100000.0 if number[0].isalpha() else n
+
+
+class PokemonRepo:
+    def __init__(self, db_path: str | Path):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------ conn
+    def connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=10.0)
+        conn.row_factory = sqlite3.Row
+        # SQLite defaults foreign_keys OFF; without this every FK is decorative.
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")      # price job must not block reads
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
+
+    @contextmanager
+    def tx(self):
+        conn = self.connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def _all(self, sql: str, params: Sequence = ()) -> list[dict]:
+        with self.tx() as c:
+            return [dict(r) for r in c.execute(sql, params).fetchall()]
+
+    def _one(self, sql: str, params: Sequence = ()) -> dict | None:
+        with self.tx() as c:
+            r = c.execute(sql, params).fetchone()
+            return dict(r) if r else None
+
+    def _scalar(self, sql: str, params: Sequence = ()) -> Any:
+        with self.tx() as c:
+            r = c.execute(sql, params).fetchone()
+            return r[0] if r else None
+
+    # ---------------------------------------------------------------- schema
+    def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
+        with self.tx() as c:
+            c.executescript(SCHEMA_PATH.read_text())
+            for kind, key, mult in default_modifiers:
+                c.execute(
+                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?)",
+                    (kind, key, mult),
+                )
+            c.execute(
+                "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
+                (SCHEMA_VERSION,),
+            )
+
+    def get_meta(self, key: str, default: str | None = None) -> str | None:
+        v = self._scalar("SELECT value FROM app_meta WHERE key = ?", (key,))
+        return v if v is not None else default
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO app_meta(key, value) VALUES (?,?) ON CONFLICT(key) "
+                "DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
+                (key, value),
+            )
+
+    # --------------------------------------------------------------- catalog
+    def upsert_official_set(self, s: dict) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO official_sets
+                     (id,name,series,printed_total,total,release_date,ptcgo_code,logo_url,symbol_url,source)
+                   VALUES (:id,:name,:series,:printed_total,:total,:release_date,:ptcgo_code,
+                           :logo_url,:symbol_url,:source)
+                   ON CONFLICT(id) DO UPDATE SET
+                     name=excluded.name, series=excluded.series,
+                     printed_total=excluded.printed_total, total=excluded.total,
+                     release_date=excluded.release_date, ptcgo_code=excluded.ptcgo_code,
+                     logo_url=excluded.logo_url, symbol_url=excluded.symbol_url,
+                     updated_at=datetime('now')""",
+                {"source": "pokemontcgio", **s},
+            )
+
+    def upsert_cards(self, cards: Iterable[dict]) -> int:
+        """Bulk upsert. Never clears image_local — a re-import must not throw away
+        the cached image files (spec §20: external data must not overwrite local state)."""
+        rows = []
+        for c in cards:
+            rows.append({
+                "id": c["id"],
+                "official_set_id": c["official_set_id"],
+                "name": c["name"],
+                "number": str(c.get("number") or ""),
+                "number_sort": _number_sort(str(c.get("number") or "")),
+                "rarity": c.get("rarity"),
+                "supertype": c.get("supertype"),
+                "subtypes_json": json.dumps(c.get("subtypes") or []),
+                "types_json": json.dumps(c.get("types") or []),
+                "artist": c.get("artist"),
+                "image_small_url": c.get("image_small_url"),
+                "image_large_url": c.get("image_large_url"),
+                "external_ids_json": json.dumps(c.get("external_ids") or {}),
+                "source": c.get("source", "pokemontcgio"),
+            })
+        if not rows:
+            return 0
+        with self.tx() as conn:
+            conn.executemany(
+                """INSERT INTO cards
+                     (id,official_set_id,name,number,number_sort,rarity,supertype,
+                      subtypes_json,types_json,artist,image_small_url,image_large_url,
+                      external_ids_json,source)
+                   VALUES (:id,:official_set_id,:name,:number,:number_sort,:rarity,:supertype,
+                           :subtypes_json,:types_json,:artist,:image_small_url,:image_large_url,
+                           :external_ids_json,:source)
+                   ON CONFLICT(id) DO UPDATE SET
+                     official_set_id=excluded.official_set_id, name=excluded.name,
+                     number=excluded.number, number_sort=excluded.number_sort,
+                     rarity=excluded.rarity, supertype=excluded.supertype,
+                     subtypes_json=excluded.subtypes_json, types_json=excluded.types_json,
+                     artist=excluded.artist, image_small_url=excluded.image_small_url,
+                     image_large_url=excluded.image_large_url,
+                     external_ids_json=excluded.external_ids_json,
+                     updated_at=datetime('now')""",
+                rows,
+            )
+        return len(rows)
+
+    def set_card_image_local(self, card_id: str, rel_path: str) -> None:
+        with self.tx() as c:
+            c.execute("UPDATE cards SET image_local=? WHERE id=?", (rel_path, card_id))
+
+    def cards_missing_local_image(self, limit: int = 5000) -> list[dict]:
+        return self._all(
+            "SELECT id, image_small_url FROM cards "
+            "WHERE image_local IS NULL AND image_small_url IS NOT NULL LIMIT ?", (limit,)
+        )
+
+    def get_card(self, card_id: str) -> dict | None:
+        return self._one(
+            "SELECT c.*, os.name AS set_name, os.ptcgo_code "
+            "FROM cards c JOIN official_sets os ON os.id=c.official_set_id WHERE c.id=?",
+            (card_id,),
+        )
+
+    def list_official_sets(self) -> list[dict]:
+        return self._all("SELECT * FROM official_sets ORDER BY release_date")
+
+    def search_cards(self, q: str = "", official_set: str = "", rarity: str = "",
+                     page: int = 1, page_size: int = 60) -> tuple[list[dict], int]:
+        where, params = ["1=1"], []
+        if q:
+            where.append("(c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)")
+            params += [f"%{q}%", f"{q}%", f"%{q}%"]
+        if official_set:
+            where.append("c.official_set_id = ?")
+            params.append(official_set)
+        if rarity:
+            where.append("c.rarity = ?")
+            params.append(rarity)
+        w = " AND ".join(where)
+        total = self._scalar(f"SELECT COUNT(*) FROM cards c WHERE {w}", params) or 0
+        rows = self._all(
+            f"""SELECT c.*, os.name AS set_name FROM cards c
+                JOIN official_sets os ON os.id=c.official_set_id
+                WHERE {w} ORDER BY os.release_date, c.number_sort
+                LIMIT ? OFFSET ?""",
+            params + [page_size, (page - 1) * page_size],
+        )
+        return rows, total
+
+    def count_cards(self) -> int:
+        return self._scalar("SELECT COUNT(*) FROM cards") or 0
+
+    # --------------------------------------------------------- personal sets
+    def upsert_collection_set(self, s: dict) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO collection_sets(id,name,description,group_name,position,rules_json)
+                   VALUES (:id,:name,:description,:group_name,:position,:rules_json)
+                   ON CONFLICT(id) DO UPDATE SET
+                     name=excluded.name, description=excluded.description,
+                     group_name=excluded.group_name, position=excluded.position,
+                     rules_json=excluded.rules_json, updated_at=datetime('now')""",
+                {"description": None, "group_name": None, "position": 0, "rules_json": None, **s},
+            )
+
+    def get_collection_set(self, set_id: str) -> dict | None:
+        return self._one("SELECT * FROM collection_sets WHERE id=?", (set_id,))
+
+    def list_collection_sets(self) -> list[dict]:
+        return self._all("SELECT * FROM collection_sets ORDER BY position, name")
+
+    def delete_collection_set(self, set_id: str) -> None:
+        with self.tx() as c:
+            c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
+
+    def replace_rule_slots(self, set_id: str, slots: list[dict]) -> int:
+        """Re-materialise rule-built slots. Manual slots and manual member edits survive
+        (PLAN.md §2.10) — a catalog refresh must not wipe hand curation."""
+        with self.tx() as c:
+            manual_cards = {
+                r["card_id"] for r in c.execute(
+                    "SELECT ssc.card_id FROM set_slot_cards ssc "
+                    "JOIN set_slots s ON s.id=ssc.slot_id "
+                    "WHERE s.set_id=? AND s.source='manual'", (set_id,)
+                ).fetchall()
+            }
+            c.execute("DELETE FROM set_slots WHERE set_id=? AND source='rule'", (set_id,))
+            max_pos = c.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM set_slots WHERE set_id=?", (set_id,)
+            ).fetchone()[0]
+            written = 0
+            for i, slot in enumerate(slots):
+                members = [cid for cid in slot["cards"] if cid not in manual_cards]
+                if not members:
+                    continue
+                cur = c.execute(
+                    "INSERT INTO set_slots(set_id,position,label,display_card_id,source) "
+                    "VALUES (?,?,?,?,'rule')",
+                    (set_id, slot.get("position", i), slot.get("label"),
+                     slot.get("display_card_id") or members[0]),
+                )
+                slot_id = cur.lastrowid
+                c.executemany(
+                    "INSERT OR IGNORE INTO set_slot_cards(slot_id,card_id,set_id) VALUES (?,?,?)",
+                    [(slot_id, cid, set_id) for cid in members],
+                )
+                written += 1
+            _ = max_pos
+            return written
+
+    def get_set_slots(self, set_id: str) -> list[dict]:
+        """Slots with ownership state. A slot counts as owned if ANY member card is held —
+        this is what makes reprints/variants collapse to one logical card (spec §17)."""
+        return self._all(
+            """SELECT sl.id AS slot_id, sl.position, sl.source,
+                      COALESCE(sl.label, c.name) AS label,
+                      c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
+                      c.image_small_url, c.image_local, c.official_set_id,
+                      (SELECT COUNT(*) FROM set_slot_cards m
+                        JOIN collection_items i ON i.card_id = m.card_id
+                       WHERE m.slot_id = sl.id) > 0 AS owned,
+                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                        JOIN collection_items i ON i.card_id = m.card_id
+                       WHERE m.slot_id = sl.id) AS quantity,
+                      (SELECT COUNT(*) FROM set_slot_cards m WHERE m.slot_id = sl.id) AS member_count
+               FROM set_slots sl
+               LEFT JOIN cards c ON c.id = sl.display_card_id
+               WHERE sl.set_id = ?
+               ORDER BY sl.position, c.number_sort""",
+            (set_id,),
+        )
+
+    def set_progress(self, set_id: str | None = None) -> list[dict]:
+        """Completion per personal set. COUNT(DISTINCT slot) on the owned side is what
+        stops Charizard-holo + Charizard-non-holo counting twice."""
+        where = "WHERE s.id = ?" if set_id else ""
+        params = (set_id,) if set_id else ()
+        return self._all(
+            f"""SELECT s.id, s.name, s.group_name, s.position,
+                       COUNT(DISTINCT sl.id) AS target,
+                       COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN sl.id END) AS owned
+                FROM collection_sets s
+                LEFT JOIN set_slots sl ON sl.set_id = s.id
+                LEFT JOIN set_slot_cards ssc ON ssc.slot_id = sl.id
+                LEFT JOIN collection_items i ON i.card_id = ssc.card_id
+                {where}
+                GROUP BY s.id, s.name, s.group_name, s.position
+                ORDER BY s.position, s.name""",
+            params,
+        )
+
+    def missing_slots(self, set_id: str, sort: str = "number") -> list[dict]:
+        order = {
+            "number": "c.number_sort",
+            "name": "COALESCE(sl.label, c.name)",
+            "rarity": "c.rarity, c.number_sort",
+        }.get(sort, "c.number_sort")
+        return self._all(
+            f"""SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
+                       c.id AS card_id, c.number, c.rarity, c.image_small_url, c.image_local
+                FROM set_slots sl
+                LEFT JOIN cards c ON c.id = sl.display_card_id
+                WHERE sl.set_id = ?
+                  AND NOT EXISTS (SELECT 1 FROM set_slot_cards m
+                                   JOIN collection_items i ON i.card_id = m.card_id
+                                  WHERE m.slot_id = sl.id)
+                ORDER BY {order}""",
+            (set_id,),
+        )
+
+    # ------------------------------------------------------------ collection
+    def upsert_collection_item(self, item: dict, mode: str = "add") -> dict:
+        """Insert or update. On the unique combination (card, variant, condition, language)
+        `add` increments the quantity instead of creating a duplicate row — without this
+        the physical count silently doubles (PLAN.md §2.5)."""
+        payload = {
+            "card_id": item["card_id"],
+            "variant": item.get("variant", "normal"),
+            "condition": item.get("condition", "NM"),
+            "language": item.get("language", "es"),
+            "quantity": int(item.get("quantity", 1)),
+            "notes": item.get("notes"),
+        }
+        conflict = ("quantity = collection_items.quantity + excluded.quantity"
+                    if mode == "add" else "quantity = excluded.quantity")
+        with self.tx() as c:
+            c.execute(
+                f"""INSERT INTO collection_items(card_id,variant,condition,language,quantity,notes)
+                    VALUES (:card_id,:variant,:condition,:language,:quantity,:notes)
+                    ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
+                      {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
+                      updated_at=datetime('now')""",
+                payload,
+            )
+            row = c.execute(
+                "SELECT * FROM collection_items WHERE card_id=? AND variant=? "
+                "AND condition=? AND language=?",
+                (payload["card_id"], payload["variant"], payload["condition"], payload["language"]),
+            ).fetchone()
+        return dict(row)
+
+    def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
+        allowed = {"variant", "condition", "language", "quantity", "notes"}
+        sets = {k: v for k, v in fields.items() if k in allowed}
+        if not sets:
+            return self.get_collection_item(item_id)
+        clause = ", ".join(f"{k}=:{k}" for k in sets)
+        sets["id"] = item_id
+        with self.tx() as c:
+            c.execute(
+                f"UPDATE collection_items SET {clause}, updated_at=datetime('now') WHERE id=:id",
+                sets,
+            )
+        return self.get_collection_item(item_id)
+
+    def get_collection_item(self, item_id: int) -> dict | None:
+        row = self._one(
+            "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
+            "c.image_small_url, c.image_local "
+            "FROM collection_items i JOIN cards c ON c.id=i.card_id WHERE i.id=?",
+            (item_id,),
+        )
+        if row:
+            row["photos"] = self.get_photos(item_id)
+        return row
+
+    def delete_collection_item(self, item_id: int) -> list[str]:
+        """Returns the filenames the caller must unlink — the repo does not touch disk."""
+        photos = self.get_photos(item_id)
+        with self.tx() as c:
+            c.execute("DELETE FROM collection_items WHERE id=?", (item_id,))
+        files = []
+        for p in photos:
+            files.append(p["filename"])
+            if p.get("thumb_filename"):
+                files.append(p["thumb_filename"])
+        return files
+
+    def items_by_card(self, card_id: str) -> list[dict]:
+        rows = self._all(
+            "SELECT * FROM collection_items WHERE card_id=? "
+            "ORDER BY CASE condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
+            "WHEN 'HP' THEN 3 ELSE 4 END, variant",
+            (card_id,),
+        )
+        for r in rows:
+            r["photos"] = self.get_photos(r["id"])
+        return rows
+
+    def list_collection(self, *, q: str = "", set_id: str = "", condition: str = "",
+                        variant: str = "", language: str = "", rarity: str = "",
+                        sort: str = "set", page: int = 1, page_size: int = 60
+                        ) -> tuple[list[dict], int]:
+        where, params = ["1=1"], []
+        if q:
+            where.append("(c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)")
+            params += [f"%{q}%", f"{q}%", f"%{q}%"]
+        if set_id:
+            where.append("EXISTS (SELECT 1 FROM set_slot_cards m WHERE m.card_id=i.card_id "
+                         "AND m.set_id=?)")
+            params.append(set_id)
+        for col, val in (("condition", condition), ("variant", variant),
+                         ("language", language)):
+            if val:
+                where.append(f"i.{col} = ?")
+                params.append(val)
+        if rarity:
+            where.append("c.rarity = ?")
+            params.append(rarity)
+        w = " AND ".join(where)
+        order = {
+            "set": "os.release_date, c.number_sort",
+            "name": "c.name",
+            "number": "c.number_sort",
+            "rarity": "c.rarity, c.number_sort",
+            "recent": "i.created_at DESC",
+            "quantity": "i.quantity DESC",
+        }.get(sort, "os.release_date, c.number_sort")
+        total = self._scalar(
+            f"SELECT COUNT(*) FROM collection_items i JOIN cards c ON c.id=i.card_id WHERE {w}",
+            params,
+        ) or 0
+        rows = self._all(
+            f"""SELECT i.*, c.name, c.number, c.rarity, c.official_set_id,
+                       c.image_small_url, c.image_local, os.name AS set_name
+                FROM collection_items i
+                JOIN cards c ON c.id = i.card_id
+                JOIN official_sets os ON os.id = c.official_set_id
+                WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""",
+            params + [page_size, (page - 1) * page_size],
+        )
+        for r in rows:
+            r["photos"] = self.get_photos(r["id"])
+        return rows, total
+
+    def collection_totals(self) -> dict:
+        """Unique logical cards vs physical copies (spec §4): 67 cartas / 94 físicas."""
+        return self._one(
+            "SELECT COUNT(DISTINCT card_id) AS unique_cards, "
+            "COALESCE(SUM(quantity), 0) AS physical_cards, "
+            "COUNT(*) AS item_rows FROM collection_items"
+        ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0}
+
+    def owned_card_variants(self) -> list[dict]:
+        """Distinct (card, variant) pairs actually held — the price job's work list.
+        Spec §11/§30: one lookup per card/variant, never one per physical copy."""
+        return self._all(
+            "SELECT DISTINCT card_id, variant FROM collection_items ORDER BY card_id"
+        )
+
+    # ---------------------------------------------------------------- photos
+    def add_photo(self, item_id: int, p: dict) -> dict:
+        with self.tx() as c:
+            has_primary = c.execute(
+                "SELECT COUNT(*) FROM collection_photos WHERE item_id=? AND is_primary=1",
+                (item_id,),
+            ).fetchone()[0]
+            pos = c.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM collection_photos WHERE item_id=?",
+                (item_id,),
+            ).fetchone()[0]
+            cur = c.execute(
+                """INSERT INTO collection_photos
+                     (item_id,filename,thumb_filename,width,height,bytes,is_primary,position)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (item_id, p["filename"], p.get("thumb_filename"), p.get("width"),
+                 p.get("height"), p.get("bytes"), 0 if has_primary else 1, pos),
+            )
+            row = c.execute("SELECT * FROM collection_photos WHERE id=?", (cur.lastrowid,)).fetchone()
+        return dict(row)
+
+    def get_photos(self, item_id: int) -> list[dict]:
+        return self._all(
+            "SELECT * FROM collection_photos WHERE item_id=? ORDER BY is_primary DESC, position",
+            (item_id,),
+        )
+
+    def get_photo(self, photo_id: int) -> dict | None:
+        return self._one("SELECT * FROM collection_photos WHERE id=?", (photo_id,))
+
+    def set_primary_photo(self, photo_id: int) -> None:
+        with self.tx() as c:
+            row = c.execute("SELECT item_id FROM collection_photos WHERE id=?",
+                            (photo_id,)).fetchone()
+            if not row:
+                return
+            c.execute("UPDATE collection_photos SET is_primary=0 WHERE item_id=?", (row["item_id"],))
+            c.execute("UPDATE collection_photos SET is_primary=1 WHERE id=?", (photo_id,))
+
+    def delete_photo(self, photo_id: int) -> list[str]:
+        p = self.get_photo(photo_id)
+        if not p:
+            return []
+        with self.tx() as c:
+            c.execute("DELETE FROM collection_photos WHERE id=?", (photo_id,))
+            # keep exactly one primary per item
+            c.execute(
+                "UPDATE collection_photos SET is_primary=1 WHERE id = ("
+                "  SELECT id FROM collection_photos WHERE item_id=? ORDER BY position LIMIT 1)"
+                " AND NOT EXISTS (SELECT 1 FROM collection_photos WHERE item_id=? AND is_primary=1)",
+                (p["item_id"], p["item_id"]),
+            )
+        files = [p["filename"]]
+        if p.get("thumb_filename"):
+            files.append(p["thumb_filename"])
+        return files
+
+    # ---------------------------------------------------------------- prices
+    def upsert_price(self, card_id: str, variant: str, source: str, currency: str,
+                     price: float | None, low: float | None, trend: float | None,
+                     avg30: float | None, raw: dict | None) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO price_cache
+                     (card_id,variant,source,currency,price,price_low,price_trend,price_avg30,raw_json)
+                   VALUES (?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(card_id,variant,source) DO UPDATE SET
+                     currency=excluded.currency, price=excluded.price,
+                     price_low=excluded.price_low, price_trend=excluded.price_trend,
+                     price_avg30=excluded.price_avg30, raw_json=excluded.raw_json,
+                     updated_at=datetime('now')""",
+                (card_id, variant, source, currency, price, low, trend, avg30,
+                 json.dumps(raw) if raw else None),
+            )
+
+    def append_price_history(self, card_id: str, variant: str, source: str,
+                             currency: str, price: float | None,
+                             captured_on: str | None = None) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO price_history"
+                "(card_id,variant,source,currency,price,captured_on) VALUES (?,?,?,?,?,?)",
+                (card_id, variant, source, currency, price,
+                 captured_on or date.today().isoformat()),
+            )
+
+    def get_prices_for_card(self, card_id: str) -> list[dict]:
+        return self._all("SELECT * FROM price_cache WHERE card_id=?", (card_id,))
+
+    def get_price(self, card_id: str, variant: str, source: str = "cardmarket") -> dict | None:
+        return self._one(
+            "SELECT * FROM price_cache WHERE card_id=? AND variant=? AND source=?",
+            (card_id, variant, source),
+        )
+
+    def stale_priced_pairs(self, stale_days: int) -> list[dict]:
+        """Owned (card, variant) pairs whose cached price is missing or too old."""
+        return self._all(
+            """SELECT DISTINCT i.card_id, i.variant FROM collection_items i
+               LEFT JOIN price_cache p
+                 ON p.card_id = i.card_id AND p.variant = i.variant
+               WHERE p.card_id IS NULL
+                  OR julianday('now') - julianday(p.updated_at) > ?
+               ORDER BY i.card_id""",
+            (stale_days,),
+        )
+
+    def get_modifiers(self) -> dict[str, dict[str, float]]:
+        out: dict[str, dict[str, float]] = {}
+        for r in self._all("SELECT * FROM price_modifiers"):
+            out.setdefault(r["kind"], {})[r["key"]] = r["multiplier"]
+        return out
+
+    def price_history(self, card_id: str | None = None, set_id: str | None = None) -> list[dict]:
+        if card_id:
+            return self._all(
+                "SELECT captured_on, SUM(price) AS price FROM price_history "
+                "WHERE card_id=? GROUP BY captured_on ORDER BY captured_on", (card_id,)
+            )
+        if set_id:
+            return self._all(
+                """SELECT h.captured_on, SUM(h.price) AS price FROM price_history h
+                   WHERE h.card_id IN (SELECT card_id FROM set_slot_cards WHERE set_id=?)
+                   GROUP BY h.captured_on ORDER BY h.captured_on""", (set_id,)
+            )
+        return self._all(
+            "SELECT captured_on, SUM(price) AS price FROM price_history "
+            "GROUP BY captured_on ORDER BY captured_on"
+        )
+
+    # ------------------------------------------------------------- snapshots
+    def write_snapshot(self, snap: dict) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO collection_snapshots
+                     (captured_on,unique_cards,physical_cards,sets_total,sets_complete,
+                      completion_pct,value_eur,breakdown_json)
+                   VALUES (:captured_on,:unique_cards,:physical_cards,:sets_total,
+                           :sets_complete,:completion_pct,:value_eur,:breakdown_json)
+                   ON CONFLICT(captured_on) DO UPDATE SET
+                     unique_cards=excluded.unique_cards, physical_cards=excluded.physical_cards,
+                     sets_total=excluded.sets_total, sets_complete=excluded.sets_complete,
+                     completion_pct=excluded.completion_pct, value_eur=excluded.value_eur,
+                     breakdown_json=excluded.breakdown_json""",
+                snap,
+            )
+
+    def list_snapshots(self, limit: int = 365) -> list[dict]:
+        return self._all(
+            "SELECT * FROM collection_snapshots ORDER BY captured_on DESC LIMIT ?", (limit,)
+        )
+
+    # ------------------------------------------------------------ dashboards
+    def rarities(self) -> list[str]:
+        return [r["rarity"] for r in self._all(
+            "SELECT DISTINCT rarity FROM cards WHERE rarity IS NOT NULL ORDER BY rarity")]

@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    container_name: tombot-tracker
+    restart: unless-stopped
+    # Bound to localhost by default. Publish on 0.0.0.0 only behind a reverse
+    # proxy with auth, or set APP_TOKEN — the API has no login (PLAN.md §2.7).
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/srv/data
+      - ./media:/srv/media
+    environment:
+      - POKEMONTCG_API_KEY=${POKEMONTCG_API_KEY:-}
+      - APP_TOKEN=${APP_TOKEN:-}
+      - PRICE_BASIS=${PRICE_BASIS:-averageSellPrice}
+      - PRICE_STALE_DAYS=${PRICE_STALE_DAYS:-25}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-25}

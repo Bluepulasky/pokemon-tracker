@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+media/catalog/*
+media/collection/*
+media/thumbs/*
+!media/**/.gitkeep
+dist/
+.DS_Store
+.pytest_cache/

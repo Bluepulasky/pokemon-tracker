@@ -1,0 +1,187 @@
+-- TOMBOT POKEMON TRACKER — schema
+-- See PLAN.md §3. Every connection must set foreign_keys=ON (SQLite defaults it OFF).
+
+PRAGMA foreign_keys = ON;
+
+-- ---------------------------------------------------------------------------
+-- CATALOG  (external source of truth; safe to overwrite on re-import)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS official_sets (
+    id             TEXT PRIMARY KEY,          -- 'base1'
+    name           TEXT NOT NULL,             -- 'Base'
+    series         TEXT,                      -- 'Base'
+    printed_total  INTEGER,
+    total          INTEGER,
+    release_date   TEXT,                      -- 'YYYY/MM/DD' from source
+    ptcgo_code     TEXT,
+    logo_url       TEXT,
+    symbol_url     TEXT,
+    source         TEXT NOT NULL DEFAULT 'pokemontcgio',
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cards (
+    id               TEXT PRIMARY KEY,        -- 'base1-4'
+    official_set_id  TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    number           TEXT NOT NULL,           -- '4', 'H12', 'SH1' — string on purpose
+    number_sort      REAL,                    -- derived; lexical sort puts #10 before #2
+    rarity           TEXT,
+    supertype        TEXT,                    -- Pokémon / Trainer / Energy
+    subtypes_json    TEXT,
+    types_json       TEXT,
+    artist           TEXT,
+    image_small_url  TEXT,
+    image_large_url  TEXT,
+    image_local      TEXT,                    -- cached path under media/catalog
+    external_ids_json TEXT,                   -- {"pokemontcgio": "...", "cardmarket_url": "..."}
+    source           TEXT NOT NULL DEFAULT 'pokemontcgio',
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cards_set    ON cards(official_set_id, number_sort);
+CREATE INDEX IF NOT EXISTS idx_cards_name   ON cards(name);
+CREATE INDEX IF NOT EXISTS idx_cards_rarity ON cards(rarity);
+
+-- ---------------------------------------------------------------------------
+-- PERSONAL SETS  (user-owned; a catalog re-import must never touch these)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_sets (
+    id           TEXT PRIMARY KEY,            -- 'base-set', 'jungle-no-holos'
+    name         TEXT NOT NULL,
+    description  TEXT,
+    group_name   TEXT,                        -- 'Gen1' / 'Gen 2' / 'Gen 3'
+    position     INTEGER NOT NULL DEFAULT 0,
+    rules_json   TEXT,                        -- declarative rule; see PLAN.md §2.10
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A slot is ONE completion target. Owning any member card completes it.
+-- This is what lets reprints/variants collapse to a single logical card (PLAN.md §2.1).
+CREATE TABLE IF NOT EXISTS set_slots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    set_id          TEXT NOT NULL REFERENCES collection_sets(id) ON DELETE CASCADE,
+    position        INTEGER NOT NULL,
+    label           TEXT,                     -- display name; defaults to primary card name
+    display_card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
+    source          TEXT NOT NULL DEFAULT 'rule',   -- 'rule' | 'manual'
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_slots_set ON set_slots(set_id, position);
+
+CREATE TABLE IF NOT EXISTS set_slot_cards (
+    slot_id  INTEGER NOT NULL REFERENCES set_slots(id) ON DELETE CASCADE,
+    card_id  TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    set_id   TEXT NOT NULL REFERENCES collection_sets(id) ON DELETE CASCADE,  -- denormalised
+    PRIMARY KEY (slot_id, card_id)
+);
+
+-- A catalog card may belong to at most one slot within a given personal set.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_slotcards_unique ON set_slot_cards(set_id, card_id);
+CREATE INDEX IF NOT EXISTS idx_slotcards_card ON set_slot_cards(card_id);
+
+-- ---------------------------------------------------------------------------
+-- COLLECTION  (user-owned; the source of truth on what is physically held)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id    TEXT NOT NULL REFERENCES cards(id) ON DELETE RESTRICT,
+    variant    TEXT NOT NULL DEFAULT 'normal',   -- normal|holo|reverse|first_edition|shadowless|other
+    condition  TEXT NOT NULL DEFAULT 'NM',       -- NM|LP|MP|HP|DMG
+    language   TEXT NOT NULL DEFAULT 'es',       -- es|en|pt|other
+    quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    notes      TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Without this, two rows of the same combination silently double the physical count.
+    UNIQUE (card_id, variant, condition, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_items_card ON collection_items(card_id);
+
+-- N photos per item (PLAN.md §2.4). The spec's single image column could not
+-- satisfy "one photo per variant, swipe through them in the modal".
+CREATE TABLE IF NOT EXISTS collection_photos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id        INTEGER NOT NULL REFERENCES collection_items(id) ON DELETE CASCADE,
+    filename       TEXT NOT NULL,             -- under media/collection/
+    thumb_filename TEXT,                      -- under media/thumbs/
+    width          INTEGER,
+    height         INTEGER,
+    bytes          INTEGER,
+    is_primary     INTEGER NOT NULL DEFAULT 0,
+    position       INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_photos_item ON collection_photos(item_id, position);
+
+-- ---------------------------------------------------------------------------
+-- PRICES
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS price_cache (
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    source      TEXT NOT NULL DEFAULT 'cardmarket',
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,                         -- the chosen basis (see config PRICE_BASIS)
+    price_low   REAL,
+    price_trend REAL,
+    price_avg30 REAL,
+    raw_json    TEXT,                         -- full upstream payload, for later re-derivation
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (card_id, variant, source)
+);
+
+CREATE TABLE IF NOT EXISTS price_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    source      TEXT NOT NULL DEFAULT 'cardmarket',
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,
+    captured_on TEXT NOT NULL,                -- 'YYYY-MM-DD', one row per day max
+    UNIQUE (card_id, variant, source, captured_on)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricehist_card ON price_history(card_id, captured_on);
+
+-- Condition/language multipliers. No public source prices by condition or by
+-- printing language, so these are local, editable estimates (PLAN.md §2.12).
+CREATE TABLE IF NOT EXISTS price_modifiers (
+    kind       TEXT NOT NULL,                 -- 'condition' | 'language' | 'variant'
+    key        TEXT NOT NULL,
+    multiplier REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (kind, key)
+);
+
+-- ---------------------------------------------------------------------------
+-- HISTORY  (current state cannot answer "how many did I own in March" — §2.6)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_snapshots (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    captured_on    TEXT NOT NULL UNIQUE,      -- 'YYYY-MM-DD'
+    unique_cards   INTEGER NOT NULL DEFAULT 0,
+    physical_cards INTEGER NOT NULL DEFAULT 0,
+    sets_total     INTEGER NOT NULL DEFAULT 0,
+    sets_complete  INTEGER NOT NULL DEFAULT 0,
+    completion_pct REAL NOT NULL DEFAULT 0,
+    value_eur      REAL NOT NULL DEFAULT 0,
+    breakdown_json TEXT,                      -- per-set detail
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

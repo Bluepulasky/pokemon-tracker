@@ -1,0 +1,372 @@
+/* SPA shell: hash routing + the four views (spec §26). */
+
+import { api } from './api.js';
+import { closeModal, initModal, openCard } from './modal.js';
+import { cardArt, el, esc, eur, lineChart, pct, photoUrl, placeholder,
+         progressBar, toast } from './ui.js';
+
+const view = () => document.getElementById('view');
+let META = null;
+
+/* ------------------------------------------------------------------ boot */
+async function boot() {
+  try {
+    META = await api.meta();
+  } catch (e) {
+    view().innerHTML = `<div class="empty">No se pudo contactar con la API.<br><small>${esc(e.message)}</small></div>`;
+    return;
+  }
+  initModal(META, () => render(true));
+  wireSearch();
+  // A route change must dismiss the modal, or it lingers over the new view.
+  window.addEventListener('hashchange', () => { closeModal(); render(); });
+  render();
+}
+
+function route() {
+  const [path, query] = (location.hash.slice(2) || 'dashboard').split('?');
+  const parts = path.split('/').filter(Boolean);
+  return { name: parts[0] || 'dashboard', id: parts[1], params: new URLSearchParams(query || '') };
+}
+
+const VIEWS = { dashboard, sets, set: setDetail, collection, missing };
+
+async function render(keepScroll = false) {
+  const r = route();
+  document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle(
+    'active', a.dataset.tab === r.name || (r.name === 'set' && a.dataset.tab === 'sets')));
+  const y = keepScroll ? window.scrollY : 0;
+  const fn = VIEWS[r.name] || dashboard;
+  view().innerHTML = '<div class="loading">Cargando…</div>';
+  try {
+    await fn(r);
+  } catch (e) {
+    view().innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
+  }
+  window.scrollTo(0, y);
+}
+
+/* ------------------------------------------------------------- dashboard */
+async function dashboard() {
+  const [d, h] = await Promise.all([api.dashboard(), api.history()]);
+  const v = d.value;
+  const points = h.data.map((s) => ({ label: s.captured_on.slice(5), value: s.value_eur }));
+
+  view().innerHTML = `
+    <h1>Mi colección</h1>
+    <p class="sub">${d.unique_cards} cartas únicas · ${d.physical_cards} cartas físicas ·
+       ${d.sets_total} sets · ${pct(d.completion_pct)} completitud</p>
+
+    <div class="stat-grid">
+      <div class="stat accent"><div class="k">Valor estimado</div>
+        <div class="v">${esc(eur(v.total_eur))}</div>
+        ${v.unpriced_items ? `<div class="note">${v.unpriced_items} sin precio conocido</div>` : ''}</div>
+      <div class="stat"><div class="k">Cartas únicas</div><div class="v">${d.unique_cards}</div></div>
+      <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
+      <div class="stat"><div class="k">Sets completos</div>
+        <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
+      <div class="stat"><div class="k">Completitud global</div>
+        <div class="v">${pct(d.completion_pct)}</div>
+        ${progressBar(d.owned_cards, d.target_cards)}
+        <div class="note">${d.owned_cards} / ${d.target_cards} cartas objetivo</div></div>
+    </div>
+
+    <h2>Evolución del valor</h2>
+    ${lineChart(points)}
+    ${points.length < 2 ? '<div class="note">El histórico se acumula con cada snapshot mensual.</div>' : ''}
+
+    <h2>Sets más completos</h2>
+    <div class="set-grid">${d.most_complete.map(setCardHtml).join('')}</div>
+
+    <h2>Sets con más cartas faltantes</h2>
+    <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
+
+    <h2>Cartas de mayor valor</h2>
+    <div class="missing-list">${
+      d.top_value.length ? d.top_value.map((t) => `
+        <div class="missing-row" data-card="${esc(t.card_id)}">
+          <span class="n">#${esc(t.number)}</span>
+          <span>${esc(t.name)}</span>
+          <span class="tag">${esc(t.variant)} · ${esc(t.condition)} · ×${t.quantity}</span>
+          <span class="r">${esc(eur(t.value))}</span>
+        </div>`).join('')
+      : '<div class="empty">Todavía no hay precios. Ejecuta una actualización de precios.</div>'}</div>
+
+    <div class="btn-row">
+      <button class="btn" id="refresh-prices">Actualizar precios ahora</button>
+      <span class="note" style="align-self:center">
+        Última actualización: ${esc(d.last_price_refresh || 'nunca')}</span>
+    </div>`;
+
+  wireCardClicks();
+  view().querySelectorAll('[data-set]').forEach((n) => {
+    n.onclick = () => { location.hash = `#/set/${n.dataset.set}`; };
+  });
+  view().querySelector('#refresh-prices').onclick = async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = 'Actualizando…';
+    try {
+      const r = await api.refreshPrices();
+      toast(`${r.updated} precios actualizados${r.unpriced ? `, ${r.unpriced} sin datos` : ''}`);
+      render();
+    } catch (err) {
+      toast(err.message, true);
+      e.target.disabled = false;
+      e.target.textContent = 'Actualizar precios ahora';
+    }
+  };
+}
+
+const setCardHtml = (s) => `
+  <div class="set-card" data-set="${esc(s.id)}">
+    <span class="pct">${pct(s.completion_pct)}</span>
+    <div class="name">${esc(s.name)}</div>
+    <div class="count">${s.owned} / ${s.target} cartas${
+      s.missing ? ` · faltan ${s.missing}` : ''}</div>
+    ${progressBar(s.owned, s.target)}
+  </div>`;
+
+/* ------------------------------------------------------------------ sets */
+async function sets() {
+  const { data } = await api.sets();
+  const groups = {};
+  for (const s of data) (groups[s.group_name || 'Otros'] ||= []).push(s);
+
+  view().innerHTML = `
+    <h1>Sets</h1>
+    <p class="sub">${data.length} sets personalizados ·
+       ${data.reduce((a, s) => a + s.owned, 0)} / ${data.reduce((a, s) => a + s.target, 0)} cartas</p>
+    ${Object.entries(groups).map(([g, list]) => `
+      <h2>${esc(g)}</h2>
+      <div class="set-grid">${list.map((s) => setCardHtml({
+        ...s, missing: s.target - s.owned })).join('')}</div>`).join('')}`;
+
+  view().querySelectorAll('[data-set]').forEach((n) => {
+    n.onclick = () => { location.hash = `#/set/${n.dataset.set}`; };
+  });
+}
+
+/* ------------------------------------------------------- set detail grid */
+async function setDetail(r) {
+  const s = await api.set(r.id);
+  const p = s.progress || { owned: 0, target: 0, completion_pct: 0 };
+  const sort = r.params.get('sort') || 'number';
+  const filter = r.params.get('filter') || 'all';
+
+  let slots = [...s.slots];
+  if (filter === 'owned') slots = slots.filter((x) => x.owned);
+  if (filter === 'missing') slots = slots.filter((x) => !x.owned);
+  slots.sort(sorter(sort));
+
+  view().innerHTML = `
+    <h1>${esc(s.name)}</h1>
+    <p class="sub">${p.owned} / ${p.target} cartas · ${pct(p.completion_pct)} completado${
+      s.description ? ` · ${esc(s.description)}` : ''}</p>
+    ${progressBar(p.owned, p.target)}
+
+    <div class="toolbar">
+      <select id="f-filter">
+        <option value="all"${filter === 'all' ? ' selected' : ''}>Todas</option>
+        <option value="owned"${filter === 'owned' ? ' selected' : ''}>Solo poseídas</option>
+        <option value="missing"${filter === 'missing' ? ' selected' : ''}>Solo faltantes</option>
+      </select>
+      <select id="f-sort">
+        <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
+        <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
+        <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
+        <option value="owned"${sort === 'owned' ? ' selected' : ''}>Poseídas primero</option>
+      </select>
+      <span class="spacer">${slots.length} cartas mostradas</span>
+    </div>
+
+    <div class="card-grid">${slots.map(slotHtml).join('')}</div>`;
+
+  const nav = () => { location.hash = `#/set/${r.id}?sort=${
+    view().querySelector('#f-sort').value}&filter=${view().querySelector('#f-filter').value}`; };
+  view().querySelector('#f-sort').onchange = nav;
+  view().querySelector('#f-filter').onchange = nav;
+  wireCardClicks();
+}
+
+const sorter = (key) => ({
+  number: (a, b) => (a.number_sort ?? 0) - (b.number_sort ?? 0),
+  name: (a, b) => String(a.label).localeCompare(String(b.label)),
+  rarity: (a, b) => String(a.rarity || '').localeCompare(String(b.rarity || ''))
+                    || (a.number_sort ?? 0) - (b.number_sort ?? 0),
+  owned: (a, b) => (b.owned ? 1 : 0) - (a.owned ? 1 : 0) || (a.number_sort ?? 0) - (b.number_sort ?? 0),
+}[key] || ((a, b) => (a.number_sort ?? 0) - (b.number_sort ?? 0)));
+
+function slotHtml(slot) {
+  const art = cardArt(slot);
+  return `<div class="card${slot.owned ? '' : ' missing'}" data-card="${esc(slot.card_id)}">
+    <div class="art">
+      ${slot.owned && art
+        ? `<img src="${esc(art)}" alt="${esc(slot.label)}" loading="lazy">`
+        : placeholder(slot.number, slot.official_set_id)}
+      ${slot.owned ? '<span class="badge own">✓</span>' : ''}
+      ${slot.quantity > 1 ? `<span class="badge qty">×${slot.quantity}</span>` : ''}
+    </div>
+    <div class="label">
+      <span class="nm">${esc(slot.label || '—')}</span>
+      <span class="no">#${esc(slot.number || '?')}</span>
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------ collection */
+async function collection(r) {
+  const f = {
+    set: r.params.get('set') || '',
+    condition: r.params.get('condition') || '',
+    variant: r.params.get('variant') || '',
+    language: r.params.get('language') || '',
+    rarity: r.params.get('rarity') || '',
+    q: r.params.get('q') || '',
+    sort: r.params.get('sort') || 'set',
+    page_size: 240,
+  };
+  const [res, setList] = await Promise.all([api.collection(f), api.sets()]);
+  const t = res.totals;
+
+  const sel = (id, label, options, cur) => `
+    <select id="${id}"><option value="">${label}</option>${options.map((o) =>
+      `<option value="${esc(o.key)}"${o.key === cur ? ' selected' : ''}>${esc(o.label)}</option>`
+    ).join('')}</select>`;
+
+  view().innerHTML = `
+    <h1>Mi colección</h1>
+    <p class="sub">${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas ·
+       ${res.total} registros</p>
+
+    <div class="toolbar">
+      <input id="f-q" type="search" placeholder="Buscar…" value="${esc(f.q)}">
+      ${sel('f-set', 'Todos los sets', setList.data.map((s) => ({ key: s.id, label: s.name })), f.set)}
+      ${sel('f-condition', 'Condición', META.conditions, f.condition)}
+      ${sel('f-variant', 'Variante', META.variants, f.variant)}
+      ${sel('f-language', 'Idioma', META.languages, f.language)}
+      ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
+      ${sel('f-sort', '', [
+        { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
+        { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
+        { key: 'quantity', label: 'Por cantidad' }, { key: 'recent', label: 'Más recientes' },
+      ], f.sort)}
+      <span class="spacer">${res.data.length} de ${res.total}</span>
+    </div>
+
+    ${res.data.length
+      ? `<div class="card-grid">${res.data.map(itemHtml).join('')}</div>`
+      : '<div class="empty">No hay cartas con estos filtros.</div>'}`;
+
+  const apply = () => {
+    const p = new URLSearchParams();
+    for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity', 'sort']) {
+      const v = view().querySelector(`#f-${k}`).value;
+      if (v) p.set(k, v);
+    }
+    location.hash = `#/collection?${p}`;
+  };
+  view().querySelectorAll('.toolbar select').forEach((s) => { s.onchange = apply; });
+  const q = view().querySelector('#f-q');
+  q.onchange = apply;
+  q.onkeydown = (e) => { if (e.key === 'Enter') apply(); };
+  wireCardClicks();
+}
+
+function itemHtml(i) {
+  /* Prefer the user's own photo, then the catalog image (spec §4/§6). */
+  const primary = i.photos?.find((p) => p.is_primary) || i.photos?.[0];
+  const src = primary ? photoUrl(primary) : cardArt(i);
+  const v = i.value || {};
+  return `<div class="card" data-card="${esc(i.card_id)}">
+    <div class="art">
+      ${src ? `<img src="${esc(src)}" alt="${esc(i.name)}" loading="lazy">`
+            : placeholder(i.number, i.official_set_id)}
+      ${i.quantity > 1 ? `<span class="badge qty">×${i.quantity}</span>` : ''}
+      ${v.total != null ? `<span class="badge val">${esc(eur(v.total))}</span>` : ''}
+    </div>
+    <div class="label">
+      <span class="nm">${esc(i.name)}</span>
+      <span class="no">#${esc(i.number)} · ${esc(i.condition)}</span>
+    </div>
+  </div>`;
+}
+
+/* --------------------------------------------------------------- missing */
+async function missing(r) {
+  const { data: setList } = await api.sets();
+  const setId = r.id || r.params.get('set') || setList[0]?.id;
+  const sort = r.params.get('sort') || 'number';
+  if (!setId) { view().innerHTML = '<div class="empty">No hay sets.</div>'; return; }
+
+  const [rows, s] = await Promise.all([api.missing(setId, sort), api.set(setId)]);
+  const p = s.progress || {};
+
+  view().innerHTML = `
+    <h1>Cartas faltantes</h1>
+    <p class="sub">${esc(s.name)} · faltan ${rows.data.length} de ${p.target} cartas</p>
+
+    <div class="toolbar">
+      <select id="f-set">${setList.map((x) => `<option value="${esc(x.id)}"${
+        x.id === setId ? ' selected' : ''}>${esc(x.name)} (${x.target - x.owned})</option>`).join('')}</select>
+      <select id="f-sort">
+        <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
+        <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
+        <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
+      </select>
+      <span class="spacer">Usa esta vista como wishlist</span>
+    </div>
+
+    ${rows.data.length ? `<div class="missing-list">${rows.data.map((m) => `
+      <div class="missing-row" data-card="${esc(m.card_id)}">
+        <span class="n">#${esc(m.number || '?')}</span>
+        <span>${esc(m.label || '')}</span>
+        <span class="r">${esc(m.rarity || '')}</span>
+      </div>`).join('')}</div>`
+      : '<div class="empty">🎉 Set completo.</div>'}`;
+
+  const nav = () => { location.hash = `#/missing/${view().querySelector('#f-set').value}?sort=${
+    view().querySelector('#f-sort').value}`; };
+  view().querySelector('#f-set').onchange = nav;
+  view().querySelector('#f-sort').onchange = nav;
+  wireCardClicks();
+}
+
+/* ----------------------------------------------------------------- glue */
+function wireCardClicks() {
+  view().querySelectorAll('[data-card]').forEach((n) => {
+    n.onclick = () => { if (n.dataset.card) openCard(n.dataset.card); };
+  });
+}
+
+function wireSearch() {
+  const input = document.getElementById('global-search');
+  const box = document.getElementById('search-results');
+  let timer;
+  input.oninput = () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { box.hidden = true; return; }
+    timer = setTimeout(async () => {
+      try {
+        const res = await api.search(q);
+        const owned = new Set(res.collection.map((c) => c.card_id));
+        box.innerHTML = res.cards.length ? res.cards.map((c) => `
+          <div class="row" data-card="${esc(c.id)}">
+            <img src="${esc(cardArt(c))}" alt="" loading="lazy">
+            <div><div>${esc(c.name)}</div>
+              <div class="meta">${esc(c.set_name)} #${esc(c.number)}${
+                owned.has(c.id) ? ' · en colección' : ''}</div></div>
+          </div>`).join('') : '<div class="meta" style="padding:10px">Sin resultados</div>';
+        box.hidden = false;
+        box.querySelectorAll('[data-card]').forEach((n) => {
+          n.onclick = () => { box.hidden = true; input.value = ''; openCard(n.dataset.card); };
+        });
+      } catch (e) { toast(e.message, true); }
+    }, 220);
+  };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) box.hidden = true;
+  });
+}
+
+boot();
