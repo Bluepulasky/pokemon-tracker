@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from . import cfg, paginate_args, repo, svc
 from .. import ApiError
-from ..config import CONDITIONS, LANGUAGES, VARIANTS
+from ..config import CONDITIONS, LANGUAGES, MAX_RATING, VARIANTS
 from ..services.images import ImageError, delete_files, process_upload
 from ..services.market import market_url
 
@@ -18,6 +18,34 @@ def _validate(body: dict) -> None:
         raise ApiError(f"idioma inválido: {body['language']}")
     if "quantity" in body and int(body["quantity"]) < 1:
         raise ApiError("la cantidad debe ser >= 1")
+    if body.get("rating") is not None:
+        try:
+            rating = int(body["rating"])
+        except (TypeError, ValueError):
+            raise ApiError("el rating debe ser un entero entre 0 y 8",
+                           "invalid_rating") from None
+        if not 0 <= rating <= MAX_RATING:
+            raise ApiError(f"el rating debe estar entre 0 y {MAX_RATING}",
+                           "invalid_rating")
+
+
+def _rating_arg(name: str) -> int | None:
+    """Parse a rating query parameter, rejecting out-of-range values.
+
+    Silently ignoring a bad value would quietly return the unfiltered collection,
+    which reads as "the filter does nothing" rather than "that was invalid".
+    """
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ApiError(f"{name} debe ser un entero entre 0 y {MAX_RATING}",
+                       "invalid_rating") from None
+    if not 0 <= value <= MAX_RATING:
+        raise ApiError(f"{name} debe estar entre 0 y {MAX_RATING}", "invalid_rating")
+    return value
 
 
 def _priced(rows):
@@ -41,6 +69,9 @@ def list_items():
         variant=request.args.get("variant", ""),
         language=request.args.get("language", ""),
         rarity=request.args.get("rarity", ""),
+        rating=_rating_arg("rating"),
+        rating_min=_rating_arg("rating_min"),
+        rating_max=_rating_arg("rating_max"),
         sort=request.args.get("sort", "set"),
         page=page, page_size=size,
     )

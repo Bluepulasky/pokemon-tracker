@@ -131,8 +131,29 @@ you have entered real cards. Neither command touches the catalog or the personal
 | Collection inventory with filters | `#/collection` |
 | Card modal: variants, photos, prices, edit | `static/js/modal.js` |
 | Missing-cards wishlist | `#/missing` |
+| Hall of Fame ranking (0-8) | card modal · `#/collection?rating_min=7` |
 | Dashboard + value history | `#/dashboard` |
 | Monthly price refresh | `flask monthly` |
+
+## Hall of Fame
+
+Every card in the collection can be ranked 0-8 — 0 meaning unranked, 8 a masterpiece.
+Set it from the card modal; it saves on click, since ranking is something you do
+repeatedly while going through a binder.
+
+The rank belongs to a **collection row**, i.e. a specific
+`(card, variant, condition, language)`. Two copies of the same card in different
+conditions rank separately. Copies identical in all four collapse into one row with a
+quantity and share a rank — the uniqueness rule that keeps physical counts honest also
+means there is no separate row to hang a second rank on.
+
+Filter with `?rating=`, `?rating_min=`, `?rating_max=`, or the **Top Tier ★7+** and
+**Favoritas ★5+** quick filters. Sort with `?sort=rating`. The dashboard shows the
+average and a gallery of the top tier.
+
+The average deliberately ignores unranked cards: 0 means "not ranked yet", not "ranked
+zero", so including them would describe how much ranking is left rather than the
+collection.
 
 ## Concepts
 

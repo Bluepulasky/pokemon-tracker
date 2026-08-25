@@ -3,7 +3,7 @@
    the add/edit form, photos, and the price breakdown. */
 
 import { api } from './api.js';
-import { cardArt, el, esc, eur, photoUrl, toast } from './ui.js';
+import { cardArt, el, esc, eur, hofBadge, photoUrl, toast } from './ui.js';
 
 let META = null;
 let onChange = () => {};
@@ -80,6 +80,12 @@ function variantCard(item) {
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
       <span class="tag">×${item.quantity}</span>
+      ${hofBadge(item.rating, { compact: true })}
+    </div>
+    <div class="field" style="margin-bottom:8px">
+      <label>Hall of Fame</label>
+      ${rankRow(item.rating || 0)}
+      <div class="rank-label">${esc(RATING_LABEL(item.rating || 0))}</div>
     </div>
     <div class="photos">
       ${item.photos.length
@@ -102,6 +108,19 @@ function variantCard(item) {
   </div>`;
 }
 
+const RATING_LABEL = (r) =>
+  (META.ratings.find((x) => x.value === Number(r)) || {}).label || '';
+
+/* 0-8 as a row of targets. A slider is fiddly on a phone and hides the value,
+   and this is the one control the feature exists for. */
+function rankRow(current) {
+  return `<div class="rank-row">
+    ${META.ratings.map((r) => `<span class="rank${r.value === 0 ? ' zero' : ''}${
+      Number(current) === r.value ? ' on' : ''}" data-rank="${r.value}"
+      title="${esc(r.label)}">${r.value === 0 ? '—' : r.value}</span>`).join('')}
+  </div>`;
+}
+
 function addForm(card) {
   return `<form class="add-form" data-card="${esc(card.id)}">
     <div class="form-row">
@@ -117,6 +136,10 @@ function addForm(card) {
         `<span class="chip${i === 0 ? ' on' : ''}" data-cond="${esc(c.key)}"
            title="${esc(c.label)}">${esc(c.key)}</span>`).join('')}</div>
     </div>
+    <div class="field" style="margin-top:12px"><label>Hall of Fame</label>
+      ${rankRow(0)}
+      <div class="rank-label"></div>
+    </div>
     <div class="btn-row">
       <button type="submit" class="btn primary">Guardar</button>
       <button type="button" class="btn ghost cancel">Cancelar</button>
@@ -128,6 +151,16 @@ function addForm(card) {
 function wireForm(root, card) {
   const form = root.querySelector('.add-form');
   let condition = META.conditions[0].key;
+  let rating = 0;
+
+  form.querySelectorAll('.rank').forEach((r) => {
+    r.onclick = () => {
+      form.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
+      r.classList.add('on');
+      rating = Number(r.dataset.rank);
+      form.querySelector('.rank-label').textContent = RATING_LABEL(rating);
+    };
+  });
 
   form.querySelectorAll('.chip').forEach((chip) => {
     chip.onclick = () => {
@@ -148,6 +181,7 @@ function wireForm(root, card) {
         variant: form.variant.value,
         language: form.language.value,
         condition,
+        rating,
         quantity: Number(form.quantity.value) || 1,
       });
       toast(`${card.name} añadida`);
@@ -188,6 +222,23 @@ function wireVariants(root, cardId) {
     };
 
     vc.querySelector('.act-edit').onclick = () => editVariant(vc, id, cardId);
+
+    // Ranking saves on click. It is the one thing you do repeatedly while
+    // going through a binder, so making it a two-step edit would be wrong.
+    vc.querySelectorAll('.rank').forEach((r) => {
+      r.onclick = async () => {
+        const value = Number(r.dataset.rank);
+        vc.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
+        r.classList.add('on');
+        vc.querySelector('.rank-label').textContent = RATING_LABEL(value);
+        try {
+          await api.rate(id, value);
+          const b = vc.querySelector('.hof');
+          if (b) b.outerHTML = hofBadge(value, { compact: true }) || '<span class="hof" hidden></span>';
+          onChange();
+        } catch (e) { toast(e.message, true); }
+      };
+    });
 
     vc.querySelectorAll('[data-photo]').forEach((img) => {
       img.onclick = async () => {

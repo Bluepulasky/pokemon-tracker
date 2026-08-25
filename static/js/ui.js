@@ -44,6 +44,15 @@ export function placeholder(number, setCode) {
   </div>`;
 }
 
+/* Hall of Fame badge. 0 is "unranked", so it renders nothing at all rather than
+   a zero — a grid full of "0" badges would be noise. */
+export function hofBadge(rating, { compact = false } = {}) {
+  const r = Number(rating) || 0;
+  if (!r) return '';
+  const tier = r >= 7 ? ' top' : r >= 5 ? ' fav' : '';
+  return `<span class="hof${tier}${compact ? ' sm' : ''}" title="Hall of Fame ${r}/8">★${r}</span>`;
+}
+
 export function progressBar(owned, target) {
   const p = target ? (100 * owned / target) : 0;
   return `<div class="bar${p >= 100 ? ' good' : ''}"><i style="width:${Math.min(100, p)}%"></i></div>`;
