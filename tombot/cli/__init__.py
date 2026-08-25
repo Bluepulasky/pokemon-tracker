@@ -51,6 +51,13 @@ def import_catalog(set_ids, images):
 
     if images:
         click.echo(f"images: {current_app.extensions['importer'].cache_images()}")
+
+    # Rebuilt here rather than inside import_sets: groups are derived by
+    # comparing cards across sets, so building them from a partial import would
+    # miss pairs and record the gaps as fact.
+    if not result["failed"]:
+        click.echo(f"printings: {_repo().rebuild_printings()}")
+
     if result["failed"]:
         click.secho("re-run to retry the failed sets (import is idempotent)", fg="yellow")
 
@@ -97,6 +104,13 @@ def resolve_links(limit):
         _rate_limit_notice()
     elif r["failed"]:
         click.secho("re-run to retry the failures", fg="yellow")
+
+
+@click.command("rebuild-printings")
+@with_appcontext
+def rebuild_printings():
+    """Rebuild the multi-edition (printing) groups from slots and the catalog."""
+    click.echo(_repo().rebuild_printings())
 
 
 @click.command("seed-sets")
@@ -262,5 +276,5 @@ def bootstrap(ctx, force_catalog):
 
 def register(app):
     for cmd in (init_db, import_catalog, seed_sets, resolve_links,
-                prices, snapshot, monthly, scheduler, bootstrap):
+                rebuild_printings, prices, snapshot, monthly, scheduler, bootstrap):
         app.cli.add_command(cmd)

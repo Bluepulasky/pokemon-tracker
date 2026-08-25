@@ -80,6 +80,7 @@ function variantCard(item) {
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
       <span class="tag">×${item.quantity}</span>
+      ${item.printing_name ? `<span class="tag ed">${esc(item.printing_name)}</span>` : ''}
       ${hofBadge(item.rating, { compact: true })}
     </div>
     <div class="field" style="margin-bottom:8px">
@@ -122,7 +123,18 @@ function rankRow(current) {
 }
 
 function addForm(card) {
+  const printings = card.available_printings || [];
   return `<form class="add-form" data-card="${esc(card.id)}">
+    ${printings.length > 1 ? `
+    <div class="field" style="margin-bottom:12px">
+      <label>Edición / Set actual</label>
+      <select name="printing">
+        ${printings.map((p) => `<option value="${p.id}" data-card="${esc(p.card_id)}"${
+          p.card_id === card.id ? ' selected' : ''}>${esc(p.display_name)}${
+          p.is_reprint ? ' (reimpresión)' : ''}</option>`).join('')}
+      </select>
+      <div class="note">Esta carta existe en varias ediciones. Elige la que tienes.</div>
+    </div>` : ''}
     <div class="form-row">
       <div class="field"><label>Variante</label>
         <select name="variant">${opts(META.variants)}</select></div>
@@ -176,8 +188,13 @@ function wireForm(root, card) {
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
+      const printingSel = form.querySelector('[name=printing]');
+      const chosen = printingSel?.selectedOptions?.[0];
       await api.addItem({
-        card_id: card.id,
+        // Picking a different edition records that printing's catalog card, so
+        // the slot is still satisfied and the physical edition is preserved.
+        card_id: chosen ? chosen.dataset.card : card.id,
+        printing_id: printingSel ? Number(printingSel.value) : undefined,
         variant: form.variant.value,
         language: form.language.value,
         condition,

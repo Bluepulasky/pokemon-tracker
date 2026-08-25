@@ -18,6 +18,15 @@ def _validate(body: dict) -> None:
         raise ApiError(f"idioma inválido: {body['language']}")
     if "quantity" in body and int(body["quantity"]) < 1:
         raise ApiError("la cantidad debe ser >= 1")
+    if body.get("printing_id") is not None:
+        printing = repo().get_printing(int(body["printing_id"]))
+        if not printing:
+            raise ApiError("edición no encontrada", "invalid_printing", 404)
+        # card_id and printing_id must agree, or the collection would claim a
+        # printing that belongs to a different card.
+        if body.get("card_id") and body["card_id"] != printing["card_id"]:
+            raise ApiError("la edición no corresponde a esta carta", "invalid_printing")
+        body["card_id"] = printing["card_id"]
     if body.get("rating") is not None:
         try:
             rating = int(body["rating"])
