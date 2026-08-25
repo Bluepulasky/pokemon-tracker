@@ -86,6 +86,35 @@ CREATE TABLE IF NOT EXISTS set_slot_cards (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_slotcards_unique ON set_slot_cards(set_id, card_id);
 CREATE INDEX IF NOT EXISTS idx_slotcards_card ON set_slot_cards(card_id);
 
+-- Catalog printings of one logical card.
+--
+-- pokemontcg.io exposes no reprint relationship, and no name/number heuristic
+-- reconstructs one reliably: Jynx #31 exists in Base Set and Neo Revelation as
+-- entirely different cards. So groups come from two sources, recorded in
+-- `source` so the weaker one can be told apart and overridden:
+--
+--   'slot'   the user grouped these cards in a personal set slot. Authoritative
+--            -- it is a direct statement that they are the same logical card.
+--   'auto'   the importer matched name + number + supertype. A hint only.
+--   'manual' entered by hand.
+--
+-- print_group is the card_id of the earliest-released member, so it is stable
+-- across re-imports.
+CREATE TABLE IF NOT EXISTS card_printings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    print_group     TEXT NOT NULL,
+    card_id         TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    official_set_id TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
+    is_reprint      INTEGER NOT NULL DEFAULT 0,
+    display_name    TEXT,
+    source          TEXT NOT NULL DEFAULT 'auto',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (print_group, card_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_printings_card  ON card_printings(card_id);
+CREATE INDEX IF NOT EXISTS idx_printings_group ON card_printings(print_group);
+
 -- ---------------------------------------------------------------------------
 -- COLLECTION  (user-owned; the source of truth on what is physically held)
 -- ---------------------------------------------------------------------------
@@ -102,6 +131,9 @@ CREATE TABLE IF NOT EXISTS collection_items (
     -- identical copies collapse into one row via the UNIQUE below, so they share a
     -- rank. Rank a copy separately by recording it under its own condition/variant.
     rating     INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 8),
+    -- Which catalog printing this physical card is. Nullable: most cards exist
+    -- in one printing, and card_id already identifies it.
+    printing_id INTEGER REFERENCES card_printings(id) ON DELETE SET NULL,
     notes      TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),

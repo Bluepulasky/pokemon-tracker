@@ -119,6 +119,11 @@ class PokemonRepo:
     MIGRATIONS = (
         ("collection_items", "rating",
          "ALTER TABLE collection_items ADD COLUMN rating INTEGER NOT NULL DEFAULT 0"),
+        # No REFERENCES clause: SQLite cannot add a column with a foreign key to
+        # an existing table. The constraint is present on fresh databases via
+        # schema.sql; upgraded ones keep the column without it.
+        ("collection_items", "printing_id",
+         "ALTER TABLE collection_items ADD COLUMN printing_id INTEGER"),
     )
 
     def _apply_migrations(self, conn) -> list[str]:
@@ -337,6 +342,93 @@ class PokemonRepo:
                              "why": "incomplete"})
         return gaps
 
+    # ------------------------------------------------------------- printings
+    def rebuild_printings(self) -> dict:
+        """Rebuild the printing groups.
+
+        Two sources, and the difference matters. Slot membership is the user
+        saying "these cards are the same card to me", so it wins. The name +
+        number + supertype match is only a hint — it is the best structural
+        signal the catalog offers, and it still produces false pairs like Jynx
+        #31 in Base Set and Neo Revelation.
+
+        Manual rows are never touched.
+        """
+        with self.tx() as c:
+            c.execute("DELETE FROM card_printings WHERE source IN ('auto', 'slot')")
+
+            groups: dict[str, set[str]] = {}
+
+            # 1. user-defined: any slot grouping more than one catalog card
+            for row in c.execute(
+                """SELECT slot_id, GROUP_CONCAT(card_id) AS ids
+                   FROM set_slot_cards GROUP BY slot_id HAVING COUNT(*) > 1"""
+            ).fetchall():
+                ids = sorted(set(row["ids"].split(",")))
+                groups.setdefault(ids[0], set()).update(ids)
+            user_defined = set(groups)
+
+            # 2. structural hint from the catalog
+            for row in c.execute(
+                """SELECT GROUP_CONCAT(id) AS ids FROM cards
+                   GROUP BY name, number, COALESCE(supertype, '')
+                   HAVING COUNT(DISTINCT official_set_id) > 1"""
+            ).fetchall():
+                ids = sorted(set(row["ids"].split(",")))
+                if any(i in g for g in groups.values() for i in ids):
+                    continue                      # already covered by a slot
+                groups.setdefault(ids[0], set()).update(ids)
+
+            written = 0
+            for key, ids in groups.items():
+                source = "slot" if key in user_defined else "auto"
+                ordered = c.execute(
+                    f"""SELECT c.id, c.official_set_id, c.name, os.name AS set_name,
+                               os.release_date
+                        FROM cards c JOIN official_sets os ON os.id = c.official_set_id
+                        WHERE c.id IN ({",".join("?" * len(ids))})
+                        ORDER BY os.release_date, c.id""",
+                    sorted(ids),
+                ).fetchall()
+                if len(ordered) < 2:
+                    continue
+                group_key = ordered[0]["id"]      # earliest printing names the group
+                for i, r in enumerate(ordered):
+                    c.execute(
+                        """INSERT OR IGNORE INTO card_printings
+                             (print_group, card_id, official_set_id, is_reprint,
+                              display_name, source)
+                           VALUES (?,?,?,?,?,?)""",
+                        (group_key, r["id"], r["official_set_id"], 1 if i else 0,
+                         r["set_name"], source),
+                    )
+                    written += 1
+            return {"groups": len(groups), "printings": written}
+
+    def printings_for_card(self, card_id: str) -> list[dict]:
+        """Every catalog printing of the logical card this card belongs to.
+
+        Returns [] when the card has no siblings — the UI then has nothing to ask
+        about and skips the edition selector entirely.
+        """
+        return self._all(
+            """SELECT p.*, c.name, c.number, c.rarity, c.image_local,
+                      c.image_small_url, os.release_date
+               FROM card_printings p
+               JOIN cards c ON c.id = p.card_id
+               JOIN official_sets os ON os.id = p.official_set_id
+               WHERE p.print_group = (SELECT print_group FROM card_printings
+                                       WHERE card_id = ? LIMIT 1)
+               ORDER BY os.release_date""",
+            (card_id,),
+        )
+
+    def get_printing(self, printing_id: int) -> dict | None:
+        return self._one("SELECT * FROM card_printings WHERE id = ?", (printing_id,))
+
+    def count_printings(self) -> int:
+        return self._scalar("SELECT COUNT(*) FROM card_printings") or 0
+
     # --------------------------------------------------------- personal sets
     def upsert_collection_set(self, s: dict) -> None:
         with self.tx() as c:
@@ -467,6 +559,7 @@ class PokemonRepo:
             "language": item.get("language", "es"),
             "quantity": int(item.get("quantity", 1)),
             "rating": int(item.get("rating") or 0),
+            "printing_id": item.get("printing_id"),
             "notes": item.get("notes"),
         }
         conflict = ("quantity = collection_items.quantity + excluded.quantity"
@@ -474,13 +567,17 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute(
                 f"""INSERT INTO collection_items
-                      (card_id,variant,condition,language,quantity,rating,notes)
-                    VALUES (:card_id,:variant,:condition,:language,:quantity,:rating,:notes)
+                      (card_id,variant,condition,language,quantity,rating,
+                       printing_id,notes)
+                    VALUES (:card_id,:variant,:condition,:language,:quantity,:rating,
+                            :printing_id,:notes)
                     ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
                       {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
                       -- keep an existing rank unless the caller sends a new one
                       rating=CASE WHEN excluded.rating > 0 THEN excluded.rating
                                   ELSE collection_items.rating END,
+                      printing_id=COALESCE(excluded.printing_id,
+                                           collection_items.printing_id),
                       updated_at=datetime('now')""",
                 payload,
             )
@@ -492,7 +589,8 @@ class PokemonRepo:
         return dict(row)
 
     def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
-        allowed = {"variant", "condition", "language", "quantity", "rating", "notes"}
+        allowed = {"variant", "condition", "language", "quantity", "rating",
+                   "printing_id", "notes"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return self.get_collection_item(item_id)
@@ -531,8 +629,10 @@ class PokemonRepo:
     def items_by_card(self, card_id: str) -> list[dict]:
         rows = self._all(
             "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
-            "c.image_small_url, c.image_local, c.external_ids_json "
+            "c.image_small_url, c.image_local, c.external_ids_json, "
+            "os.name AS printing_name "
             "FROM collection_items i JOIN cards c ON c.id = i.card_id "
+            "JOIN official_sets os ON os.id = c.official_set_id "
             "WHERE i.card_id=? "
             "ORDER BY CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
             "WHEN 'HP' THEN 3 ELSE 4 END, i.variant",
@@ -591,7 +691,7 @@ class PokemonRepo:
         rows = self._all(
             f"""SELECT i.*, c.name, c.number, c.rarity, c.official_set_id,
                        c.image_small_url, c.image_local, c.external_ids_json,
-                       os.name AS set_name
+                       os.name AS set_name, os.name AS printing_name
                 FROM collection_items i
                 JOIN cards c ON c.id = i.card_id
                 JOIN official_sets os ON os.id = c.official_set_id

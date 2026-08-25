@@ -55,6 +55,9 @@ def get_card(card_id):
     card["items"] = repo().items_by_card(card_id)
     card["prices"] = repo().get_prices_for_card(card_id)
     card["market_url"] = market_url(card, locale=cfg().CARDMARKET_LOCALE)
+    # Empty when the card has no sibling printings, so the UI can skip the
+    # edition selector rather than showing a one-option dropdown.
+    card["available_printings"] = repo().printings_for_card(card_id)
     return jsonify(card)
 
 

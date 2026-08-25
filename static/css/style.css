@@ -211,6 +211,7 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .variant-card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
        background: var(--bg); border: 1px solid var(--line); color: var(--fg-dim); }
+.tag.ed { border-color: rgba(59,108,246,.4); color: #9db6ff; }
 .variant-card .photos { display: flex; gap: 6px; overflow-x: auto; margin: 8px 0; }
 .variant-card .photos img { width: 52px; aspect-ratio: 245/342; object-fit: cover;
                             border-radius: 4px; border: 1px solid var(--line); }

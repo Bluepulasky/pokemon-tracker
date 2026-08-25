@@ -135,6 +135,29 @@ you have entered real cards. Neither command touches the catalog or the personal
 | Dashboard + value history | `#/dashboard` |
 | Monthly price refresh | `flask monthly` |
 
+## Multi-edition cards
+
+A card reprinted across sets can be recorded as the specific edition you hold. When a
+card has sibling printings, the modal shows an **Edición / Set actual** selector; picking
+one records that printing's catalog card, so the personal set slot is still satisfied
+while the physical edition is preserved.
+
+Groups live in `card_printings` and come from two sources, tracked in `source`:
+
+- **`slot`** — you grouped the cards in a personal set slot. Authoritative: it is a
+  direct statement that they are the same logical card.
+- **`auto`** — the importer matched name + number + supertype. A hint only.
+- **`manual`** — entered by hand; never touched by a rebuild.
+
+The distinction matters because pokemontcg.io exposes **no reprint relationship**, and no
+heuristic reconstructs one reliably. Matching on name alone pairs Base Set Magmar with
+the EX Team Rocket Returns Magmar — different cards entirely. Even name + number pairs
+Jynx #31 in Base Set with Jynx #31 in Neo Revelation, which are unrelated. The auto pass
+is the best structural signal available and is still only a starting point; grouping
+cards in a slot is how you state the truth.
+
+Rebuild with `flask rebuild-printings` (also run by `import-catalog` and `bootstrap`).
+
 ## Hall of Fame
 
 Every card in the collection can be ranked 0-8 — 0 meaning unranked, 8 a masterpiece.
