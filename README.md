@@ -128,12 +128,29 @@ you have entered real cards. Neither command touches the catalog or the personal
 |---|---|
 | Personal sets defined by rules (`Jungle (sin holos)`) | `tombot/services/seed_sets.py` |
 | Set grid with placeholders for missing cards | `#/set/<id>` |
-| Collection inventory with filters | `#/collection` |
+| Cartas: inventory, or every card in your sets | `#/cartas` |
 | Card modal: variants, photos, prices, edit | `static/js/modal.js` |
 | Missing-cards wishlist | `#/missing` |
-| Hall of Fame ranking (0-8) | card modal · `#/collection?rating_min=7` |
+| Hall of Fame ranking (0-8) | card modal · `#/cartas?rating_min=7` |
 | Dashboard + value history | `#/dashboard` |
 | Monthly price refresh | `flask monthly` |
+
+## The Cartas view
+
+Two modes over the same filter bar:
+
+- **En colección** (default) — the physical inventory, one row per
+  `(card, variant, condition, language)`.
+- **Todas las del set** — every slot in your personal sets. Cards you do not own
+  appear as grey hatched placeholders (`owned: false`), so a set reads as a checklist.
+
+`?show_all=1` selects the second. Filters that describe a physical copy — condition,
+variant, language, Hall of Fame rank — can only match owned rows, so using any of them
+drops the placeholders. That is the intended behaviour for the rank filter and is
+equally right for the others.
+
+Sorting always falls back to a card column, because placeholders have no collection
+row to sort on.
 
 ## Hall of Fame
 

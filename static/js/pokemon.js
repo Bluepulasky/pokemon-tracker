@@ -29,12 +29,15 @@ function route() {
   return { name: parts[0] || 'dashboard', id: parts[1], params: new URLSearchParams(query || '') };
 }
 
-const VIEWS = { dashboard, sets, set: setDetail, collection, missing };
+const VIEWS = { dashboard, sets, set: setDetail, cartas: collection,
+                collection, missing };   // /collection kept as an alias
 
 async function render(keepScroll = false) {
   const r = route();
   document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle(
-    'active', a.dataset.tab === r.name || (r.name === 'set' && a.dataset.tab === 'sets')));
+    'active', a.dataset.tab === r.name
+      || (r.name === 'set' && a.dataset.tab === 'sets')
+      || (r.name === 'collection' && a.dataset.tab === 'cartas')));
   const y = keepScroll ? window.scrollY : 0;
   const fn = VIEWS[r.name] || dashboard;
   view().innerHTML = '<div class="loading">Cargando…</div>';
@@ -265,6 +268,10 @@ async function collection(r) {
     sort: r.params.get('sort') || 'set',
     page_size: 240,
   };
+  // Owned is the default: the inventory is what you reach for most often, and
+  // All pulls every slot in the personal sets.
+  const showAll = r.params.get('show_all') === '1';
+  if (showAll) f.show_all = '1';
   const [res, setList] = await Promise.all([api.collection(f), api.sets()]);
   const t = res.totals;
 
@@ -274,9 +281,17 @@ async function collection(r) {
     ).join('')}</select>`;
 
   view().innerHTML = `
-    <h1>Mi colección</h1>
-    <p class="sub">${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas ·
-       ${res.total} registros</p>
+    <h1>Cartas</h1>
+    <p class="sub">${showAll
+      ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${
+          t.physical_cards} físicas`
+      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${
+          res.total} registros`}</p>
+
+    <div class="mode-toggle">
+      <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
+      <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
+    </div>
 
     <div class="toolbar">
       <input id="f-q" type="search" placeholder="Buscar…" value="${esc(f.q)}">
@@ -316,11 +331,15 @@ async function collection(r) {
       if (v) p.set(k, v);
     }
     if (f.rating_min && !('rating_min' in overrides)) p.set('rating_min', f.rating_min);
+    if (showAll && !('show_all' in overrides)) p.set('show_all', '1');
     for (const [k, v] of Object.entries(overrides)) {
       if (v) p.set(k, v); else p.delete(k);
     }
-    location.hash = `#/collection?${p}`;
+    location.hash = `#/cartas?${p}`;
   };
+  view().querySelectorAll('[data-mode]').forEach((chip) => {
+    chip.onclick = () => apply({ show_all: chip.dataset.mode === 'all' ? '1' : '' });
+  });
   view().querySelectorAll('[data-qmin]').forEach((chip) => {
     chip.onclick = () => {
       // A quick filter and an exact-rating filter would fight each other.
@@ -336,21 +355,24 @@ async function collection(r) {
 }
 
 function itemHtml(i) {
-  /* Prefer the user's own photo, then the catalog image (spec §4/§6). */
+  /* Prefer the user's own photo, then the catalog image (spec §4/§6).
+     In "All" mode an unowned slot has no physical copy, so it renders as the
+     grey hatched placeholder rather than art the user does not have. */
+  const owned = i.owned !== false;
   const primary = i.photos?.find((p) => p.is_primary) || i.photos?.[0];
-  const src = primary ? photoUrl(primary) : cardArt(i);
+  const src = owned ? (primary ? photoUrl(primary) : cardArt(i)) : cardArt(i);
   const v = i.value || {};
-  return `<div class="card" data-card="${esc(i.card_id)}">
+  return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}">
     <div class="art">
-      ${src ? `<img src="${esc(src)}" alt="${esc(i.name)}" loading="lazy">`
+      ${src ? `<img src="${esc(src)}" alt="${esc(i.name || i.label)}" loading="lazy">`
             : placeholder(i.number, i.official_set_id)}
-      ${i.quantity > 1 ? `<span class="badge qty">×${i.quantity}</span>` : ''}
-      ${i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
-      ${v.total != null ? `<span class="badge val">${esc(eur(v.total))}</span>` : ''}
+      ${owned && i.quantity > 1 ? `<span class="badge qty">×${i.quantity}</span>` : ''}
+      ${owned && i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
+      ${owned && v.total != null ? `<span class="badge val">${esc(eur(v.total))}</span>` : ''}
     </div>
     <div class="label">
-      <span class="nm">${esc(i.name)}</span>
-      <span class="no">#${esc(i.number)} · ${esc(i.condition)}</span>
+      <span class="nm">${esc(i.name || i.label || '—')}</span>
+      <span class="no">#${esc(i.number)}${owned && i.condition ? ` · ${esc(i.condition)}` : ''}</span>
     </div>
   </div>`;
 }

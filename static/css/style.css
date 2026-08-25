@@ -244,6 +244,17 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
         background: var(--bg-3); cursor: pointer; font-size: 13px; }
 .chip.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
 
+/* View-mode switch at the top of the Cartas view. Deliberately larger and
+   separate from the filter row: it changes what the list means, not just which
+   rows survive. */
+.mode-toggle { display: flex; gap: 0; margin: 0 0 14px; }
+.mode-toggle .chip {
+  border-radius: 0; padding: 9px 18px; font-size: 14px;
+  border: 1px solid var(--line);
+}
+.mode-toggle .chip:first-child { border-radius: 999px 0 0 999px; }
+.mode-toggle .chip:last-child { border-radius: 0 999px 999px 0; border-left: 0; }
+
 /* Segmented owned/all toggle in the set toolbar. */
 .chips.seg { gap: 0; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .chips.seg .chip {
