@@ -46,7 +46,8 @@ def test_all_mode_returns_a_row_per_slot_when_nothing_is_owned(repo):
 
 
 def test_all_mode_marks_owned_rows(repo):
-    repo.upsert_collection_item({"card_id": "base1-1", "rating": 8})
+    repo.upsert_collection_item({"card_id": "base1-1"})
+    repo.set_card_rating("base1-1", 8)
     rows, _ = repo.list_slots_with_ownership(set_id="mine", page_size=100)
     owned = {r["label"]: r["owned"] for r in rows}
     assert owned == {"Alakazam": True, "Blastoise": False, "Charizard": False}
@@ -71,8 +72,10 @@ def test_physical_filters_exclude_placeholders(repo):
     """A placeholder has no condition, variant, language or rank, so any filter
     describing a physical copy must drop it. The spec requires this for the Hall
     of Fame filter; it is equally correct for the others."""
-    repo.upsert_collection_item({"card_id": "base1-1", "rating": 8, "condition": "NM"})
-    repo.upsert_collection_item({"card_id": "base1-2", "rating": 2, "condition": "LP"})
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "NM"})
+    repo.upsert_collection_item({"card_id": "base1-2", "condition": "LP"})
+    repo.set_card_rating("base1-1", 8)
+    repo.set_card_rating("base1-2", 2)
 
     top, _ = repo.list_slots_with_ownership(set_id="mine", rating_min=7, page_size=100)
     assert [r["label"] for r in top] == ["Alakazam"]
@@ -85,7 +88,8 @@ def test_physical_filters_exclude_placeholders(repo):
 def test_sorting_tolerates_placeholders(repo):
     """Ordering by an item column would scatter unowned rows unpredictably, so
     every sort falls back to a card column."""
-    repo.upsert_collection_item({"card_id": "base1-2", "rating": 5})
+    repo.upsert_collection_item({"card_id": "base1-2"})
+    repo.set_card_rating("base1-2", 5)
     by_rating, _ = repo.list_slots_with_ownership(set_id="mine", sort="rating", page_size=100)
     assert by_rating[0]["label"] == "Blastoise", "ranked card first"
     assert len(by_rating) == 3, "placeholders still present"

@@ -63,6 +63,11 @@ export async function openCard(cardId) {
           </div>
           ${card.market_url ? `<a class="mkm" href="${esc(card.market_url)}"
              target="_blank" rel="noopener noreferrer">Ver en Cardmarket ↗</a>` : ''}
+          <div class="field card-rank">
+            <label>Hall of Fame</label>
+            ${rankRow(card.rating || 0)}
+            <div class="rank-label">${esc(RATING_LABEL(card.rating || 0))}</div>
+          </div>
         </div>
         <button class="close" aria-label="Cerrar">&times;</button>
       </div>
@@ -76,6 +81,7 @@ export async function openCard(cardId) {
     </div>`));
 
   root.querySelector('.close').onclick = closeModal;
+  wireCardRank(root, card);
   wireForm(root, card);
   wireVariants(root, cardId);
 }
@@ -90,12 +96,6 @@ function variantCard(item) {
       <span class="tag">${esc(label('languages', item.language))}</span>
       <span class="tag">×${item.quantity}</span>
       ${item.printing_name ? `<span class="tag ed">${esc(item.printing_name)}</span>` : ''}
-      ${hofBadge(item.rating, { compact: true })}
-    </div>
-    <div class="field" style="margin-bottom:8px">
-      <label>Hall of Fame</label>
-      ${rankRow(item.rating || 0)}
-      <div class="rank-label">${esc(RATING_LABEL(item.rating || 0))}</div>
     </div>
     <div class="photos">
       ${item.photos.length
@@ -158,10 +158,7 @@ function addForm(card) {
         `<span class="chip${i === 0 ? ' on' : ''}" data-cond="${esc(c.key)}"
            title="${esc(c.label)}">${esc(c.key)}</span>`).join('')}</div>
     </div>
-    <div class="field" style="margin-top:12px"><label>Hall of Fame</label>
-      ${rankRow(0)}
-      <div class="rank-label"></div>
-    </div>
+
     <div class="btn-row">
       <button type="submit" class="btn primary">Guardar</button>
       <button type="button" class="btn ghost cancel">Cancelar</button>
@@ -170,19 +167,29 @@ function addForm(card) {
   </form>`;
 }
 
+/* The rank belongs to the card, so there is one picker for the whole modal.
+   It saves on click: ranking is the thing you do repeatedly while going through
+   a binder, and a two-step edit would be wrong for it. */
+function wireCardRank(root, card) {
+  const box = root.querySelector('.card-rank');
+  if (!box) return;
+  box.querySelectorAll('.rank').forEach((r) => {
+    r.onclick = async () => {
+      const value = Number(r.dataset.rank);
+      box.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
+      r.classList.add('on');
+      box.querySelector('.rank-label').textContent = RATING_LABEL(value);
+      try {
+        await api.rateCard(card.id, value);
+        onChange();
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+}
+
 function wireForm(root, card) {
   const form = root.querySelector('.add-form');
   let condition = META.conditions[0].key;
-  let rating = 0;
-
-  form.querySelectorAll('.rank').forEach((r) => {
-    r.onclick = () => {
-      form.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
-      r.classList.add('on');
-      rating = Number(r.dataset.rank);
-      form.querySelector('.rank-label').textContent = RATING_LABEL(rating);
-    };
-  });
 
   form.querySelectorAll('.chip').forEach((chip) => {
     chip.onclick = () => {
@@ -219,7 +226,6 @@ function wireForm(root, card) {
         variant: form.variant.value,
         language: form.language.value,
         condition,
-        rating,
         quantity: Number(form.quantity.value) || 1,
       });
       toast(`${card.name} añadida`);
@@ -261,22 +267,7 @@ function wireVariants(root, cardId) {
 
     vc.querySelector('.act-edit').onclick = () => editVariant(vc, id, cardId);
 
-    // Ranking saves on click. It is the one thing you do repeatedly while
-    // going through a binder, so making it a two-step edit would be wrong.
-    vc.querySelectorAll('.rank').forEach((r) => {
-      r.onclick = async () => {
-        const value = Number(r.dataset.rank);
-        vc.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
-        r.classList.add('on');
-        vc.querySelector('.rank-label').textContent = RATING_LABEL(value);
-        try {
-          await api.rate(id, value);
-          const b = vc.querySelector('.hof');
-          if (b) b.outerHTML = hofBadge(value, { compact: true }) || '<span class="hof" hidden></span>';
-          onChange();
-        } catch (e) { toast(e.message, true); }
-      };
-    });
+
 
     vc.querySelectorAll('[data-photo]').forEach((img) => {
       img.onclick = async () => {

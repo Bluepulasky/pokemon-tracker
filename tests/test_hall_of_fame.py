@@ -1,4 +1,9 @@
-"""Hall of Fame ranking (0-8) on collection items."""
+"""Hall of Fame ranking (0-8).
+
+The rank belongs to the CARD, not to a collection row. It shipped on
+collection_items, which meant a card owned as holo and non-holo had to be ranked
+twice — two answers to a question that has one.
+"""
 import os
 import sqlite3
 import tempfile
@@ -29,87 +34,108 @@ def repo():
     os.unlink(path)
 
 
-def test_rating_defaults_to_unranked(repo):
-    item = repo.upsert_collection_item({"card_id": "base1-4"})
-    assert item["rating"] == 0
+def test_rank_is_shared_by_every_variant_of_the_card(repo):
+    """The reported bug: ranking the holo did not rank the non-holo."""
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo"})
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "normal"})
+    repo.set_card_rating("base1-4", 8)
+
+    ratings = {i["variant"]: i["rating"] for i in repo.items_by_card("base1-4")}
+    assert ratings == {"holo": 8, "normal": 8}
 
 
-def test_rating_is_per_row_not_per_physical_copy(repo):
-    """The spec asks for a rank per copy, but UNIQUE(card,variant,condition,
-    language) collapses identical copies into one row with a quantity. Copies
-    that differ in any of those attributes are separate rows and rank
-    separately; truly identical copies share a rank."""
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "NM", "rating": 8})
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "LP", "rating": 3})
-    ratings = {i["condition"]: i["rating"] for i in repo.items_by_card("base1-4")}
-    assert ratings == {"NM": 8, "LP": 3}
-
-    # same combination again -> still one row, quantity accumulates
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "NM", "quantity": 2})
-    rows = [i for i in repo.items_by_card("base1-4") if i["condition"] == "NM"]
-    assert len(rows) == 1 and rows[0]["quantity"] == 3
+def test_rank_survives_owning_nothing(repo):
+    """A rank is an opinion about the card, so it does not require a copy in
+    hand — you can rank a card you are still hunting for."""
+    repo.set_card_rating("base1-4", 7)
+    assert repo.get_card_rating("base1-4") == 7
 
 
-def test_adding_more_copies_keeps_the_existing_rank(repo):
-    """Adding a duplicate sends rating=0 by default; that must not wipe a rank."""
-    item = repo.upsert_collection_item({"card_id": "base1-4", "rating": 7})
-    repo.upsert_collection_item({"card_id": "base1-4", "quantity": 1})
-    assert repo.get_collection_item(item["id"])["rating"] == 7
+def test_zero_clears_the_rank(repo):
+    repo.set_card_rating("base1-4", 5)
+    repo.set_card_rating("base1-4", 0)
+    assert repo.get_card_rating("base1-4") == 0
+    assert repo._scalar("SELECT COUNT(*) FROM card_ratings") == 0, \
+        "0 means unranked, so it is stored as absence"
 
 
-def test_average_excludes_unranked(repo):
-    """0 means "not ranked yet", not "ranked zero" — averaging it in would make
-    the number describe how much ranking is left rather than the collection."""
-    repo.upsert_collection_item({"card_id": "base1-4", "rating": 8})
-    repo.upsert_collection_item({"card_id": "base1-2", "rating": 6})
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "LP"})   # unranked
+def test_average_counts_cards_not_rows(repo):
+    """Two variants of one card are one opinion. Counting the row twice would
+    skew the average toward whatever the user happens to own duplicates of."""
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo"})
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "normal"})
+    repo.upsert_collection_item({"card_id": "base1-2"})
+    repo.set_card_rating("base1-4", 8)
+    repo.set_card_rating("base1-2", 6)
+
     stats = repo.rating_stats()
+    assert stats["rated"] == 2, "two cards, not three rows"
     assert stats["average"] == 7.0
-    assert stats["rated"] == 2 and stats["unrated"] == 1
     assert stats["best"] == 8
 
 
-def test_rating_filters(repo):
-    for cond, rating in [("NM", 8), ("LP", 7), ("MP", 5), ("HP", 2)]:
-        repo.upsert_collection_item({"card_id": "base1-4", "condition": cond,
-                                     "rating": rating})
-    exact, _ = repo.list_collection(rating=8)
-    assert len(exact) == 1
+def test_unranked_count_is_over_owned_cards(repo):
+    repo.upsert_collection_item({"card_id": "base1-4"})
+    repo.upsert_collection_item({"card_id": "base1-2"})
+    repo.set_card_rating("base1-4", 8)
+    assert repo.rating_stats() == {**repo.rating_stats(), "rated": 1, "unrated": 1}
+
+
+def test_rating_filters_match_every_variant(repo):
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo"})
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "normal"})
+    repo.upsert_collection_item({"card_id": "base1-2"})
+    repo.set_card_rating("base1-4", 8)
+    repo.set_card_rating("base1-2", 3)
+
     top, _ = repo.list_collection(rating_min=7)
-    assert len(top) == 2, "Top Tier quick filter"
-    fav, _ = repo.list_collection(rating_min=5)
-    assert len(fav) == 3, "Favourites quick filter"
-    band, _ = repo.list_collection(rating_min=2, rating_max=5)
-    assert len(band) == 2
+    assert len(top) == 2, "both variants of the ranked card"
+    exact, _ = repo.list_collection(rating=3)
+    assert [i["card_id"] for i in exact] == ["base1-2"]
+    unranked, _ = repo.list_collection(rating=0)
+    assert unranked == []
 
 
 def test_database_rejects_out_of_range(repo):
-    """Defence in depth: the API validates, but the column carries a CHECK so a
-    bad value cannot get in through the CLI or a direct write."""
     with pytest.raises(sqlite3.IntegrityError):
         with repo.tx() as c:
-            c.execute("INSERT INTO collection_items(card_id, rating) VALUES ('base1-4', 9)")
+            c.execute("INSERT INTO card_ratings(card_id, rating) VALUES ('base1-4', 9)")
 
 
-def test_migration_adds_rating_to_an_existing_database():
-    """schema.sql is CREATE TABLE IF NOT EXISTS, so it does nothing to a database
-    that already exists. Without an explicit migration every existing install
-    breaks on the first query touching the new column."""
+def test_migration_moves_row_ranks_onto_the_card():
+    """An existing install has ranks on collection_items. They must carry over,
+    the higher one winning where a card was ranked twice, and the old column must
+    survive as a backup — DROP COLUMN cannot be undone and this is the only copy
+    of ranks the user typed in by hand."""
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     try:
-        repo = PokemonRepo(path)
-        repo.init_db(DEFAULT_MODIFIERS)
-        with repo.tx() as c:                     # simulate the pre-feature schema
-            c.execute("DROP INDEX IF EXISTS idx_items_rating")   # index pins the column
-            c.execute("ALTER TABLE collection_items DROP COLUMN rating")
-            cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
-            assert "rating" not in cols
-        repo.close()
+        r = PokemonRepo(path)
+        r.init_db(DEFAULT_MODIFIERS)
+        r.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
+                               "printed_total": 1, "total": 1,
+                               "release_date": "1999/01/09", "ptcgo_code": None,
+                               "logo_url": None, "symbol_url": None})
+        r.upsert_cards([{"id": "base1-4", "official_set_id": "base1",
+                         "name": "Charizard", "number": "4"}])
+        with r.tx() as c:                       # rebuild the pre-fix shape
+            c.execute("DROP TABLE card_ratings")
+            c.execute("ALTER TABLE collection_items ADD COLUMN rating "
+                      "INTEGER NOT NULL DEFAULT 0")
+            c.execute("INSERT INTO collection_items(card_id,variant,rating) "
+                      "VALUES ('base1-4','holo',8)")
+            c.execute("INSERT INTO collection_items(card_id,variant,rating) "
+                      "VALUES ('base1-4','normal',3)")
+        r.close()
 
-        PokemonRepo(path).init_db(DEFAULT_MODIFIERS)   # upgrade
+        PokemonRepo(path).init_db(DEFAULT_MODIFIERS)
+
         con = sqlite3.connect(path)
-        assert "rating" in {r[1] for r in con.execute("PRAGMA table_info(collection_items)")}
+        assert con.execute("SELECT rating FROM card_ratings WHERE card_id='base1-4'"
+                           ).fetchone()[0] == 8, "higher of the two ranks wins"
+        assert "rating" in {x[1] for x in con.execute(
+            "PRAGMA table_info(collection_items)")}, "old column kept as a backup"
+        assert con.execute("SELECT COUNT(*) FROM collection_items").fetchone()[0] == 2
         con.close()
     finally:
         os.unlink(path)

@@ -45,6 +45,12 @@ class PokemonRepo:
         self._local = threading.local()
 
     # ------------------------------------------------------------------ conn
+    # Columns of collection_items are listed explicitly wherever a query also
+    # computes `rating`. An upgraded database still carries the retired
+    # collection_items.rating column, and `SELECT i.*` would emit a second
+    # column of that name which shadows the real value — a bug that appears only
+    # on installs that have been through the migration.
+
     def connect(self) -> sqlite3.Connection:
         """This thread's connection, opened once and reused.
 
@@ -139,7 +145,58 @@ class PokemonRepo:
             if column not in cols:
                 conn.execute(ddl)
                 applied.append(f"{table}.{column}")
+        applied += self._migrate_ratings_to_cards(conn)
         return applied
+
+    @staticmethod
+    def _migrate_ratings_to_cards(conn) -> list[str]:
+        """Move Hall of Fame ranks from collection rows onto the card.
+
+        The rank shipped on collection_items, so a card owned as holo and
+        non-holo had to be ranked twice. Existing ranks are carried over by
+        taking the highest rank recorded for each card — the alternatives lose
+        data or pick arbitrarily.
+        """
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
+        if "rating" not in cols:
+            return []
+
+        conn.execute("""CREATE TABLE IF NOT EXISTS card_ratings (
+                            card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+                            rating     INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 8),
+                            updated_at TEXT NOT NULL DEFAULT (datetime('now')))""")
+        expected = conn.execute(
+            "SELECT COUNT(DISTINCT card_id) FROM collection_items WHERE rating > 0"
+        ).fetchone()[0]
+
+        conn.execute(
+            """INSERT INTO card_ratings(card_id, rating)
+               SELECT card_id, MAX(rating) FROM collection_items
+               WHERE rating > 0 GROUP BY card_id
+               ON CONFLICT(card_id) DO UPDATE SET
+                 rating = MAX(card_ratings.rating, excluded.rating)"""
+        )
+
+        # Verify before declaring success. A card ranked on two rows (the bug
+        # this fixes) keeps the higher rank, so every ranked card must now have
+        # exactly one row here.
+        copied = conn.execute(
+            """SELECT COUNT(*) FROM card_ratings r
+               WHERE EXISTS (SELECT 1 FROM collection_items i
+                              WHERE i.card_id = r.card_id AND i.rating > 0)"""
+        ).fetchone()[0]
+        if copied < expected:
+            raise RuntimeError(
+                f"rating migration incomplete: {copied}/{expected} cards carried "
+                f"over; collection_items.rating left untouched")
+
+        # collection_items.rating is deliberately NOT dropped. The copy above is
+        # the only record of ranks the user has already entered, and DROP COLUMN
+        # cannot be undone. Nothing reads the column any more, so leaving it
+        # costs a few bytes and keeps a rollback possible. Fresh databases never
+        # get it — schema.sql no longer defines it.
+        return [f"card_ratings (carried over {copied} rank(s) from collection rows; "
+                f"collection_items.rating retained as a backup)"]
 
     def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
         with self.tx() as c:
@@ -564,7 +621,6 @@ class PokemonRepo:
             "condition": item.get("condition", "NM"),
             "language": item.get("language", "es"),
             "quantity": int(item.get("quantity", 1)),
-            "rating": int(item.get("rating") or 0),
             "printing_id": item.get("printing_id"),
             "notes": item.get("notes"),
         }
@@ -573,15 +629,11 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute(
                 f"""INSERT INTO collection_items
-                      (card_id,variant,condition,language,quantity,rating,
-                       printing_id,notes)
-                    VALUES (:card_id,:variant,:condition,:language,:quantity,:rating,
+                      (card_id,variant,condition,language,quantity,printing_id,notes)
+                    VALUES (:card_id,:variant,:condition,:language,:quantity,
                             :printing_id,:notes)
                     ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
                       {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
-                      -- keep an existing rank unless the caller sends a new one
-                      rating=CASE WHEN excluded.rating > 0 THEN excluded.rating
-                                  ELSE collection_items.rating END,
                       printing_id=COALESCE(excluded.printing_id,
                                            collection_items.printing_id),
                       updated_at=datetime('now')""",
@@ -595,7 +647,7 @@ class PokemonRepo:
         return dict(row)
 
     def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
-        allowed = {"variant", "condition", "language", "quantity", "rating",
+        allowed = {"variant", "condition", "language", "quantity",
                    "printing_id", "notes"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
@@ -611,9 +663,11 @@ class PokemonRepo:
 
     def get_collection_item(self, item_id: int) -> dict | None:
         row = self._one(
-            "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
-            "c.image_small_url, c.image_local, c.external_ids_json "
-            "FROM collection_items i JOIN cards c ON c.id=i.card_id WHERE i.id=?",
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
+            "c.image_small_url, c.image_local, c.external_ids_json, "
+            "COALESCE(cr.rating, 0) AS rating "
+            "FROM collection_items i JOIN cards c ON c.id=i.card_id "
+            "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id WHERE i.id=?",
             (item_id,),
         )
         if row:
@@ -634,11 +688,12 @@ class PokemonRepo:
 
     def items_by_card(self, card_id: str) -> list[dict]:
         rows = self._all(
-            "SELECT i.*, c.name, c.number, c.rarity, c.official_set_id, "
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
-            "os.name AS printing_name "
+            "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating "
             "FROM collection_items i JOIN cards c ON c.id = i.card_id "
             "JOIN official_sets os ON os.id = c.official_set_id "
+            "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id "
             "WHERE i.card_id=? "
             "ORDER BY CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
             "WHEN 'HP' THEN 3 ELSE 4 END, i.variant",
@@ -670,20 +725,21 @@ class PokemonRepo:
         if rarity:
             where.append("c.rarity = ?")
             params.append(rarity)
+        # COALESCE because an unranked card has no card_ratings row at all.
         if rating is not None:
-            where.append("i.rating = ?")
+            where.append("COALESCE(cr.rating, 0) = ?")
             params.append(int(rating))
         # Ranges drive the Top Tier / Favourites quick filters.
         if rating_min is not None:
-            where.append("i.rating >= ?")
+            where.append("COALESCE(cr.rating, 0) >= ?")
             params.append(int(rating_min))
         if rating_max is not None:
-            where.append("i.rating <= ?")
+            where.append("COALESCE(cr.rating, 0) <= ?")
             params.append(int(rating_max))
         w = " AND ".join(where)
         order = {
             "set": "os.release_date, c.number_sort",
-            "rating": "i.rating DESC, c.name",
+            "rating": "COALESCE(cr.rating, 0) DESC, c.name",
             "name": "c.name",
             "number": "c.number_sort",
             "rarity": "c.rarity, c.number_sort",
@@ -691,16 +747,19 @@ class PokemonRepo:
             "quantity": "i.quantity DESC",
         }.get(sort, "os.release_date, c.number_sort")
         total = self._scalar(
-            f"SELECT COUNT(*) FROM collection_items i JOIN cards c ON c.id=i.card_id WHERE {w}",
+            f"SELECT COUNT(*) FROM collection_items i JOIN cards c ON c.id=i.card_id "
+            f"LEFT JOIN card_ratings cr ON cr.card_id = i.card_id WHERE {w}",
             params,
         ) or 0
         rows = self._all(
-            f"""SELECT i.*, c.name, c.number, c.rarity, c.official_set_id,
+            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
                        c.image_small_url, c.image_local, c.external_ids_json,
-                       os.name AS set_name, os.name AS printing_name
+                       os.name AS set_name, os.name AS printing_name,
+                       COALESCE(cr.rating, 0) AS rating
                 FROM collection_items i
                 JOIN cards c ON c.id = i.card_id
                 JOIN official_sets os ON os.id = c.official_set_id
+                LEFT JOIN card_ratings cr ON cr.card_id = i.card_id
                 WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""",
             params + [page_size, (page - 1) * page_size],
         )
@@ -743,14 +802,17 @@ class PokemonRepo:
             if val:
                 where.append(f"i.{col} = ?")
                 params.append(val)
+        # The rank now lives on the card, but it still may only match owned rows:
+        # a placeholder is a card you do not have, so it has no physical copy to
+        # filter on even if the card itself carries a rank.
         if rating is not None:
-            where.append("i.rating = ?")
+            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) = ?")
             params.append(int(rating))
         if rating_min is not None:
-            where.append("i.rating >= ?")
+            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) >= ?")
             params.append(int(rating_min))
         if rating_max is not None:
-            where.append("i.rating <= ?")
+            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) <= ?")
             params.append(int(rating_max))
         w = " AND ".join(where)
 
@@ -761,7 +823,7 @@ class PokemonRepo:
             "name": "COALESCE(sl.label, c.name)",
             "number": "c.number_sort",
             "rarity": "c.rarity, c.number_sort",
-            "rating": "COALESCE(i.rating, -1) DESC, c.number_sort",
+            "rating": "COALESCE(cr.rating, -1) DESC, c.number_sort",
             "quantity": "COALESCE(i.quantity, 0) DESC, c.number_sort",
             "owned": "owned DESC, c.number_sort",
             "recent": "COALESCE(i.created_at, '') DESC, c.number_sort",
@@ -775,6 +837,7 @@ class PokemonRepo:
             LEFT JOIN collection_items i
                    ON i.card_id IN (SELECT card_id FROM set_slot_cards
                                      WHERE slot_id = sl.id)
+            LEFT JOIN card_ratings cr ON cr.card_id = i.card_id
             WHERE {w}"""
 
         total = self._scalar(f"SELECT COUNT(*) {base}", params) or 0
@@ -785,7 +848,9 @@ class PokemonRepo:
                        c.official_set_id, c.image_small_url, c.image_local,
                        c.external_ids_json, os.name AS set_name,
                        i.id AS id, i.variant, i.condition, i.language,
-                       i.quantity, i.rating, i.notes,
+                       i.quantity, i.notes,
+                       CASE WHEN i.id IS NULL THEN NULL
+                            ELSE COALESCE(cr.rating, 0) END AS rating,
                        i.created_at, i.updated_at,
                        CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS owned
                 {base} ORDER BY {order} LIMIT ? OFFSET ?""",
@@ -817,6 +882,25 @@ class PokemonRepo:
             "COUNT(*) AS item_rows FROM collection_items"
         ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0}
 
+    def set_card_rating(self, card_id: str, rating: int) -> None:
+        """0 clears the rank rather than storing it — 0 means unranked, and a row
+        saying so is indistinguishable from no row while making every average and
+        count query carry a `rating > 0` guard."""
+        with self.tx() as c:
+            if int(rating) <= 0:
+                c.execute("DELETE FROM card_ratings WHERE card_id = ?", (card_id,))
+            else:
+                c.execute(
+                    "INSERT INTO card_ratings(card_id, rating) VALUES (?,?) "
+                    "ON CONFLICT(card_id) DO UPDATE SET rating=excluded.rating, "
+                    "updated_at=datetime('now')",
+                    (card_id, int(rating)),
+                )
+
+    def get_card_rating(self, card_id: str) -> int:
+        return self._scalar(
+            "SELECT rating FROM card_ratings WHERE card_id = ?", (card_id,)) or 0
+
     def rating_stats(self) -> dict:
         """Hall of Fame summary.
 
@@ -825,23 +909,33 @@ class PokemonRepo:
         make it say more about how much ranking is left to do than about the
         collection.
         """
+        # Counted over cards, not collection rows: two variants of one card are
+        # one opinion, and counting them twice would skew the average toward
+        # whatever the user happens to own duplicates of.
         row = self._one(
             """SELECT COUNT(*) AS rated,
-                      COALESCE(AVG(rating), 0) AS average,
-                      COALESCE(MAX(rating), 0) AS best
-               FROM collection_items WHERE rating > 0"""
+                      COALESCE(AVG(r.rating), 0) AS average,
+                      COALESCE(MAX(r.rating), 0) AS best
+               FROM card_ratings r
+               WHERE r.rating > 0
+                 AND EXISTS (SELECT 1 FROM collection_items i WHERE i.card_id = r.card_id)"""
         ) or {}
         dist = {r["rating"]: r["n"] for r in self._all(
-            "SELECT rating, COUNT(*) AS n FROM collection_items "
-            "WHERE rating > 0 GROUP BY rating")}
+            """SELECT r.rating, COUNT(*) AS n FROM card_ratings r
+               WHERE r.rating > 0
+                 AND EXISTS (SELECT 1 FROM collection_items i WHERE i.card_id = r.card_id)
+               GROUP BY r.rating""")}
+        owned_cards = self._scalar(
+            "SELECT COUNT(DISTINCT card_id) FROM collection_items") or 0
         return {
             "rated": row.get("rated", 0) or 0,
-            "unrated": self._scalar(
-                "SELECT COUNT(*) FROM collection_items WHERE rating = 0") or 0,
+            "unrated": max(0, owned_cards - (row.get("rated", 0) or 0)),
             "average": round(row.get("average", 0) or 0, 2),
             "best": row.get("best", 0) or 0,
             "top_tier": self._scalar(
-                "SELECT COUNT(*) FROM collection_items WHERE rating >= 7") or 0,
+                """SELECT COUNT(*) FROM card_ratings r WHERE r.rating >= 7
+                   AND EXISTS (SELECT 1 FROM collection_items i
+                                WHERE i.card_id = r.card_id)""") or 0,
             "distribution": {str(k): v for k, v in sorted(dist.items())},
         }
 

@@ -130,11 +130,6 @@ CREATE TABLE IF NOT EXISTS collection_items (
     condition  TEXT NOT NULL DEFAULT 'NM',       -- NM|LP|MP|HP|DMG
     language   TEXT NOT NULL DEFAULT 'es',       -- es|en|pt|other
     quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    -- Hall of Fame rank, 0-8. 0 means unranked, which is why averages exclude it.
-    -- Scoped to the row, i.e. to a (card, variant, condition, language) combination:
-    -- identical copies collapse into one row via the UNIQUE below, so they share a
-    -- rank. Rank a copy separately by recording it under its own condition/variant.
-    rating     INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 8),
     -- Which catalog printing this physical card is. Nullable: most cards exist
     -- in one printing, and card_id already identifies it.
     printing_id INTEGER REFERENCES card_printings(id) ON DELETE SET NULL,
@@ -146,7 +141,6 @@ CREATE TABLE IF NOT EXISTS collection_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_card ON collection_items(card_id);
-CREATE INDEX IF NOT EXISTS idx_items_rating ON collection_items(rating);
 
 -- N photos per item (PLAN.md §2.4). The spec's single image column could not
 -- satisfy "one photo per variant, swipe through them in the modal".
@@ -164,6 +158,24 @@ CREATE TABLE IF NOT EXISTS collection_photos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_photos_item ON collection_photos(item_id, position);
+
+-- Hall of Fame rank, 0-8, per logical card.
+--
+-- Deliberately its own table rather than a column on cards: the rank is the
+-- user's judgement and must survive a catalog re-import, which overwrites
+-- everything in `cards`.
+--
+-- It is keyed by card and NOT by collection row. The rank answers "how much do I
+-- like this card", which has nothing to do with which physical copy is in hand —
+-- ranking the holo and the non-holo Ninetales separately is busywork that says
+-- the same thing twice.
+CREATE TABLE IF NOT EXISTS card_ratings (
+    card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+    rating     INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 8),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_ratings_rating ON card_ratings(rating);
 
 -- ---------------------------------------------------------------------------
 -- PRICES
