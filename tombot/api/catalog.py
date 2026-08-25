@@ -59,7 +59,7 @@ def get_card(card_id):
     card["market_url"] = market_url(card, locale=cfg().CARDMARKET_LOCALE)
     # Empty when the card has no sibling printings, so the UI can skip the
     # edition selector rather than showing a one-option dropdown.
-printings = repo().printings_for_card(card_id)
+    printings = repo().printings_for_card(card_id)
     # Parse the variant list so the client does not have to, and fall back to the
     # era rules for a card that has no printing row of its own.
     for pr in printings:
