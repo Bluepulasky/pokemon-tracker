@@ -1,6 +1,7 @@
 .PHONY: help venv install bootstrap run dev test links prices snapshot monthly \
-        docker docker-app docker-logs docker-stop docker-shell docker-prices \
-        docker-links bundle clean
+        docker docker-app docker-logs docker-stop docker-shell \
+        docker-bootstrap docker-initdb docker-sets docker-prices docker-links \
+        docker-demo docker-demo-clear bundle clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -55,11 +56,26 @@ DOCKER_EXEC = docker compose exec --user $$(id -u):$$(id -g)
 docker-shell:    ## Shell inside the running container
 	$(DOCKER_EXEC) app bash
 
+docker-bootstrap: ## Re-run schema + catalog + sets + links in the container (idempotent)
+	$(DOCKER_EXEC) app flask bootstrap
+
+docker-initdb:   ## Create/upgrade the schema only
+	$(DOCKER_EXEC) app flask init-db
+
+docker-sets:     ## Rebuild the personal sets from seed_sets.py rules
+	$(DOCKER_EXEC) app flask seed-sets
+
 docker-prices:   ## Run a price refresh inside the container
 	$(DOCKER_EXEC) app flask prices
 
 docker-links:    ## Resolve Cardmarket links inside the container
 	$(DOCKER_EXEC) app flask resolve-links
+
+docker-demo:     ## Fill the collection with sample cards to try the UI
+	$(DOCKER_EXEC) app python scripts/demo_seed.py
+
+docker-demo-clear: ## Remove ALL collection items/photos (keeps catalog + sets)
+	$(DOCKER_EXEC) app python scripts/demo_seed.py --clear
 
 bundle:          ## Produce dist/*.bundle for handover
 	./scripts/make-bundle.sh
