@@ -72,6 +72,15 @@ class Config:
 
 
 # Domain vocabularies — single source of truth for API validation and the UI.
+# Hall of Fame rank. 0 means unranked, which is why averages skip it.
+MAX_RATING = 8
+RATING_LABELS = {
+    0: "Sin rango", 1: "Muy bajo", 2: "Bajo", 3: "Correcto", 4: "Buena",
+    5: "Muy buena", 6: "Excelente", 7: "Joya", 8: "Obra maestra",
+}
+RATING_TOP_TIER = 7      # "Top Tier" quick filter
+RATING_FAVOURITE = 5     # "Favoritas" quick filter
+
 CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"]
 CONDITION_LABELS = {
     "NM": "Near Mint", "LP": "Lightly Played", "MP": "Moderately Played",

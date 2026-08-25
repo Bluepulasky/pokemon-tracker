@@ -257,6 +257,41 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 }
 .chips.seg .chip.on b { background: rgba(0,0,0,.18); color: #1a1400; }
 
+/* ------------------------------------------------------- hall of fame */
+.hof {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: rgba(255,255,255,.09); color: var(--fg-dim); line-height: 1.5;
+}
+.hof.fav { background: rgba(59,108,246,.22); color: #9db6ff; }
+.hof.top { background: rgba(255,203,5,.9); color: #1a1400; }
+.hof.sm { font-size: 10px; padding: 1px 6px; }
+
+.badge.hof-badge { top: 6px; left: 6px; }
+.card .badge.hof-badge { background: rgba(255,203,5,.92); color: #1a1400; }
+.card .badge.hof-badge.fav { background: rgba(59,108,246,.92); color: #fff; }
+
+/* Rank picker in the modal: 0-8 as one row of targets, not a fiddly slider. */
+.rank-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.rank {
+  width: 34px; height: 34px; display: flex; align-items: center;
+  justify-content: center; border-radius: 8px; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line);
+  font-size: 13px; font-weight: 600; color: var(--fg-dim); transition: .12s;
+}
+.rank:hover { border-color: var(--fg-faint); color: var(--fg); }
+.rank.on { background: var(--accent); border-color: var(--accent); color: #1a1400; }
+.rank.zero { width: auto; padding: 0 10px; font-size: 12px; }
+.rank-label { font-size: 12px; color: var(--fg-faint); margin-top: 6px; min-height: 16px; }
+
+/* The variant card is narrow, so the full-size row would wrap to three lines.
+   Smaller targets give a tidy two rows without shrinking the primary picker in
+   the add form. */
+.variant-card { width: 230px; }
+.variant-card .rank { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
+.variant-card .rank.zero { padding: 0 8px; }
+.variant-card .rank-row { gap: 4px; }
+
 .note { font-size: 12px; color: var(--fg-faint); margin-top: 8px; }
 
 /* Outbound Cardmarket link. rel=noopener because it opens in a new tab. */

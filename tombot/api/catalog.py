@@ -18,6 +18,7 @@ def healthz():
 def meta():
     """Vocabularies the UI needs, so the front end never hardcodes them."""
     from ..config import (CONDITIONS, CONDITION_LABELS, LANGUAGES, LANGUAGE_LABELS,
+                          RATING_FAVOURITE, RATING_LABELS, RATING_TOP_TIER,
                           VARIANTS, VARIANT_LABELS)
     r = repo()
     return jsonify({
@@ -25,6 +26,10 @@ def meta():
         "languages": [{"key": k, "label": LANGUAGE_LABELS[k]} for k in LANGUAGES],
         "variants": [{"key": k, "label": VARIANT_LABELS[k]} for k in VARIANTS],
         "rarities": r.rarities(),
+        "ratings": [{"value": v, "label": lbl} for v, lbl in
+                    sorted(RATING_LABELS.items())],
+        "rating_top_tier": RATING_TOP_TIER,
+        "rating_favourite": RATING_FAVOURITE,
         "official_sets": r.list_official_sets(),
         "last_price_refresh": r.get_meta("last_price_refresh"),
     })
@@ -55,13 +60,27 @@ def get_card(card_id):
 
 @bp.get("/search")
 def search():
-    """Global search across catalog and collection (spec §19)."""
+    """Global search across catalog and collection (spec §19).
+
+    A rating filter narrows the collection half only — the catalog has no ranks,
+    and silently dropping catalog hits when one is set would look like the search
+    was broken.
+    """
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"cards": [], "collection": []})
+
+    from .collection import _rating_arg
+    rating = _rating_arg("rating")
+    rating_min = _rating_arg("rating_min")
+    rating_max = _rating_arg("rating_max")
+
     cards, _ = repo().search_cards(q=q, page=1, page_size=25)
-    items, _ = repo().list_collection(q=q, page=1, page_size=25)
-    return jsonify({"cards": cards, "collection": items})
+    items, _ = repo().list_collection(
+        q=q, rating=rating, rating_min=rating_min, rating_max=rating_max,
+        page=1, page_size=25)
+    return jsonify({"cards": attach(cards, locale=cfg().CARDMARKET_LOCALE),
+                    "collection": items})
 
 
 @bp.post("/catalog/import")

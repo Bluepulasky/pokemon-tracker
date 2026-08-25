@@ -97,6 +97,11 @@ CREATE TABLE IF NOT EXISTS collection_items (
     condition  TEXT NOT NULL DEFAULT 'NM',       -- NM|LP|MP|HP|DMG
     language   TEXT NOT NULL DEFAULT 'es',       -- es|en|pt|other
     quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    -- Hall of Fame rank, 0-8. 0 means unranked, which is why averages exclude it.
+    -- Scoped to the row, i.e. to a (card, variant, condition, language) combination:
+    -- identical copies collapse into one row via the UNIQUE below, so they share a
+    -- rank. Rank a copy separately by recording it under its own condition/variant.
+    rating     INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 8),
     notes      TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -105,6 +110,7 @@ CREATE TABLE IF NOT EXISTS collection_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_card ON collection_items(card_id);
+CREATE INDEX IF NOT EXISTS idx_items_rating ON collection_items(rating);
 
 -- N photos per item (PLAN.md §2.4). The spec's single image column could not
 -- satisfy "one photo per variant, swipe through them in the modal".

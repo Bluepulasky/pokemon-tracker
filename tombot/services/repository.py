@@ -6,6 +6,7 @@ repo too; nothing else opens a connection.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import threading
@@ -13,6 +14,8 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+log = logging.getLogger(__name__)
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 SCHEMA_VERSION = "1"
@@ -109,8 +112,34 @@ class PokemonRepo:
             return r[0] if r else None
 
     # ---------------------------------------------------------------- schema
+    # Columns added after the first release. schema.sql is all CREATE TABLE IF
+    # NOT EXISTS, so it does nothing to a database that already exists — new
+    # columns have to be applied explicitly or existing installs break on the
+    # first query that references them.
+    MIGRATIONS = (
+        ("collection_items", "rating",
+         "ALTER TABLE collection_items ADD COLUMN rating INTEGER NOT NULL DEFAULT 0"),
+    )
+
+    def _apply_migrations(self, conn) -> list[str]:
+        applied = []
+        for table, column, ddl in self.MIGRATIONS:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if not cols:
+                continue                      # table not created yet; schema.sql handles it
+            if column not in cols:
+                conn.execute(ddl)
+                applied.append(f"{table}.{column}")
+        return applied
+
     def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
         with self.tx() as c:
+            # Migrations run FIRST. schema.sql builds indexes over the new columns,
+            # and on an existing database those statements fail with "no such
+            # column" before any migration would have had a chance to add it.
+            # On a fresh database this is a no-op — the tables do not exist yet.
+            for name in self._apply_migrations(c):
+                log.info("migrated: added %s", name)
             c.executescript(SCHEMA_PATH.read_text())
             for kind, key, mult in default_modifiers:
                 c.execute(
@@ -437,16 +466,21 @@ class PokemonRepo:
             "condition": item.get("condition", "NM"),
             "language": item.get("language", "es"),
             "quantity": int(item.get("quantity", 1)),
+            "rating": int(item.get("rating") or 0),
             "notes": item.get("notes"),
         }
         conflict = ("quantity = collection_items.quantity + excluded.quantity"
                     if mode == "add" else "quantity = excluded.quantity")
         with self.tx() as c:
             c.execute(
-                f"""INSERT INTO collection_items(card_id,variant,condition,language,quantity,notes)
-                    VALUES (:card_id,:variant,:condition,:language,:quantity,:notes)
+                f"""INSERT INTO collection_items
+                      (card_id,variant,condition,language,quantity,rating,notes)
+                    VALUES (:card_id,:variant,:condition,:language,:quantity,:rating,:notes)
                     ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
                       {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
+                      -- keep an existing rank unless the caller sends a new one
+                      rating=CASE WHEN excluded.rating > 0 THEN excluded.rating
+                                  ELSE collection_items.rating END,
                       updated_at=datetime('now')""",
                 payload,
             )
@@ -458,7 +492,7 @@ class PokemonRepo:
         return dict(row)
 
     def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
-        allowed = {"variant", "condition", "language", "quantity", "notes"}
+        allowed = {"variant", "condition", "language", "quantity", "rating", "notes"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return self.get_collection_item(item_id)
@@ -510,6 +544,8 @@ class PokemonRepo:
 
     def list_collection(self, *, q: str = "", set_id: str = "", condition: str = "",
                         variant: str = "", language: str = "", rarity: str = "",
+                        rating: int | None = None, rating_min: int | None = None,
+                        rating_max: int | None = None,
                         sort: str = "set", page: int = 1, page_size: int = 60
                         ) -> tuple[list[dict], int]:
         where, params = ["1=1"], []
@@ -528,9 +564,20 @@ class PokemonRepo:
         if rarity:
             where.append("c.rarity = ?")
             params.append(rarity)
+        if rating is not None:
+            where.append("i.rating = ?")
+            params.append(int(rating))
+        # Ranges drive the Top Tier / Favourites quick filters.
+        if rating_min is not None:
+            where.append("i.rating >= ?")
+            params.append(int(rating_min))
+        if rating_max is not None:
+            where.append("i.rating <= ?")
+            params.append(int(rating_max))
         w = " AND ".join(where)
         order = {
             "set": "os.release_date, c.number_sort",
+            "rating": "i.rating DESC, c.name",
             "name": "c.name",
             "number": "c.number_sort",
             "rarity": "c.rarity, c.number_sort",
@@ -562,6 +609,34 @@ class PokemonRepo:
             "COALESCE(SUM(quantity), 0) AS physical_cards, "
             "COUNT(*) AS item_rows FROM collection_items"
         ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0}
+
+    def rating_stats(self) -> dict:
+        """Hall of Fame summary.
+
+        The average deliberately excludes rating 0. Zero means "not ranked yet",
+        not "ranked zero", so averaging it in would drag the number toward 0 and
+        make it say more about how much ranking is left to do than about the
+        collection.
+        """
+        row = self._one(
+            """SELECT COUNT(*) AS rated,
+                      COALESCE(AVG(rating), 0) AS average,
+                      COALESCE(MAX(rating), 0) AS best
+               FROM collection_items WHERE rating > 0"""
+        ) or {}
+        dist = {r["rating"]: r["n"] for r in self._all(
+            "SELECT rating, COUNT(*) AS n FROM collection_items "
+            "WHERE rating > 0 GROUP BY rating")}
+        return {
+            "rated": row.get("rated", 0) or 0,
+            "unrated": self._scalar(
+                "SELECT COUNT(*) FROM collection_items WHERE rating = 0") or 0,
+            "average": round(row.get("average", 0) or 0, 2),
+            "best": row.get("best", 0) or 0,
+            "top_tier": self._scalar(
+                "SELECT COUNT(*) FROM collection_items WHERE rating >= 7") or 0,
+            "distribution": {str(k): v for k, v in sorted(dist.items())},
+        }
 
     def owned_card_variants(self) -> list[dict]:
         """Distinct (card, variant) pairs actually held — the price job's work list.

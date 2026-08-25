@@ -2,7 +2,7 @@
 
 import { api } from './api.js';
 import { closeModal, initModal, openCard } from './modal.js';
-import { cardArt, el, esc, eur, lineChart, pct, photoUrl, placeholder,
+import { cardArt, el, esc, eur, hofBadge, lineChart, pct, photoUrl, placeholder,
          progressBar, toast } from './ui.js';
 
 const view = () => document.getElementById('view');
@@ -48,9 +48,10 @@ async function render(keepScroll = false) {
 
 /* ------------------------------------------------------------- dashboard */
 async function dashboard() {
-  const [d, h] = await Promise.all([api.dashboard(), api.history()]);
+  const [d, hist] = await Promise.all([api.dashboard(), api.history()]);
   const v = d.value;
-  const points = h.data.map((s) => ({ label: s.captured_on.slice(5), value: s.value_eur }));
+  const h = d.hall_of_fame || { rated: 0, average: 0, top_tier: 0, unrated: 0 };
+  const points = hist.data.map((s) => ({ label: s.captured_on.slice(5), value: s.value_eur }));
 
   view().innerHTML = `
     <h1>Mi colección</h1>
@@ -65,6 +66,11 @@ async function dashboard() {
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
       <div class="stat"><div class="k">Sets completos</div>
         <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
+      <div class="stat"><div class="k">Hall of Fame</div>
+        <div class="v">${h.rated ? `${h.average}<small> / 8</small>` : '—'}</div>
+        <div class="note">${h.rated
+          ? `${h.rated} valoradas · ${h.top_tier} top tier · ${h.unrated} sin valorar`
+          : 'Todavía no has valorado ninguna carta'}</div></div>
       <div class="stat"><div class="k">Completitud global</div>
         <div class="v">${pct(d.completion_pct)}</div>
         ${progressBar(d.owned_cards, d.target_cards)}
@@ -80,6 +86,12 @@ async function dashboard() {
 
     <h2>Sets con más cartas faltantes</h2>
     <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
+
+    <h2>Hall of Fame</h2>
+    ${h.rated
+      ? `<div class="card-grid" id="hof-grid"></div>
+         <div class="btn-row"><button class="btn" id="hof-all">Ver todas las valoradas</button></div>`
+      : `<div class="empty">Abre una carta de tu colección y asígnale un rango de 0 a 8.</div>`}
 
     <h2>Cartas de mayor valor</h2>
     <div class="missing-list">${
@@ -97,6 +109,20 @@ async function dashboard() {
       <span class="note" style="align-self:center">
         Última actualización: ${esc(d.last_price_refresh || 'nunca')}</span>
     </div>`;
+
+  if (h.rated) {
+    try {
+      const top = await api.collection({ rating_min: META.rating_top_tier,
+                                         sort: 'rating', page_size: 16 });
+      const grid = view().querySelector('#hof-grid');
+      grid.innerHTML = top.data.length
+        ? top.data.map(itemHtml).join('')
+        : `<div class="empty">Ninguna carta llega a ★${META.rating_top_tier} todavía.</div>`;
+      view().querySelector('#hof-all').onclick = () => {
+        location.hash = `#/collection?rating_min=1&sort=rating`;
+      };
+    } catch (e) { toast(e.message, true); }
+  }
 
   wireCardClicks();
   view().querySelectorAll('[data-set]').forEach((n) => {
@@ -234,6 +260,8 @@ async function collection(r) {
     language: r.params.get('language') || '',
     rarity: r.params.get('rarity') || '',
     q: r.params.get('q') || '',
+    rating: r.params.get('rating') || '',
+    rating_min: r.params.get('rating_min') || '',
     sort: r.params.get('sort') || 'set',
     page_size: 240,
   };
@@ -257,26 +285,49 @@ async function collection(r) {
       ${sel('f-variant', 'Variante', META.variants, f.variant)}
       ${sel('f-language', 'Idioma', META.languages, f.language)}
       ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
+      ${sel('f-rating', 'Hall of Fame', META.ratings.map((x) =>
+        ({ key: String(x.value), label: `${x.value === 0 ? '—' : '★' + x.value} ${x.label}` })), f.rating)}
       ${sel('f-sort', '', [
         { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
         { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
-        { key: 'quantity', label: 'Por cantidad' }, { key: 'recent', label: 'Más recientes' },
+        { key: 'quantity', label: 'Por cantidad' }, { key: 'rating', label: 'Por Hall of Fame' },
+        { key: 'recent', label: 'Más recientes' },
       ], f.sort)}
       <span class="spacer">${res.data.length} de ${res.total}</span>
+    </div>
+
+    <div class="chips" style="margin:-8px 0 16px">
+      ${[['', 'Todas'],
+         [String(META.rating_top_tier), `Top Tier ★${META.rating_top_tier}+`],
+         [String(META.rating_favourite), `Favoritas ★${META.rating_favourite}+`]]
+        .map(([v, label]) => `<span class="chip${f.rating_min === v && !f.rating ? ' on' : ''}"
+           data-qmin="${v}">${label}</span>`).join('')}
     </div>
 
     ${res.data.length
       ? `<div class="card-grid">${res.data.map(itemHtml).join('')}</div>`
       : '<div class="empty">No hay cartas con estos filtros.</div>'}`;
 
-  const apply = () => {
+  const apply = (overrides = {}) => {
     const p = new URLSearchParams();
-    for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity', 'sort']) {
+    for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
+                     'rating', 'sort']) {
       const v = view().querySelector(`#f-${k}`).value;
       if (v) p.set(k, v);
     }
+    if (f.rating_min && !('rating_min' in overrides)) p.set('rating_min', f.rating_min);
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v) p.set(k, v); else p.delete(k);
+    }
     location.hash = `#/collection?${p}`;
   };
+  view().querySelectorAll('[data-qmin]').forEach((chip) => {
+    chip.onclick = () => {
+      // A quick filter and an exact-rating filter would fight each other.
+      view().querySelector('#f-rating').value = '';
+      apply({ rating_min: chip.dataset.qmin, rating: '' });
+    };
+  });
   view().querySelectorAll('.toolbar select').forEach((s) => { s.onchange = apply; });
   const q = view().querySelector('#f-q');
   q.onchange = apply;
@@ -294,6 +345,7 @@ function itemHtml(i) {
       ${src ? `<img src="${esc(src)}" alt="${esc(i.name)}" loading="lazy">`
             : placeholder(i.number, i.official_set_id)}
       ${i.quantity > 1 ? `<span class="badge qty">×${i.quantity}</span>` : ''}
+      ${i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
       ${v.total != null ? `<span class="badge val">${esc(eur(v.total))}</span>` : ''}
     </div>
     <div class="label">
