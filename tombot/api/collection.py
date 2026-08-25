@@ -62,15 +62,51 @@ def _priced(rows):
     mods = repo().get_modifiers()
     locale = cfg().CARDMARKET_LOCALE
     for r in rows:
-        r["value"] = pricing.estimate_item(r, mods)
+        # A placeholder has no physical copy, so it has no estimated value —
+        # pricing it would invent a number for a card that is not owned.
+        r["value"] = (pricing.estimate_item(r, mods) if r.get("owned", True)
+                      else {"unit": None, "total": None, "currency": "EUR",
+                            "basis": "not_owned", "updated_at": None})
         # The row is a join over cards, so it already carries external_ids_json.
         r["market_url"] = market_url(r, locale=locale)
     return rows
 
 
+def _truthy(name: str) -> bool:
+    return (request.args.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 @bp.get("")
 def list_items():
+    """Owned inventory, or every card in the personal sets when show_all=1.
+
+    show_all keeps the same shape and filters so the front end can flip modes
+    without a second code path; unowned rows come back with owned=false and no
+    collection fields.
+    """
     page, size = paginate_args()
+
+    if _truthy("show_all"):
+        rows, total = repo().list_slots_with_ownership(
+            q=request.args.get("q", ""),
+            set_id=request.args.get("set", ""),
+            condition=request.args.get("condition", ""),
+            variant=request.args.get("variant", ""),
+            language=request.args.get("language", ""),
+            rarity=request.args.get("rarity", ""),
+            rating=_rating_arg("rating"),
+            rating_min=_rating_arg("rating_min"),
+            rating_max=_rating_arg("rating_max"),
+            sort=request.args.get("sort", "set"),
+            page=page, page_size=size,
+        )
+        return jsonify({
+            "data": _priced(rows), "page": page, "page_size": size, "total": total,
+            "mode": "all",
+            "totals": {**repo().collection_totals(),
+                       **repo().slots_ownership_totals(request.args.get("set", ""))},
+        })
+
     rows, total = repo().list_collection(
         q=request.args.get("q", ""),
         set_id=request.args.get("set", ""),
@@ -86,6 +122,7 @@ def list_items():
     )
     return jsonify({
         "data": _priced(rows), "page": page, "page_size": size, "total": total,
+        "mode": "owned",
         # Unique vs physical counts, shown side by side per spec §4.
         "totals": repo().collection_totals(),
     })
