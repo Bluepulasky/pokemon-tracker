@@ -602,6 +602,107 @@ class PokemonRepo:
             r["photos"] = self.get_photos(r["id"])
         return rows, total
 
+    def list_slots_with_ownership(
+            self, *, q: str = "", set_id: str = "", condition: str = "",
+            variant: str = "", language: str = "", rarity: str = "",
+            rating: int | None = None, rating_min: int | None = None,
+            rating_max: int | None = None,
+            sort: str = "set", page: int = 1, page_size: int = 60
+    ) -> tuple[list[dict], int]:
+        """Every card in the personal sets, owned or not ("All" view mode).
+
+        One row per owned collection item, or a single placeholder row for a slot
+        nothing satisfies. The ownership join goes through a subquery rather than
+        joining set_slot_cards directly: a slot can group several catalog cards,
+        and a direct join would emit one duplicate placeholder per member card
+        for the slots that are not owned at all.
+
+        Filters that describe a physical copy — condition, variant, language,
+        rating — can only match owned rows, so applying any of them drops
+        placeholders. That is the intended behaviour for the Hall of Fame filter
+        and is equally right for the others.
+        """
+        where, params = ["1=1"], []
+        if set_id:
+            where.append("sl.set_id = ?")
+            params.append(set_id)
+        if q:
+            where.append("(c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)")
+            params += [f"%{q}%", f"{q}%", f"%{q}%"]
+        if rarity:
+            where.append("c.rarity = ?")
+            params.append(rarity)
+        for col, val in (("condition", condition), ("variant", variant),
+                         ("language", language)):
+            if val:
+                where.append(f"i.{col} = ?")
+                params.append(val)
+        if rating is not None:
+            where.append("i.rating = ?")
+            params.append(int(rating))
+        if rating_min is not None:
+            where.append("i.rating >= ?")
+            params.append(int(rating_min))
+        if rating_max is not None:
+            where.append("i.rating <= ?")
+            params.append(int(rating_max))
+        w = " AND ".join(where)
+
+        # Placeholders have no collection row, so anything ordering by an item
+        # column must fall back to a card column or they sort unpredictably.
+        order = {
+            "set": "cs.position, c.number_sort",
+            "name": "COALESCE(sl.label, c.name)",
+            "number": "c.number_sort",
+            "rarity": "c.rarity, c.number_sort",
+            "rating": "COALESCE(i.rating, -1) DESC, c.number_sort",
+            "quantity": "COALESCE(i.quantity, 0) DESC, c.number_sort",
+            "owned": "owned DESC, c.number_sort",
+            "recent": "COALESCE(i.created_at, '') DESC, c.number_sort",
+        }.get(sort, "cs.position, c.number_sort")
+
+        base = f"""
+            FROM set_slots sl
+            JOIN collection_sets cs ON cs.id = sl.set_id
+            LEFT JOIN cards c ON c.id = sl.display_card_id
+            LEFT JOIN official_sets os ON os.id = c.official_set_id
+            LEFT JOIN collection_items i
+                   ON i.card_id IN (SELECT card_id FROM set_slot_cards
+                                     WHERE slot_id = sl.id)
+            WHERE {w}"""
+
+        total = self._scalar(f"SELECT COUNT(*) {base}", params) or 0
+        rows = self._all(
+            f"""SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
+                       cs.id AS personal_set_id, cs.name AS personal_set_name,
+                       c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
+                       c.official_set_id, c.image_small_url, c.image_local,
+                       c.external_ids_json, os.name AS set_name,
+                       i.id AS id, i.variant, i.condition, i.language,
+                       i.quantity, i.rating, i.notes,
+                       i.created_at, i.updated_at,
+                       CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS owned
+                {base} ORDER BY {order} LIMIT ? OFFSET ?""",
+            params + [page_size, (page - 1) * page_size],
+        )
+        for r in rows:
+            r["owned"] = bool(r["owned"])
+            r["photos"] = self.get_photos(r["id"]) if r["id"] else []
+        return rows, total
+
+    def slots_ownership_totals(self, set_id: str = "") -> dict:
+        where = "WHERE sl.set_id = ?" if set_id else ""
+        params = (set_id,) if set_id else ()
+        return self._one(
+            f"""SELECT COUNT(DISTINCT sl.id) AS slots,
+                       COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN sl.id END) AS owned_slots
+                FROM set_slots sl
+                LEFT JOIN collection_items i
+                       ON i.card_id IN (SELECT card_id FROM set_slot_cards
+                                         WHERE slot_id = sl.id)
+                {where}""", params
+        ) or {"slots": 0, "owned_slots": 0}
+
     def collection_totals(self) -> dict:
         """Unique logical cards vs physical copies (spec §4): 67 cartas / 94 físicas."""
         return self._one(
