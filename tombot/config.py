@@ -86,6 +86,6 @@ VARIANT_LABELS = {
 DEFAULT_MODIFIERS = [
     ("condition", "NM", 1.00), ("condition", "LP", 0.85), ("condition", "MP", 0.70),
     ("condition", "HP", 0.50), ("condition", "DMG", 0.35),
-    ("language", "en", 1.00), ("language", "es", 0.90),
-    ("language", "pt", 0.85), ("language", "other", 0.85),
+    ("language", "en", 1.00), ("language", "es", 1.00),
+    ("language", "pt", 0.85), ("language", "other", 1.00),
 ]

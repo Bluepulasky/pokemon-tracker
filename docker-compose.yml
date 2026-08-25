@@ -1,6 +1,5 @@
 # TomBot Pokémon Tracker
 #
-#   cp .env.example .env      # edit APP_PORT / BIND_ADDR here
 #   docker compose up -d
 #
 # Everything configurable lives in .env — this file should not need editing.
@@ -16,14 +15,14 @@ services:
     #   127.0.0.1  only this machine (default)
     #   0.0.0.0    anything on your LAN  <- set APP_TOKEN if you do this
     ports:
-      - "${BIND_ADDR:-127.0.0.1}:${APP_PORT:-8080}:${APP_PORT:-8080}"
+      - "8090:8080"
 
     volumes:
       - ${DATA_PATH:-./data}:/srv/data
       - ${MEDIA_PATH:-./media}:/srv/media
 
     environment:
-      PORT: "${APP_PORT:-8080}"
+      PORT: "8080"
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
       TZ: "${TZ:-Europe/Madrid}"
