@@ -68,11 +68,28 @@ class PricingService:
         return {"checked": len(pairs), "updated": updated, "unpriced": unpriced}
 
     def _pick(self, prices: dict, variant: str) -> float | None:
-        fields = VARIANT_PRICE_FIELDS.get(variant, [])
-        basis = self.config.PRICE_BASIS
-        for f in [*fields, basis, *DEFAULT_FIELDS]:
+        """Price for this variant, or None.
+
+        A variant the upstream prices separately — reverse holo is the only one —
+        is read ONLY from its own fields. Falling through to the card-level price
+        when those are empty is how a reverse holo silently acquired the price of
+        the ordinary card, which is the valuation bug this addresses.
+
+        Everything else legitimately uses the card-level price: the upstream
+        publishes one number per card id, so holo and non-holo of the same
+        printing genuinely share it.
+        """
+        dedicated = VARIANT_PRICE_FIELDS.get(variant)
+        if dedicated:
+            for f in dedicated:
+                v = prices.get(f)
+                if v:                   # upstream uses 0.0 for "no data", not null
+                    return float(v)
+            return None                 # no data for this variant; do not guess
+
+        for f in [self.config.PRICE_BASIS, *DEFAULT_FIELDS]:
             v = prices.get(f)
-            if v:                       # upstream uses 0.0 for "no data", not null
+            if v:
                 return float(v)
         return None
 
@@ -80,19 +97,31 @@ class PricingService:
     def estimate_item(self, item: dict, modifiers: dict | None = None) -> dict:
         """Estimated value of one collection row, including quantity.
 
-        Fallback chain (spec §14): exact (card, variant) -> card, any variant -> unpriced.
+        Priced against the exact printing the user recorded and nothing else.
+
+        There used to be a fallback that borrowed the price of any other variant
+        of the same card. That silently valued a Charizard reprint at the Base
+        Set price and vice versa — a wrong number is worse than no number here,
+        because it lands in the dashboard total looking like fact. Missing data
+        now reports itself.
         """
         mods = modifiers if modifiers is not None else self.repo.get_modifiers()
         row = self.repo.get_price(item["card_id"], item.get("variant", "normal"))
-        basis = "exact"
+
         if not row or row.get("price") is None:
-            candidates = [p for p in self.repo.get_prices_for_card(item["card_id"])
-                          if p.get("price") is not None]
-            row = candidates[0] if candidates else None
-            basis = "variant_fallback"
-        if not row or row.get("price") is None:
-            return {"unit": None, "total": None, "currency": "EUR",
-                    "basis": "unpriced", "updated_at": None}
+            # The upstream prices a card id as a whole, so a variant with no
+            # entry of its own legitimately falls back to the card-level price —
+            # that is the same printing, not a different one.
+            card_level = self.repo.get_price(item["card_id"], "normal")
+            if card_level and card_level.get("price") is not None \
+                    and item.get("variant") not in VARIANT_PRICE_FIELDS:
+                row, basis = card_level, "printing_level"
+            else:
+                return {"unit": None, "total": None, "currency": "EUR",
+                        "basis": "no_data", "updated_at": None,
+                        "reason": "sin precio para esta impresión"}
+        else:
+            basis = "exact"
 
         cond_m = mods.get("condition", {}).get(item.get("condition", "NM"), 1.0)
         lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
@@ -103,6 +132,7 @@ class PricingService:
             "total": round(unit * qty, 2),
             "currency": row.get("currency", "EUR"),
             "basis": basis,
+            "priced_variant": row.get("variant"),
             "condition_multiplier": cond_m,
             "language_multiplier": lang_m,
             "updated_at": row.get("updated_at"),
@@ -136,4 +166,8 @@ class PricingService:
                 break
             page += 1
         return {"total_eur": round(total, 2), "priced_items": priced,
-                "unpriced_items": unpriced, "by_official_set": per_set}
+                "unpriced_items": unpriced, "by_official_set": per_set,
+                # Surfaced so a low total reads as missing data rather than a
+                # cheap collection.
+                "coverage_pct": round(100.0 * priced / (priced + unpriced), 1)
+                                if (priced + unpriced) else 100.0}

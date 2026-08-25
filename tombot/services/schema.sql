@@ -107,6 +107,10 @@ CREATE TABLE IF NOT EXISTS card_printings (
     official_set_id TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
     is_reprint      INTEGER NOT NULL DEFAULT 0,
     display_name    TEXT,
+    -- Physical variants this edition can come in, as a JSON list. Derived from
+    -- the set era and the card's rarity: a WOTC holo rare exists as 1st Edition,
+    -- Shadowless and Unlimited, a modern card does not.
+    variants_json   TEXT,
     source          TEXT NOT NULL DEFAULT 'auto',
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (print_group, card_id)

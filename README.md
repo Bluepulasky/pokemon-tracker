@@ -233,6 +233,22 @@ Cardmarket's own API is application-gated and not obtainable for a personal proj
 `api.pokemontcg.io` republishes Cardmarket EUR prices per card with no account, and is
 used as both catalog and price source. See `PLAN.md` §2.2.
 
+### What can and cannot be priced apart
+
+pokemontcg.io publishes **one price per card id**. That means:
+
+- **Editions are priced apart** when they are separate cards — Base Set Charizard
+  (`base1-4`) and a Celebrations reprint are different ids with different prices.
+- **Variants within one printing are not.** Shadowless, 1st Edition and Unlimited
+  Charizard are all `base1-4` and share a number.
+- **Reverse holo is the exception** — the upstream carries `reverseHolo*` fields.
+
+Where a variant has no price of its own, the app reports **"sin datos"** rather than
+borrowing another variant's. A reverse holo used to inherit the ordinary card's price,
+which valued a €2 card at €1,500. A wrong number is worse than no number when it lands
+in the dashboard total looking like fact. The dashboard reports price **coverage**
+alongside the total so a low figure reads as missing data.
+
 No public source prices by *condition* or by *printing language*, so:
 
 ```

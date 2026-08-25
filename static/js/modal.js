@@ -23,6 +23,15 @@ export function closeModal() {
   root.innerHTML = '';
 }
 
+/* Variants offered are the ones the chosen edition was actually printed in —
+   a Base Set holo can be 1st Edition or Shadowless, a modern card cannot. */
+function variantOpts(variants, selected) {
+  const allowed = (variants && variants.length)
+    ? META.variants.filter((v) => variants.includes(v.key))
+    : META.variants;
+  return opts(allowed, selected);
+}
+
 const opts = (list, sel) => list
   .map((o) => `<option value="${esc(o.key)}"${o.key === sel ? ' selected' : ''}>${esc(o.label)}</option>`)
   .join('');
@@ -95,8 +104,8 @@ function variantCard(item) {
         : '<span class="note">Sin fotografía propia</span>'}
     </div>
     <div class="price">${esc(eur(v.total))}
-      <small>${v.basis === 'unpriced' ? 'sin precio'
-                : v.basis === 'variant_fallback' ? 'aprox.'
+      <small>${v.basis === 'no_data' ? 'sin datos para esta impresión'
+                : v.basis === 'printing_level' ? `${eur(v.unit)} × ${item.quantity} · precio de la impresión`
                 : `${eur(v.unit)} × ${item.quantity}`}</small></div>
     ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
        target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
@@ -124,12 +133,13 @@ function rankRow(current) {
 
 function addForm(card) {
   const printings = card.available_printings || [];
+  const current = printings.find((p) => p.card_id === card.id) || printings[0] || {};
   return `<form class="add-form" data-card="${esc(card.id)}">
     ${printings.length > 1 ? `
     <div class="field" style="margin-bottom:12px">
       <label>Edición / Set actual</label>
       <select name="printing">
-        ${printings.map((p) => `<option value="${p.id}" data-card="${esc(p.card_id)}"${
+        ${printings.map((p) => `<option value="${p.id ?? ''}" data-card="${esc(p.card_id)}"${
           p.card_id === card.id ? ' selected' : ''}>${esc(p.display_name)}${
           p.is_reprint ? ' (reimpresión)' : ''}</option>`).join('')}
       </select>
@@ -137,7 +147,7 @@ function addForm(card) {
     </div>` : ''}
     <div class="form-row">
       <div class="field"><label>Variante</label>
-        <select name="variant">${opts(META.variants)}</select></div>
+        <select name="variant">${variantOpts(current.variants)}</select></div>
       <div class="field"><label>Idioma</label>
         <select name="language">${opts(META.languages, 'es')}</select></div>
       <div class="field" style="flex:0 0 90px"><label>Cantidad</label>
@@ -181,6 +191,17 @@ function wireForm(root, card) {
       condition = chip.dataset.cond;
     };
   });
+  // Changing the edition re-offers the variants that edition exists in.
+  const printingSel = form.querySelector('[name=printing]');
+  if (printingSel) {
+    printingSel.onchange = () => {
+      const chosen = (card.available_printings || [])
+        .find((p) => String(p.id ?? '') === printingSel.value);
+      form.querySelector('[name=variant]').innerHTML =
+        variantOpts(chosen && chosen.variants);
+    };
+  }
+
   form.querySelector('.cancel').onclick = closeModal;
 
   form.onsubmit = async (e) => {
@@ -188,13 +209,13 @@ function wireForm(root, card) {
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      const printingSel = form.querySelector('[name=printing]');
       const chosen = printingSel?.selectedOptions?.[0];
       await api.addItem({
         // Picking a different edition records that printing's catalog card, so
         // the slot is still satisfied and the physical edition is preserved.
         card_id: chosen ? chosen.dataset.card : card.id,
-        printing_id: printingSel ? Number(printingSel.value) : undefined,
+        printing_id: (printingSel && printingSel.value)
+          ? Number(printingSel.value) : undefined,
         variant: form.variant.value,
         language: form.language.value,
         condition,
