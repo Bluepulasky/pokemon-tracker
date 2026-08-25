@@ -184,15 +184,52 @@ def _bool_env(name: str) -> bool:
 
 
 @click.command("bootstrap")
+@click.option("--force-catalog", is_flag=True,
+              help="Re-import every set even if the catalog looks complete")
 @click.pass_context
 @with_appcontext
-def bootstrap(ctx):
-    """init-db + import-catalog + seed-sets. One command for a fresh install."""
+def bootstrap(ctx, force_catalog):
+    """Set up or repair the install: schema, catalog, personal sets, links.
+
+    This is the repair command as much as the install command, so it must make
+    progress on every run. It checks the catalog per set rather than asking
+    "are there any cards", because a partial import is the normal outcome when
+    the upstream is throwing 500s, and treating that as done leaves the app
+    permanently half-built.
+
+    Set seeding and link resolution always run: both are idempotent, both are
+    cheap when there is nothing to do, and neither depends on the import having
+    succeeded.
+    """
     ctx.invoke(init_db)
-    ctx.invoke(import_catalog, set_ids="", images=True)
+    repo = _repo()
+
+    required = required_official_sets()
+    gaps = repo.catalog_gaps(required)
+
+    if force_catalog:
+        click.echo(f"--force-catalog: re-importing all {len(required)} sets")
+        ctx.invoke(import_catalog, set_ids=",".join(required), images=True)
+    elif gaps:
+        for g in gaps:
+            expected = g["expected"] if g["expected"] is not None else "?"
+            click.echo(f"  {g['set']:<8} {g['have']}/{expected}  {g['why']}")
+        click.echo(f"importing {len(gaps)} incomplete set(s)")
+        ctx.invoke(import_catalog, set_ids=",".join(g["set"] for g in gaps), images=True)
+    else:
+        click.echo(f"catalog complete ({repo.count_cards()} cards across "
+                   f"{len(required)} sets)")
+
     ctx.invoke(seed_sets, rebuild=True)
     ctx.invoke(resolve_links, limit=5000)
-    click.secho("bootstrap complete", fg="green")
+
+    remaining = repo.catalog_gaps(required)
+    if remaining:
+        click.secho(f"{len(remaining)} set(s) still incomplete: "
+                    f"{', '.join(g['set'] for g in remaining)}", fg="yellow")
+        click.secho("re-run to retry — imports resume where they left off", fg="yellow")
+    else:
+        click.secho("bootstrap complete", fg="green")
 
 
 def register(app):
