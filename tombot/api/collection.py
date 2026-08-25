@@ -36,6 +36,7 @@ def _validate(body: dict) -> None:
         if not 0 <= rating <= MAX_RATING:
             raise ApiError(f"el rating debe estar entre 0 y {MAX_RATING}",
                            "invalid_rating")
+        body["_rating"] = rating       # applied to the card, not the row
 
 
 def _rating_arg(name: str) -> int | None:
@@ -153,7 +154,14 @@ def add_item():
     # mode=add increments an existing (card, variant, condition, language) row
     # instead of creating a duplicate that would double the physical count.
     mode = body.get("mode", "add")
-    return jsonify(repo().upsert_collection_item(body, mode=mode)), 201
+    item = repo().upsert_collection_item(body, mode=mode)
+    # The rank belongs to the card, so a rating sent with a collection write is
+    # applied there. Kept working rather than rejected: it is a natural thing to
+    # send when registering a card you already have an opinion about.
+    if "_rating" in body:
+        repo().set_card_rating(item["card_id"], body["_rating"])
+        item["rating"] = body["_rating"]
+    return jsonify(item), 201
 
 
 @bp.put("/<int:item_id>")
@@ -162,6 +170,9 @@ def update_item(item_id):
         raise ApiError("registro no encontrado", "not_found", 404)
     body = request.get_json(silent=True) or {}
     _validate(body)
+    current = repo().get_collection_item(item_id)
+    if "_rating" in body:
+        repo().set_card_rating(current["card_id"], body["_rating"])
     return jsonify(repo().update_collection_item(item_id, body))
 
 

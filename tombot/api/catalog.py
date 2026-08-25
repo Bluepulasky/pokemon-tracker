@@ -58,7 +58,30 @@ def get_card(card_id):
     # Empty when the card has no sibling printings, so the UI can skip the
     # edition selector rather than showing a one-option dropdown.
     card["available_printings"] = repo().printings_for_card(card_id)
+    card["rating"] = repo().get_card_rating(card_id)
     return jsonify(card)
+
+
+@bp.put("/cards/<card_id>/rating")
+def set_card_rating(card_id):
+    """Hall of Fame rank for the card itself.
+
+    It lived on the collection row, which meant ranking the holo and the non-holo
+    of one card separately — two answers to a question that has one.
+    """
+    from ..config import MAX_RATING
+    if not repo().get_card(card_id):
+        raise ApiError("carta no encontrada", "not_found", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        rating = int(body.get("rating"))
+    except (TypeError, ValueError):
+        raise ApiError(f"el rating debe ser un entero entre 0 y {MAX_RATING}",
+                       "invalid_rating") from None
+    if not 0 <= rating <= MAX_RATING:
+        raise ApiError(f"el rating debe estar entre 0 y {MAX_RATING}", "invalid_rating")
+    repo().set_card_rating(card_id, rating)
+    return jsonify({"card_id": card_id, "rating": repo().get_card_rating(card_id)})
 
 
 @bp.get("/search")

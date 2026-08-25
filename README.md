@@ -176,15 +176,18 @@ row to sort on.
 
 ## Hall of Fame
 
-Every card in the collection can be ranked 0-8 — 0 meaning unranked, 8 a masterpiece.
-Set it from the card modal; it saves on click, since ranking is something you do
-repeatedly while going through a binder.
+Every card can be ranked 0-8 — 0 meaning unranked, 8 a masterpiece. Set it from the card
+modal; it saves on click, since ranking is something you do repeatedly while going
+through a binder.
 
-The rank belongs to a **collection row**, i.e. a specific
-`(card, variant, condition, language)`. Two copies of the same card in different
-conditions rank separately. Copies identical in all four collapse into one row with a
-quantity and share a rank — the uniqueness rule that keeps physical counts honest also
-means there is no separate row to hang a second rank on.
+The rank belongs to the **card**, in its own `card_ratings` table. Rank Ninetales once
+and every copy you own — holo, non-holo, any condition or language — carries it. The
+rank answers "how much do I like this card", which has nothing to do with which physical
+copy is in hand.
+
+It is a separate table rather than a column on `cards` so that a catalog re-import,
+which overwrites everything in `cards`, cannot touch it. You can also rank a card you do
+not own yet.
 
 Filter with `?rating=`, `?rating_min=`, `?rating_max=`, or the **Top Tier ★7+** and
 **Favoritas ★5+** quick filters. Sort with `?sort=rating`. The dashboard shows the
