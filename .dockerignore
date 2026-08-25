@@ -1,0 +1,29 @@
+# Keep the build context to source only. Without this the context is ~238MB and
+# the user's database and photos get baked into the image — they would ship with
+# it if it were ever pushed anywhere.
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime state: bind-mounted at run time, must never be in the image.
+data/
+media/
+!media/**/.gitkeep
+
+.git/
+.gitignore
+dist/
+.env
+*.bundle
+*.sha256
+
+docs/
+*.md
+!README.md
+
+.DS_Store
+.idea/
+.vscode/

@@ -1,4 +1,5 @@
-.PHONY: help venv install bootstrap run dev test links prices snapshot monthly docker bundle clean
+.PHONY: help venv install bootstrap run dev test links prices snapshot monthly \
+        docker docker-app docker-logs docker-stop docker-shell docker-prices bundle clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -33,8 +34,23 @@ snapshot:        ## Write a collection snapshot
 monthly:         ## prices + snapshot — what cron should call
 	FLASK_APP=app.py .venv/bin/flask monthly
 
-docker:          ## Build and start via docker compose
+docker:          ## Build and start (app + scheduler)
 	docker compose up -d --build
+
+docker-app:      ## Start only the web app, no scheduler
+	docker compose up -d --build app
+
+docker-logs:     ## Follow container logs
+	docker compose logs -f
+
+docker-stop:     ## Stop the containers
+	docker compose down
+
+docker-shell:    ## Shell inside the running container
+	docker compose exec app bash
+
+docker-prices:   ## Run a price refresh inside the container
+	docker compose exec app flask prices
 
 bundle:          ## Produce dist/*.bundle for handover
 	./scripts/make-bundle.sh

@@ -19,16 +19,44 @@ make bootstrap     # schema + catalog import (~1,100 cards) + 12 personal sets
 make run           # http://127.0.0.1:8080
 ```
 
-Or with Docker:
+### On a home server (Docker)
 
 ```bash
-cp .env.example .env      # optional: add a free pokemontcg.io API key
-docker compose up -d --build
-docker compose exec app flask bootstrap
+cp .env.example .env
+$EDITOR .env                 # set APP_PORT, BIND_ADDR, PUID/PGID
+docker compose up -d
 ```
 
-`bootstrap` is idempotent. The upstream API returns HTTP 500 fairly often, so if a set
-fails, just run it again — completed sets are skipped, nothing is lost.
+That is the whole install. The container creates the schema, imports the catalog
+(~1,100 cards), builds the personal sets and resolves the Cardmarket links on first
+start, then serves. Watch it with `make docker-logs`.
+
+The upstream API returns HTTP 500 fairly often. Everything the bootstrap does is
+idempotent and resumable, so a failed set is picked up on the next restart — nothing
+is lost and nothing is duplicated.
+
+**Changing the port** — one value in `.env`, nothing else:
+
+```ini
+APP_PORT=9090
+```
+
+**Reaching it from other machines on your LAN:**
+
+```ini
+BIND_ADDR=0.0.0.0
+APP_TOKEN=<openssl rand -hex 24>
+```
+
+`BIND_ADDR` defaults to `127.0.0.1` deliberately. The API has no login, so anything that
+can reach the port can delete your collection — set `APP_TOKEN` before opening it up. The
+browser needs it once: `localStorage.setItem('app_token', '<value>')`.
+
+**File ownership** — set `PUID`/`PGID` to your own `id -u` / `id -g`, otherwise the
+database and photos end up owned by root on the host.
+
+Two containers come up: `app` (the web UI) and `scheduler` (the monthly price refresh).
+Skip the scheduler with `make docker-app` and use host cron instead if you prefer.
 
 ## What it does
 
@@ -96,11 +124,17 @@ resolved once (`flask resolve-links`) and stored, because the slug is Cardmarket
 and not derivable — `Charizard-V2-BS4`, `Brocks-Rhydon-GH2`. Set `CARDMARKET_LOCALE`
 (default `es`) to pick the site language.
 
-Refresh monthly — that matches how often upstream updates Cardmarket data:
+Refresh monthly — that matches how often upstream updates Cardmarket data. The
+`scheduler` container does this for you (`SCHEDULER_CRON_DAY` / `SCHEDULER_CRON_HOUR`
+in `.env`). If you would rather use host cron, run `make docker-app` to skip that
+container and add:
 
 ```cron
-0 4 1 * *  cd /srv/tombot && docker compose exec -T app flask monthly
+0 4 1 * *  cd /srv/tombot-pokemon-tracker && docker compose exec -T app flask monthly
 ```
+
+The scheduler runs as its own container on purpose: an in-process scheduler inside
+gunicorn fires once per worker, so every price run would happen `WEB_CONCURRENCY` times.
 
 ## Commands
 

@@ -7,6 +7,7 @@ entry inside a container hides its failures (PLAN.md §2.13).
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 
 import click
@@ -136,6 +137,52 @@ def take_snapshot() -> dict:
     return {k: v for k, v in snap.items() if k != "breakdown_json"}
 
 
+@click.command("scheduler")
+@with_appcontext
+def scheduler():
+    """Run the monthly price refresh + snapshot on a schedule, and block.
+
+    Deliberately its own process (its own container in compose). An in-process
+    scheduler inside gunicorn would fire once per worker — with WEB_CONCURRENCY=2
+    every price run would happen twice.
+    """
+    from apscheduler.schedulers.blocking import BlockingScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    cfg = current_app.extensions["config"]
+    pricing = current_app.extensions["pricing"]
+    app = current_app._get_current_object()
+
+    def job():
+        with app.app_context():
+            try:
+                click.echo(f"[scheduler] prices: {pricing.refresh()}")
+                click.echo(f"[scheduler] snapshot: {take_snapshot()}")
+            except Exception as e:                     # never kill the scheduler
+                click.secho(f"[scheduler] run failed: {e}", fg="red")
+
+    sched = BlockingScheduler(timezone=os.environ.get("TZ", "UTC"))
+    trigger = CronTrigger(day=cfg.SCHEDULER_CRON_DAY, hour=cfg.SCHEDULER_CRON_HOUR,
+                          minute=0)
+    sched.add_job(job, trigger, id="monthly", max_instances=1,
+                  coalesce=True, misfire_grace_time=6 * 3600)
+    click.echo(f"[scheduler] monthly job: day {cfg.SCHEDULER_CRON_DAY} "
+               f"at {cfg.SCHEDULER_CRON_HOUR:02d}:00 ({sched.timezone})")
+
+    if _bool_env("RUN_ON_START"):
+        click.echo("[scheduler] RUN_ON_START set — running once now")
+        job()
+
+    try:
+        sched.start()
+    except (KeyboardInterrupt, SystemExit):
+        click.echo("[scheduler] stopping")
+
+
+def _bool_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 @click.command("bootstrap")
 @click.pass_context
 @with_appcontext
@@ -150,5 +197,5 @@ def bootstrap(ctx):
 
 def register(app):
     for cmd in (init_db, import_catalog, seed_sets, resolve_links,
-                prices, snapshot, monthly, bootstrap):
+                prices, snapshot, monthly, scheduler, bootstrap):
         app.cli.add_command(cmd)
