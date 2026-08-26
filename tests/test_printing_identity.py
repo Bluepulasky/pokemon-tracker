@@ -108,3 +108,101 @@ def test_coverage_is_reported(repo, pricing):
     v = pricing.value_collection()
     assert v["priced_items"] == 1 and v["unpriced_items"] == 1
     assert v["coverage_pct"] == 50.0
+
+
+# ---------------------------------------------- end to end through the service
+def test_print_runs_of_one_card_price_apart(tmp_path):
+    """The reported bug, end to end: one Hitmonchan owned in three printings used
+    to read a single number for all three."""
+    import json
+    import pathlib
+
+    from tombot.config import DEFAULT_MODIFIERS
+    from tombot.services.repository import PokemonRepo
+    from tombot.services.sources.tcgdex import parse_variants
+
+    fixtures = pathlib.Path(__file__).parent / "fixtures" / "tcgdex"
+
+    class FixtureSource:
+        def fetch_prices(self, card_ids):
+            return {c: {"source": "cardmarket",
+                        "variants": parse_variants(
+                            json.loads((fixtures / f"{c}.json").read_text()))}
+                    for c in card_ids if (fixtures / f"{c}.json").exists()}
+
+    repo = PokemonRepo(tmp_path / "e2e.db")
+    repo.init_db(DEFAULT_MODIFIERS)
+    repo.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
+                              "printed_total": 102, "total": 102,
+                              "release_date": "1999/01/09", "ptcgo_code": None,
+                              "logo_url": None, "symbol_url": None})
+    repo.upsert_cards([{"id": "base1-7", "official_set_id": "base1",
+                        "name": "Hitmonchan", "number": "7"}])
+    for variant in ("holo", "shadowless", "first_edition"):
+        repo.upsert_collection_item({"card_id": "base1-7", "variant": variant,
+                                     "condition": "MP", "language": "en"})
+
+    svc = PricingService(repo, FixtureSource(), Config)
+    assert svc.refresh(all_cards=True)["updated"] == 3
+
+    mods = repo.get_modifiers()
+    got = {i["variant"]: svc.estimate_item(i, mods)
+           for i in repo.items_by_card("base1-7")}
+
+    assert got["holo"]["variant_key"] == "holo:unlimited"
+    assert got["shadowless"]["variant_key"] == "holo:shadowless"
+    assert got["first_edition"]["variant_key"] == "holo:shadowless:1st-edition"
+
+    # MP is 0.70; the Shadowless product is 23.50 against Unlimited at 14.29
+    assert got["holo"]["unit"] == 10.0
+    assert got["shadowless"]["unit"] == 16.45
+    # and the 1st edition carries the x2 premium on top
+    assert got["first_edition"]["unit"] == 32.9
+    assert got["first_edition"]["variant_multiplier"] == 2.0
+
+
+def test_a_manual_price_wins_and_survives_a_refresh(tmp_path):
+    """Promos and other gaps are corrected by hand, so a refresh must never
+    overwrite what the user typed."""
+    import json
+    import pathlib
+
+    from tombot.config import DEFAULT_MODIFIERS
+    from tombot.services.repository import PokemonRepo
+    from tombot.services.sources.tcgdex import parse_variants
+
+    fixtures = pathlib.Path(__file__).parent / "fixtures" / "tcgdex"
+
+    class FixtureSource:
+        def fetch_prices(self, card_ids):
+            return {c: {"source": "cardmarket",
+                        "variants": parse_variants(
+                            json.loads((fixtures / f"{c}.json").read_text()))}
+                    for c in card_ids if (fixtures / f"{c}.json").exists()}
+
+    repo = PokemonRepo(tmp_path / "manual.db")
+    repo.init_db(DEFAULT_MODIFIERS)
+    repo.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
+                              "printed_total": 102, "total": 102,
+                              "release_date": "1999/01/09", "ptcgo_code": None,
+                              "logo_url": None, "symbol_url": None})
+    repo.upsert_cards([{"id": "base1-7", "official_set_id": "base1",
+                        "name": "Hitmonchan", "number": "7"}])
+    repo.upsert_collection_item({"card_id": "base1-7", "variant": "holo",
+                                 "condition": "NM", "language": "en"})
+
+    svc = PricingService(repo, FixtureSource(), Config)
+    svc.refresh(all_cards=True)
+    repo.set_manual_price("base1-7", "holo", 9.99)
+
+    result = svc.refresh(all_cards=True)
+    assert result["manual_kept"] == 1 and result["updated"] == 0
+
+    item = repo.items_by_card("base1-7")[0]
+    estimate = svc.estimate_item(item, repo.get_modifiers())
+    assert estimate["unit"] == 9.99 and estimate["manual"] is True
+
+    # clearing it falls back to the feed
+    repo.set_manual_price("base1-7", "holo", None)
+    estimate = svc.estimate_item(repo.items_by_card("base1-7")[0], repo.get_modifiers())
+    assert estimate["unit"] == 14.29 and estimate["manual"] is False

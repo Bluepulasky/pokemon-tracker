@@ -104,23 +104,39 @@ def parse_variants(card: dict) -> list[dict]:
     # entry has no product at all and the ONLY priced product is the 1st-edition
     # one — applying a multiplier there would double a price that already is the
     # 1st edition.
-    stamped_only: set[int] = set()
-    for entry in entries:
-        cm = (entry.get("pricing") or {}).get("cardmarket") or {}
-        pid = cm.get("idProduct")
-        if not pid or "1st-edition" not in (entry.get("stamp") or []):
-            continue
-        has_plain_twin = any(
-            ((o.get("pricing") or {}).get("cardmarket") or {}).get("idProduct") == pid
-            and "1st-edition" not in (o.get("stamp") or [])
-            for o in entries
+    # When a card has exactly ONE Cardmarket product, that product is the card's
+    # price and every printing shares it — including printings the payload leaves
+    # unpriced.
+    #
+    # This is the Gym Heroes case. There the only priced entry is tagged
+    # 1st-edition and the plain entry has no product at all, which would leave an
+    # ordinary Blaine's Moltres unpriced. The tag is unreliable: the maintainer
+    # checked Cardmarket and found NM Unlimited copies listed well above that
+    # figure, so it reads as the card's price carrying a stray stamp rather than a
+    # 1st-edition premium.
+    #
+    # Deliberately narrow: it only fires when there is a single product, so cards
+    # that genuinely price their print runs apart (base1-4 has two, base1-58 has
+    # five) are untouched and never borrow across runs.
+    products = {
+        ((e.get("pricing") or {}).get("cardmarket") or {}).get("idProduct")
+        for e in entries
+    }
+    products.discard(None)
+    shared_block = None
+    if len(products) == 1:
+        shared_block = next(
+            ((e.get("pricing") or {}).get("cardmarket") or {})
+            for e in entries
+            if ((e.get("pricing") or {}).get("cardmarket") or {}).get("idProduct")
         )
-        if not has_plain_twin:
-            stamped_only.add(pid)
 
     out: list[dict] = []
     for entry in entries:
         cm = (entry.get("pricing") or {}).get("cardmarket") or {}
+        inherited = False
+        if not cm and shared_block:
+            cm, inherited = shared_block, True
         fields = price_fields_for(entry.get("type") or "normal")
         price = next((cm[f] for f in fields if cm.get(f)), None)
         out.append({
@@ -135,15 +151,14 @@ def parse_variants(card: dict) -> list[dict]:
             "price": float(price) if price else None,
             "price_field": next((f for f in fields if cm.get(f)), None),
             "updated_at": cm.get("updated"),
-            # True when this price describes an ordinary print and a 1st-edition
-            # copy therefore needs the multiplier. False when the price already
-            # is the 1st edition, or when there is no price to adjust.
+            # A 1st-edition printing is never priced apart from its unstamped
+            # twin in any set, so a multiplier is the only way to value one.
             "first_edition_multiplier_applies": bool(
-                cm.get("idProduct")
-                and cm.get("idProduct") not in stamped_only
-                and "1st-edition" in (entry.get("stamp") or [])
+                price and "1st-edition" in (entry.get("stamp") or [])
             ),
-            "price_is_first_edition": cm.get("idProduct") in stamped_only,
+            # True when this printing had no product of its own and took the
+            # card's single shared one.
+            "price_inherited": inherited,
         })
     return out
 

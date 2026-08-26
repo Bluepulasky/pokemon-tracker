@@ -134,6 +134,10 @@ class PokemonRepo:
          "ALTER TABLE collection_items ADD COLUMN printing_id INTEGER"),
         ("card_printings", "variants_json",
          "ALTER TABLE card_printings ADD COLUMN variants_json TEXT"),
+        ("price_cache", "variant_key",
+         "ALTER TABLE price_cache ADD COLUMN variant_key TEXT"),
+        ("price_cache", "market_product_id",
+         "ALTER TABLE price_cache ADD COLUMN market_product_id INTEGER"),
     )
 
     def _apply_migrations(self, conn) -> list[str]:
@@ -1132,20 +1136,44 @@ class PokemonRepo:
     # ---------------------------------------------------------------- prices
     def upsert_price(self, card_id: str, variant: str, source: str, currency: str,
                      price: float | None, low: float | None, trend: float | None,
-                     avg30: float | None, raw: dict | None) -> None:
+                     avg30: float | None, raw: dict | None,
+                     variant_key: str | None = None,
+                     market_product_id: int | None = None) -> None:
         with self.tx() as c:
             c.execute(
                 """INSERT INTO price_cache
-                     (card_id,variant,source,currency,price,price_low,price_trend,price_avg30,raw_json)
-                   VALUES (?,?,?,?,?,?,?,?,?)
+                     (card_id,variant,source,currency,price,price_low,price_trend,
+                      price_avg30,raw_json,variant_key,market_product_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(card_id,variant,source) DO UPDATE SET
                      currency=excluded.currency, price=excluded.price,
                      price_low=excluded.price_low, price_trend=excluded.price_trend,
                      price_avg30=excluded.price_avg30, raw_json=excluded.raw_json,
+                     variant_key=excluded.variant_key,
+                     market_product_id=excluded.market_product_id,
                      updated_at=datetime('now')""",
                 (card_id, variant, source, currency, price, low, trend, avg30,
-                 json.dumps(raw) if raw else None),
+                 json.dumps(raw) if raw else None, variant_key, market_product_id),
             )
+
+    def set_manual_price(self, card_id: str, variant: str, price: float | None,
+                         currency: str = "EUR") -> None:
+        """A price the user typed in. Stored as its own source so a refresh can
+        never overwrite it, and so it can be removed to fall back to the feed."""
+        with self.tx() as c:
+            if price is None:
+                c.execute("DELETE FROM price_cache WHERE card_id=? AND variant=? "
+                          "AND source='manual'", (card_id, variant))
+            else:
+                c.execute(
+                    """INSERT INTO price_cache
+                         (card_id,variant,source,currency,price,variant_key)
+                       VALUES (?,?, 'manual', ?, ?, 'manual')
+                       ON CONFLICT(card_id,variant,source) DO UPDATE SET
+                         price=excluded.price, currency=excluded.currency,
+                         updated_at=datetime('now')""",
+                    (card_id, variant, currency, float(price)),
+                )
 
     def append_price_history(self, card_id: str, variant: str, source: str,
                              currency: str, price: float | None,
@@ -1161,10 +1189,18 @@ class PokemonRepo:
     def get_prices_for_card(self, card_id: str) -> list[dict]:
         return self._all("SELECT * FROM price_cache WHERE card_id=?", (card_id,))
 
-    def get_price(self, card_id: str, variant: str, source: str = "cardmarket") -> dict | None:
+    def get_price(self, card_id: str, variant: str,
+                  source: str | None = None) -> dict | None:
+        """Price for this printing. A manual entry always wins over the feed."""
+        if source:
+            return self._one(
+                "SELECT * FROM price_cache WHERE card_id=? AND variant=? AND source=?",
+                (card_id, variant, source),
+            )
         return self._one(
-            "SELECT * FROM price_cache WHERE card_id=? AND variant=? AND source=?",
-            (card_id, variant, source),
+            "SELECT * FROM price_cache WHERE card_id=? AND variant=? "
+            "ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END LIMIT 1",
+            (card_id, variant),
         )
 
     def stale_priced_pairs(self, stale_days: int) -> list[dict]:

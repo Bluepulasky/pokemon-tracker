@@ -202,6 +202,10 @@ CREATE TABLE IF NOT EXISTS price_cache (
     price_trend REAL,
     price_avg30 REAL,
     raw_json    TEXT,                         -- full upstream payload, for later re-derivation
+    -- Which printing this price describes, e.g. 'holo:shadowless'. Recorded so a
+    -- price can be traced back to the exact print run rather than guessed at.
+    variant_key TEXT,
+    market_product_id INTEGER,
     updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (card_id, variant, source)
 );
