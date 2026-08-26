@@ -545,10 +545,3 @@ container rebuild never touches the database or the photos.
 Per §9/§28: no OCR, no card recognition. Per §31: single user, no accounts, no sharing,
 no marketplace integration, no trading, no deck building. Prices are estimates and are
 labelled as such in the UI.
-
-## 11. Open questions for the maintainer
-
-1. Base Set 2 (`base4`) — separate personal set, or `merge` members of Base Set slots?
-2. Team Rocket `Rare Secret` #83 Dark Raichu — in or out of "sin holos"?
-3. WOTC Promos (`basep`, 53 cards) — all of them, or a subset?
-4. Is the box reachable from the public internet? Decides whether `APP_TOKEN` ships on.
