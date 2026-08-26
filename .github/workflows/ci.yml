@@ -1,0 +1,89 @@
+name: CI
+
+# Pull requests are the point: nothing else runs these tests. Pushes to main are
+# covered too, because features have landed there through parallel merges that
+# neither PR alone could have caught.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A new push supersedes the previous run on the same branch.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the Dockerfile. Testing what actually ships beats testing
+          # whatever the runner defaults to.
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-cov
+
+      - name: Import the application
+        # Every test drives PokemonRepo directly, so a syntax error or a bad
+        # import in the API layer once passed the entire suite unnoticed. This
+        # imports the app the way gunicorn does.
+        run: python -c "from tombot import create_app; from tombot.config import Config; create_app(Config)"
+
+      - name: Run tests
+        # The suite is hermetic — no network, no clock, no shared fixtures — so a
+        # failure here is a real regression rather than a flake.
+        #
+        # The floor is set at the level coverage is already at, not at an
+        # aspirational number: it exists to stop coverage sliding backwards, and
+        # can be raised as gaps get filled. The API layer sits near zero today,
+        # which is how a syntax error in it once passed the entire suite.
+        run: |
+          python -m pytest tests/ -q \
+            --cov=tombot --cov-report=term-missing --cov-fail-under=35
+
+  image:
+    name: docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t tombot-ci .
+
+      - name: Entrypoint and CLI work inside the image
+        # Guards the deployment surface the test suite cannot reach: a missing
+        # dependency, a non-executable entrypoint, a CLI command that fails to
+        # register. All three have broken here before.
+        run: |
+          docker run --rm tombot-ci flask --help > /tmp/cli.txt
+          for cmd in bootstrap init-db import-catalog seed-sets resolve-links \
+                     rebuild-printings prices snapshot monthly scheduler; do
+            grep -q "^  $cmd" /tmp/cli.txt || { echo "missing CLI command: $cmd"; exit 1; }
+          done
+          test -x scripts/entrypoint.sh || { echo "entrypoint is not executable"; exit 1; }
+
+      - name: Container boots and serves
+        run: |
+          docker run -d --name tombot-ci-run -p 8080:8080 \
+            -e AUTO_BOOTSTRAP=0 -e PUID=1000 -e PGID=1000 tombot-ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/healthz > /tmp/health.json; then break; fi
+            sleep 2
+          done
+          cat /tmp/health.json
+          # A booting container returns 200 long before the schema exists, so
+          # assert on the payload rather than the status code.
+          grep -q '"ok": *true' /tmp/health.json
+          docker logs tombot-ci-run
+          docker rm -f tombot-ci-run
