@@ -275,7 +275,7 @@ async function collection(r) {
       ${sel('f-language', 'Idioma', META.languages, f.language)}
       ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
       ${sel('f-rating', 'Hall of Fame', META.ratings.map((x) =>
-        ({ key: String(x.value), label: `${x.value === 0 ? '—' : '★' + x.value} ${x.label}` })), f.rating)}
+        ({ key: String(x.value), label: `${x.value === 0 ? '—' : '★' + x.value}` })), f.rating)}
       ${sel('f-sort', '', [
         { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
         { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
