@@ -286,7 +286,7 @@ async function collection(r) {
     </div>
 
     <div class="mode-toggle" style="margin:-4px 0 16px">
-      ${[['', 'Sin restricción'], ['1', 'En Hall of Fame']]
+      ${[['', 'Todas'], ['1', 'En Hall of Fame']]
         .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
            data-qmin="${v}">${label}</span>`).join('')}
     </div>
