@@ -38,8 +38,20 @@ def _from_git() -> str | None:
         return None
 
 
+_git_cache: str | None | ellipsis = ...          # ... = not looked up yet
+
+
 def get_version() -> str:
-    return os.environ.get("APP_VERSION") or _from_git() or "unknown"
+    """Resolved per call, so the environment is authoritative.
 
-
-VERSION = get_version()
+    A module-level constant frozen at import time reports whatever was set when
+    the process started importing, which is not always what is running. The git
+    lookup is cached because it shells out; the environment read is free.
+    """
+    global _git_cache
+    baked = os.environ.get("APP_VERSION")
+    if baked:
+        return baked
+    if _git_cache is ...:
+        _git_cache = _from_git()
+    return _git_cache or "unknown"

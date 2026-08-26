@@ -137,4 +137,5 @@ def test_an_unstamped_build_says_so_rather_than_guessing(monkeypatch):
 
     monkeypatch.delenv("APP_VERSION", raising=False)
     monkeypatch.setattr(version, "_from_git", lambda: None)
+    monkeypatch.setattr(version, "_git_cache", ...)
     assert version.get_version() == "unknown"
