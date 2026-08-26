@@ -173,6 +173,10 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 }
 .badge.qty { top: 6px; right: 6px; background: rgba(255,203,5,.92); color: #1a1400; }
 .badge.own { top: 6px; left: 6px; background: rgba(62,207,142,.92); color: #04221a; }
+/* Held but short of the target: neither missing nor done, so neither the grey
+   hatch nor the green tick. The count says how far off it is. */
+.badge.partial { top: 6px; left: 6px; background: rgba(245,165,36,.92); color: #241800;
+                 font-variant-numeric: tabular-nums; }
 .badge.val { bottom: 6px; left: 6px; background: rgba(14,16,19,.8); color: var(--fg);
              font-variant-numeric: tabular-nums; }
 
