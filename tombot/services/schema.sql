@@ -177,6 +177,17 @@ CREATE TABLE IF NOT EXISTS card_ratings (
 
 CREATE INDEX IF NOT EXISTS idx_card_ratings_rating ON card_ratings(rating);
 
+-- How many copies of a card count as "done".
+--
+-- Its own table for the same reason as card_ratings: it is the user's intent, not
+-- catalog data, so a re-import must not touch it. Absent means 1, so the default
+-- costs no rows and behaves exactly as before this existed.
+CREATE TABLE IF NOT EXISTS card_targets (
+    card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+    target     INTEGER NOT NULL CHECK (target >= 1),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ---------------------------------------------------------------------------
 -- PRICES
 -- ---------------------------------------------------------------------------

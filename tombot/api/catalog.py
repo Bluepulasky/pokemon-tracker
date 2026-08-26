@@ -27,6 +27,9 @@ def meta():
         "languages": [{"key": k, "label": LANGUAGE_LABELS[k]} for k in LANGUAGES],
         "variants": [{"key": k, "label": VARIANT_LABELS[k]} for k in VARIANTS],
         "rarities": r.rarities(),
+        "types": r.card_types(),
+        "editions": [{"key": "first_edition", "label": "1st Edition"},
+                     {"key": "unlimited", "label": "Unlimited"}],
         "ratings": [{"value": v, "label": lbl} for v, lbl in
                     sorted(RATING_LABELS.items())],
         "official_sets": r.list_official_sets(),
@@ -72,7 +75,28 @@ def get_card(card_id):
         }]
     card["available_printings"] = printings
     card["rating"] = repo().get_card_rating(card_id)
+    card["target"] = repo().get_card_target(card_id)
     return jsonify(card)
+
+
+@bp.put("/cards/<card_id>/target")
+def set_card_target(card_id):
+    """How many copies of this card count as complete.
+
+    Belongs to the card, like the rank: wanting three Charizards is a statement
+    about the card, not about any one copy.
+    """
+    if not repo().get_card(card_id):
+        raise ApiError("carta no encontrada", "not_found", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        target = int(body.get("target"))
+    except (TypeError, ValueError):
+        raise ApiError("el objetivo debe ser un entero >= 1", "invalid_target") from None
+    if target < 1:
+        raise ApiError("el objetivo debe ser al menos 1", "invalid_target")
+    repo().set_card_target(card_id, target)
+    return jsonify({"card_id": card_id, "target": repo().get_card_target(card_id)})
 
 
 @bp.put("/cards/<card_id>/rating")

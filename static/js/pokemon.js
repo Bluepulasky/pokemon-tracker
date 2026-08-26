@@ -239,6 +239,9 @@ async function collection(r) {
     q: r.params.get('q') || '',
     rating: r.params.get('rating') || '',
     rating_min: r.params.get('rating_min') || '',
+    type: r.params.get('type') || '',
+    edition: r.params.get('edition') || '',
+    max_quantity: r.params.get('max_quantity') || '',
     sort: r.params.get('sort') || 'set',
     page_size: 240,
   };
@@ -274,8 +277,12 @@ async function collection(r) {
       ${sel('f-variant', 'Variante', META.variants, f.variant)}
       ${sel('f-language', 'Idioma', META.languages, f.language)}
       ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
-      ${sel('f-rating', 'Hall of Fame', META.ratings.map((x) =>
-        ({ key: String(x.value), label: `${x.value === 0 ? '—' : '★' + x.value}` })), f.rating)}
+      ${sel('f-rating', 'Hall of Fame', META.ratings.filter((x) => x.value > 0)
+        .map((x) => ({ key: String(x.value), label: `★ ${x.value}` })), f.rating)}
+      ${sel('f-type', 'Tipo', META.types.map((t) => ({ key: t, label: t })), f.type)}
+      ${sel('f-edition', 'Edición', META.editions, f.edition)}
+      ${sel('f-max_quantity', 'Cantidad',
+        [1, 2, 3, 4, 5].map((n) => ({ key: String(n), label: `${n} o menos` })), f.max_quantity)}
       ${sel('f-sort', '', [
         { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
         { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
@@ -298,7 +305,7 @@ async function collection(r) {
   const apply = (overrides = {}) => {
     const p = new URLSearchParams();
     for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
-                     'rating', 'sort']) {
+                     'rating', 'type', 'edition', 'max_quantity', 'sort']) {
       const v = view().querySelector(`#f-${k}`).value;
       if (v) p.set(k, v);
     }
@@ -364,7 +371,9 @@ async function missing(r) {
 
   view().innerHTML = `
     <h1>Cartas faltantes</h1>
-    <p class="sub">${esc(s.name)} · faltan ${rows.data.length} de ${p.target} cartas</p>
+    <p class="sub">${esc(s.name)} · faltan ${rows.data.length} de ${p.target} cartas${
+      (() => { const extra = rows.data.reduce((a, m) => a + Math.max(0, (m.still_needed || 1) - 1), 0);
+               return extra ? ` · ${extra} copia(s) extra por objetivos` : ''; })()}</p>
 
     <div class="toolbar">
       <select id="f-set">${setList.map((x) => `<option value="${esc(x.id)}"${
@@ -381,6 +390,9 @@ async function missing(r) {
       <div class="missing-row" data-card="${esc(m.card_id)}">
         <span class="n">#${esc(m.number || '?')}</span>
         <span>${esc(m.label || '')}</span>
+        ${m.target > 1
+          ? `<span class="tag">faltan ${m.still_needed} de ${m.target}</span>`
+          : ''}
         <span class="r">${esc(m.rarity || '')}</span>
       </div>`).join('')}</div>`
       : '<div class="empty">🎉 Set completo.</div>'}`;
