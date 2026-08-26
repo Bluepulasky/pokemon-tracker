@@ -67,6 +67,12 @@ export async function openCard(cardId) {
             <label>Hall of Fame</label>
             ${rankRow(card.rating || 0)}
           </div>
+          <div class="field card-target">
+            <label>Objetivo de copias</label>
+            <input type="number" min="1" inputmode="numeric"
+                   value="${Number(card.target) || 1}">
+            <div class="note">La carta cuenta como conseguida al llegar a este número.</div>
+          </div>
         </div>
         <button class="close" aria-label="Cerrar">&times;</button>
       </div>
@@ -81,6 +87,7 @@ export async function openCard(cardId) {
 
   root.querySelector('.close').onclick = closeModal;
   wireCardRank(root, card);
+  wireCardTarget(root, card);
   wireForm(root, card);
   wireVariants(root, cardId);
 }
@@ -184,6 +191,21 @@ function wireCardRank(root, card) {
       } catch (e) { toast(e.message, true); }
     };
   });
+}
+
+/* The target belongs to the card, like the rank. Saved on blur rather than on
+   every keystroke, since it is a number you type rather than a value you pick. */
+function wireCardTarget(root, card) {
+  const input = root.querySelector('.card-target input');
+  if (!input) return;
+  input.onchange = async () => {
+    const value = Math.max(1, Number(input.value) || 1);
+    input.value = value;
+    try {
+      await api.setTarget(card.id, value);
+      onChange();
+    } catch (e) { toast(e.message, true); }
+  };
 }
 
 function wireForm(root, card) {

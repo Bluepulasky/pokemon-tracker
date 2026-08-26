@@ -32,6 +32,7 @@ export const api = {
   search:      (q)            => req('GET', `/api/search?q=${encodeURIComponent(q)}`),
   collection:  (f)            => req('GET', `/api/collection?${qs(f || {})}`),
   rateCard:    (cardId, rating) => req('PUT', `/api/cards/${cardId}/rating`, { rating }),
+  setTarget:   (cardId, target) => req('PUT', `/api/cards/${cardId}/target`, { target }),
   byCard:      (cardId)       => req('GET', `/api/collection/by-card/${cardId}`),
   addItem:     (b)            => req('POST', '/api/collection', b),
   updateItem:  (id, b)        => req('PUT', `/api/collection/${id}`, b),

@@ -558,15 +558,17 @@ class PokemonRepo:
                       COALESCE(sl.label, c.name) AS label,
                       c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
                       c.image_small_url, c.image_local, c.official_set_id,
-                      (SELECT COUNT(*) FROM set_slot_cards m
+                      COALESCE(t.target, 1) AS target,
+                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
                         JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) > 0 AS owned,
+                       WHERE m.slot_id = sl.id) >= COALESCE(t.target, 1) AS owned,
                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
                         JOIN collection_items i ON i.card_id = m.card_id
                        WHERE m.slot_id = sl.id) AS quantity,
                       (SELECT COUNT(*) FROM set_slot_cards m WHERE m.slot_id = sl.id) AS member_count
                FROM set_slots sl
                LEFT JOIN cards c ON c.id = sl.display_card_id
+               LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                WHERE sl.set_id = ?
                ORDER BY sl.position, c.number_sort""",
             (set_id,),
@@ -577,14 +579,23 @@ class PokemonRepo:
         stops Charizard-holo + Charizard-non-holo counting twice."""
         where = "WHERE s.id = ?" if set_id else ""
         params = (set_id,) if set_id else ()
+        # A slot counts once the copies held reach its target. With no target set
+        # the target is 1, which is the same "do I have one" question as before.
         return self._all(
             f"""SELECT s.id, s.name, s.group_name, s.position,
                        COUNT(DISTINCT sl.id) AS target,
-                       COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN sl.id END) AS owned
+                       COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS owned
                 FROM collection_sets s
-                LEFT JOIN set_slots sl ON sl.set_id = s.id
-                LEFT JOIN set_slot_cards ssc ON ssc.slot_id = sl.id
-                LEFT JOIN collection_items i ON i.card_id = ssc.card_id
+                LEFT JOIN (
+                    SELECT sl.id, sl.set_id,
+                           COALESCE(t.target, 1) AS want,
+                           (SELECT COALESCE(SUM(i.quantity), 0)
+                              FROM set_slot_cards m
+                              JOIN collection_items i ON i.card_id = m.card_id
+                             WHERE m.slot_id = sl.id) AS held
+                      FROM set_slots sl
+                      LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
+                ) sl ON sl.set_id = s.id
                 {where}
                 GROUP BY s.id, s.name, s.group_name, s.position
                 ORDER BY s.position, s.name""",
@@ -597,15 +608,27 @@ class PokemonRepo:
             "name": "COALESCE(sl.label, c.name)",
             "rarity": "c.rarity, c.number_sort",
         }.get(sort, "c.number_sort")
+        # Short of the target counts as missing, and the shortfall is reported so
+        # the wishlist can say how many are still needed rather than just "none".
         return self._all(
             f"""SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
-                       c.id AS card_id, c.number, c.rarity, c.image_small_url, c.image_local
+                       c.id AS card_id, c.number, c.rarity, c.image_small_url,
+                       c.image_local,
+                       COALESCE(t.target, 1) AS target,
+                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                         JOIN collection_items i ON i.card_id = m.card_id
+                        WHERE m.slot_id = sl.id) AS held,
+                       COALESCE(t.target, 1) - (
+                         SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                          JOIN collection_items i ON i.card_id = m.card_id
+                         WHERE m.slot_id = sl.id) AS still_needed
                 FROM set_slots sl
                 LEFT JOIN cards c ON c.id = sl.display_card_id
+                LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                 WHERE sl.set_id = ?
-                  AND NOT EXISTS (SELECT 1 FROM set_slot_cards m
-                                   JOIN collection_items i ON i.card_id = m.card_id
-                                  WHERE m.slot_id = sl.id)
+                  AND (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                        JOIN collection_items i ON i.card_id = m.card_id
+                       WHERE m.slot_id = sl.id) < COALESCE(t.target, 1)
                 ORDER BY {order}""",
             (set_id,),
         )
@@ -705,6 +728,8 @@ class PokemonRepo:
 
     def list_collection(self, *, q: str = "", set_id: str = "", condition: str = "",
                         variant: str = "", language: str = "", rarity: str = "",
+                        card_type: str = "", edition: str = "",
+                        max_quantity: int | None = None,
                         rating: int | None = None, rating_min: int | None = None,
                         rating_max: int | None = None,
                         sort: str = "set", page: int = 1, page_size: int = 60
@@ -725,6 +750,25 @@ class PokemonRepo:
         if rarity:
             where.append("c.rarity = ?")
             params.append(rarity)
+        # Type comes from the catalog's JSON list. LIKE on the quoted value is
+        # exact enough here: types are single words and cannot be substrings of
+        # one another ("Fire" never appears inside another type name).
+        if card_type:
+            where.append("c.types_json LIKE ?")
+            params.append(f'%"{card_type}"%')
+        # Edition maps onto the physical variant. Unlimited is "neither of the
+        # early-run markings" rather than a stored value, because that is what it
+        # means: an ordinary copy from the open print run.
+        if edition == "first_edition":
+            where.append("i.variant = 'first_edition'")
+        elif edition == "unlimited":
+            where.append("i.variant NOT IN ('first_edition', 'shadowless')")
+        # Total copies held of the card, not of this one row — "2 or fewer" is a
+        # question about the card.
+        if max_quantity is not None:
+            where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
+                         "WHERE q.card_id = i.card_id) <= ?")
+            params.append(int(max_quantity))
         # COALESCE because an unranked card has no card_ratings row at all.
         if rating is not None:
             where.append("COALESCE(cr.rating, 0) = ?")
@@ -770,6 +814,8 @@ class PokemonRepo:
     def list_slots_with_ownership(
             self, *, q: str = "", set_id: str = "", condition: str = "",
             variant: str = "", language: str = "", rarity: str = "",
+            card_type: str = "", edition: str = "",
+            max_quantity: int | None = None,
             rating: int | None = None, rating_min: int | None = None,
             rating_max: int | None = None,
             sort: str = "set", page: int = 1, page_size: int = 60
@@ -802,6 +848,21 @@ class PokemonRepo:
             if val:
                 where.append(f"i.{col} = ?")
                 params.append(val)
+        if card_type:
+            where.append("c.types_json LIKE ?")
+            params.append(f'%"{card_type}"%')
+        # Edition describes a copy in hand, so it drops placeholders — unlike the
+        # rank below, which belongs to the card.
+        if edition == "first_edition":
+            where.append("i.variant = 'first_edition'")
+        elif edition == "unlimited":
+            where.append("i.variant IS NOT NULL "
+                         "AND i.variant NOT IN ('first_edition', 'shadowless')")
+        if max_quantity is not None:
+            where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
+                         "WHERE q.card_id = COALESCE(i.card_id, c.id)) <= ?")
+            params.append(int(max_quantity))
+
         # No ownership condition. The rank is a judgement about the card, so a
         # card you have ranked but not yet acquired must still match.
         if rating is not None:
@@ -898,6 +959,24 @@ class PokemonRepo:
                     "updated_at=datetime('now')",
                     (card_id, int(rating)),
                 )
+
+    def set_card_target(self, card_id: str, target: int) -> None:
+        """A target of 1 is stored as absence — it is the default, and a row
+        saying so would just be noise to keep in sync."""
+        with self.tx() as c:
+            if int(target) <= 1:
+                c.execute("DELETE FROM card_targets WHERE card_id = ?", (card_id,))
+            else:
+                c.execute(
+                    "INSERT INTO card_targets(card_id, target) VALUES (?,?) "
+                    "ON CONFLICT(card_id) DO UPDATE SET target=excluded.target, "
+                    "updated_at=datetime('now')",
+                    (card_id, int(target)),
+                )
+
+    def get_card_target(self, card_id: str) -> int:
+        return self._scalar(
+            "SELECT target FROM card_targets WHERE card_id = ?", (card_id,)) or 1
 
     def get_card_rating(self, card_id: str) -> int:
         return self._scalar(
@@ -1131,6 +1210,17 @@ class PokemonRepo:
         )
 
     # ------------------------------------------------------------ dashboards
+    def card_types(self) -> list[str]:
+        """Distinct energy types present in the catalog, for the type filter."""
+        seen: set[str] = set()
+        for row in self._all("SELECT DISTINCT types_json FROM cards "
+                             "WHERE types_json IS NOT NULL AND types_json <> '[]'"):
+            try:
+                seen.update(json.loads(row["types_json"]))
+            except (TypeError, ValueError):
+                continue
+        return sorted(seen)
+
     def rarities(self) -> list[str]:
         return [r["rarity"] for r in self._all(
             "SELECT DISTINCT rarity FROM cards WHERE rarity IS NOT NULL ORDER BY rarity")]
