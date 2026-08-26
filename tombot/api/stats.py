@@ -13,11 +13,20 @@ def dashboard():
     progress = r.set_progress()
     for p in progress:
         target = p.get("target") or 0
-        p["completion_pct"] = round(100.0 * (p.get("owned") or 0) / target, 1) if target else 0.0
-        p["missing"] = target - (p.get("owned") or 0)
+        owned = p.get("owned") or 0
+        p["completion_pct"] = round(100.0 * owned / target, 1) if target else 0.0
+        p["missing"] = target - owned
+        # Copy progress is a separate question: you can hold every card in a set
+        # and still be short of the copies you want.
+        held, want = p.get("copies_held") or 0, p.get("copies_target") or 0
+        p["copies_pct"] = round(100.0 * held / want, 1) if want else 0.0
+        p["copies_missing"] = max(0, want - held)
 
     target_total = sum(p.get("target") or 0 for p in progress)
     owned_total = sum(p.get("owned") or 0 for p in progress)
+    complete_total = sum(p.get("complete") or 0 for p in progress)
+    copies_held = sum(p.get("copies_held") or 0 for p in progress)
+    copies_target = sum(p.get("copies_target") or 0 for p in progress)
     value = svc("pricing").value_collection()
 
     by_completion = sorted(progress, key=lambda p: p["completion_pct"], reverse=True)
@@ -27,8 +36,15 @@ def dashboard():
         "unique_cards": totals["unique_cards"],
         "physical_cards": totals["physical_cards"],
         "sets_total": len(progress),
-        "sets_complete": sum(1 for p in progress if p["target"] and p["owned"] == p["target"]),
+        "sets_complete": sum(1 for p in progress
+                             if p["target"] and p.get("complete") == p["target"]),
+        # Unique completion: do I have the card at all.
         "completion_pct": round(100.0 * owned_total / target_total, 1) if target_total else 0.0,
+        # Copy completion: do I have as many as I set out to.
+        "copies_pct": round(100.0 * copies_held / copies_target, 1) if copies_target else 0.0,
+        "copies_held": copies_held,
+        "copies_target": copies_target,
+        "complete_cards": complete_total,
         "target_cards": target_total,
         "owned_cards": owned_total,
         "value": value,

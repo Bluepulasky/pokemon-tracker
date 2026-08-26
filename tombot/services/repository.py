@@ -559,9 +559,15 @@ class PokemonRepo:
                       c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
                       c.image_small_url, c.image_local, c.official_set_id,
                       COALESCE(t.target, 1) AS target,
+                      -- Three states, not two. Holding a single copy takes the
+                      -- card out of the greyed-out treatment; reaching the target
+                      -- is what earns the tick.
                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
                         JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) >= COALESCE(t.target, 1) AS owned,
+                       WHERE m.slot_id = sl.id) > 0 AS owned,
+                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                        JOIN collection_items i ON i.card_id = m.card_id
+                       WHERE m.slot_id = sl.id) >= COALESCE(t.target, 1) AS complete,
                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
                         JOIN collection_items i ON i.card_id = m.card_id
                        WHERE m.slot_id = sl.id) AS quantity,
@@ -584,7 +590,12 @@ class PokemonRepo:
         return self._all(
             f"""SELECT s.id, s.name, s.group_name, s.position,
                        COUNT(DISTINCT sl.id) AS target,
-                       COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS owned
+                       COUNT(DISTINCT CASE WHEN sl.held > 0 THEN sl.id END) AS owned,
+                       COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS complete,
+                       -- Copy progress caps each slot at its target so a pile of
+                       -- spares cannot push the set past 100%.
+                       COALESCE(SUM(MIN(sl.held, sl.want)), 0) AS copies_held,
+                       COALESCE(SUM(sl.want), 0) AS copies_target
                 FROM collection_sets s
                 LEFT JOIN (
                     SELECT sl.id, sl.set_id,
@@ -621,7 +632,10 @@ class PokemonRepo:
                        COALESCE(t.target, 1) - (
                          SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
                           JOIN collection_items i ON i.card_id = m.card_id
-                         WHERE m.slot_id = sl.id) AS still_needed
+                         WHERE m.slot_id = sl.id) AS still_needed,
+                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
+                         JOIN collection_items i ON i.card_id = m.card_id
+                        WHERE m.slot_id = sl.id) = 0 AS missing_entirely
                 FROM set_slots sl
                 LEFT JOIN cards c ON c.id = sl.display_card_id
                 LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
@@ -729,7 +743,7 @@ class PokemonRepo:
     def list_collection(self, *, q: str = "", set_id: str = "", condition: str = "",
                         variant: str = "", language: str = "", rarity: str = "",
                         card_type: str = "", edition: str = "",
-                        max_quantity: int | None = None,
+                        min_quantity: int | None = None,
                         rating: int | None = None, rating_min: int | None = None,
                         rating_max: int | None = None,
                         sort: str = "set", page: int = 1, page_size: int = 60
@@ -763,12 +777,13 @@ class PokemonRepo:
             where.append("i.variant = 'first_edition'")
         elif edition == "unlimited":
             where.append("i.variant NOT IN ('first_edition', 'shadowless')")
-        # Total copies held of the card, not of this one row — "2 or fewer" is a
-        # question about the card.
-        if max_quantity is not None:
+        # Total copies held of the card, not of this one row — "2 or more" is a
+        # question about the card, and three copies split across a holo row and a
+        # normal row is three copies.
+        if min_quantity is not None:
             where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
-                         "WHERE q.card_id = i.card_id) <= ?")
-            params.append(int(max_quantity))
+                         "WHERE q.card_id = i.card_id) >= ?")
+            params.append(int(min_quantity))
         # COALESCE because an unranked card has no card_ratings row at all.
         if rating is not None:
             where.append("COALESCE(cr.rating, 0) = ?")
@@ -815,7 +830,7 @@ class PokemonRepo:
             self, *, q: str = "", set_id: str = "", condition: str = "",
             variant: str = "", language: str = "", rarity: str = "",
             card_type: str = "", edition: str = "",
-            max_quantity: int | None = None,
+            min_quantity: int | None = None,
             rating: int | None = None, rating_min: int | None = None,
             rating_max: int | None = None,
             sort: str = "set", page: int = 1, page_size: int = 60
@@ -858,10 +873,10 @@ class PokemonRepo:
         elif edition == "unlimited":
             where.append("i.variant IS NOT NULL "
                          "AND i.variant NOT IN ('first_edition', 'shadowless')")
-        if max_quantity is not None:
+        if min_quantity is not None:
             where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
-                         "WHERE q.card_id = COALESCE(i.card_id, c.id)) <= ?")
-            params.append(int(max_quantity))
+                         "WHERE q.card_id = COALESCE(i.card_id, c.id)) >= ?")
+            params.append(int(min_quantity))
 
         # No ownership condition. The rank is a judgement about the card, so a
         # card you have ranked but not yet acquired must still match.

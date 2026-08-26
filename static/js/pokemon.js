@@ -58,7 +58,7 @@ async function dashboard() {
   view().innerHTML = `
     <h1>Mi colección</h1>
     <p class="sub">${d.unique_cards} cartas únicas · ${d.physical_cards} cartas físicas ·
-       ${d.sets_total} sets · ${pct(d.completion_pct)} completitud</p>
+       ${d.sets_total} sets · ${pct(d.completion_pct)} únicas · ${pct(d.copies_pct)} copias</p>
 
     <div class="stat-grid">
       <div class="stat accent"><div class="k">Valor estimado</div>
@@ -68,10 +68,14 @@ async function dashboard() {
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
       <div class="stat"><div class="k">Sets completos</div>
         <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
-      <div class="stat"><div class="k">Completitud global</div>
+      <div class="stat"><div class="k">Completitud (únicas)</div>
         <div class="v">${pct(d.completion_pct)}</div>
         ${progressBar(d.owned_cards, d.target_cards)}
-        <div class="note">${d.owned_cards} / ${d.target_cards} cartas objetivo</div></div>
+        <div class="note">${d.owned_cards} / ${d.target_cards} cartas distintas</div></div>
+      <div class="stat"><div class="k">Completitud (copias)</div>
+        <div class="v">${pct(d.copies_pct)}</div>
+        ${progressBar(d.copies_held, d.copies_target)}
+        <div class="note">${d.copies_held} / ${d.copies_target} copias objetivo</div></div>
     </div>
 
     <h2>Evolución del valor</h2>
@@ -210,6 +214,9 @@ const sorter = (key) => ({
 
 function slotHtml(slot) {
   const art = cardArt(slot);
+  // Holding a copy lifts the greyed-out treatment; reaching the target earns the
+  // tick. A card you have one of but want three of is neither missing nor done.
+  const complete = !!slot.complete;
   // Missing cards show their art too, dimmed and hatched by CSS, so the set
   // reads as a complete checklist. Catalog art is served from local disk, so
   // this costs no third-party requests.
@@ -218,8 +225,10 @@ function slotHtml(slot) {
       ${art
         ? `<img src="${esc(art)}" alt="${esc(slot.label)}" loading="lazy">`
         : placeholder(slot.number, slot.official_set_id)}
-      ${slot.owned ? '<span class="badge own">✓</span>' : ''}
-      ${slot.quantity > 1 ? `<span class="badge qty">×${slot.quantity}</span>` : ''}
+      ${complete ? '<span class="badge own">✓</span>' : ''}
+      ${slot.owned && !complete
+        ? `<span class="badge partial">${slot.quantity}/${slot.target}</span>` : ''}
+      ${complete && slot.quantity > 1 ? `<span class="badge qty">×${slot.quantity}</span>` : ''}
     </div>
     <div class="label">
       <span class="nm">${esc(slot.label || '—')}</span>
@@ -241,7 +250,7 @@ async function collection(r) {
     rating_min: r.params.get('rating_min') || '',
     type: r.params.get('type') || '',
     edition: r.params.get('edition') || '',
-    max_quantity: r.params.get('max_quantity') || '',
+    min_quantity: r.params.get('min_quantity') || '',
     sort: r.params.get('sort') || 'set',
     page_size: 240,
   };
@@ -277,12 +286,13 @@ async function collection(r) {
       ${sel('f-variant', 'Variante', META.variants, f.variant)}
       ${sel('f-language', 'Idioma', META.languages, f.language)}
       ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
-      ${sel('f-rating', 'Hall of Fame', META.ratings.filter((x) => x.value > 0)
-        .map((x) => ({ key: String(x.value), label: `★ ${x.value}` })), f.rating)}
+      ${sel('f-rating', 'Hall of Fame',
+        [{ key: '0', label: 'Sin rating' }].concat(META.ratings.filter((x) => x.value > 0)
+          .map((x) => ({ key: String(x.value), label: `★ ${x.value}` }))), f.rating)}
       ${sel('f-type', 'Tipo', META.types.map((t) => ({ key: t, label: t })), f.type)}
       ${sel('f-edition', 'Edición', META.editions, f.edition)}
-      ${sel('f-max_quantity', 'Cantidad',
-        [1, 2, 3, 4, 5].map((n) => ({ key: String(n), label: `${n} o menos` })), f.max_quantity)}
+      ${sel('f-min_quantity', 'Cantidad',
+        [1, 2, 3, 4, 5].map((n) => ({ key: String(n), label: `${n} o más` })), f.min_quantity)}
       ${sel('f-sort', '', [
         { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
         { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
@@ -305,7 +315,7 @@ async function collection(r) {
   const apply = (overrides = {}) => {
     const p = new URLSearchParams();
     for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
-                     'rating', 'type', 'edition', 'max_quantity', 'sort']) {
+                     'rating', 'type', 'edition', 'min_quantity', 'sort']) {
       const v = view().querySelector(`#f-${k}`).value;
       if (v) p.set(k, v);
     }
@@ -371,9 +381,9 @@ async function missing(r) {
 
   view().innerHTML = `
     <h1>Cartas faltantes</h1>
-    <p class="sub">${esc(s.name)} · faltan ${rows.data.length} de ${p.target} cartas${
-      (() => { const extra = rows.data.reduce((a, m) => a + Math.max(0, (m.still_needed || 1) - 1), 0);
-               return extra ? ` · ${extra} copia(s) extra por objetivos` : ''; })()}</p>
+    <p class="sub">${esc(s.name)} · ${
+      rows.data.filter((m) => m.missing_entirely).length} de ${p.target} únicas · faltan ${
+      rows.data.reduce((a, m) => a + Math.max(0, m.still_needed || 0), 0)} copias</p>
 
     <div class="toolbar">
       <select id="f-set">${setList.map((x) => `<option value="${esc(x.id)}"${
@@ -390,9 +400,9 @@ async function missing(r) {
       <div class="missing-row" data-card="${esc(m.card_id)}">
         <span class="n">#${esc(m.number || '?')}</span>
         <span>${esc(m.label || '')}</span>
-        ${m.target > 1
-          ? `<span class="tag">faltan ${m.still_needed} de ${m.target}</span>`
-          : ''}
+        ${m.missing_entirely
+          ? (m.target > 1 ? `<span class="tag">faltan ${m.still_needed} copias</span>` : '')
+          : `<span class="tag">tenés ${m.held} de ${m.target}</span>`}
         <span class="r">${esc(m.rarity || '')}</span>
       </div>`).join('')}</div>`
       : '<div class="empty">🎉 Set completo.</div>'}`;

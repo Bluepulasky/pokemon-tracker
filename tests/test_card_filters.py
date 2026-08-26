@@ -70,17 +70,21 @@ def test_edition_filter_separates_first_edition_from_unlimited(repo):
 
 
 def test_quantity_filter_counts_the_card_not_the_row(repo):
-    """'2 or fewer' asks about the card. Two rows of one each is two copies, so
-    the card must not slip through by having small rows."""
+    """'2 or more' asks about the card. Three copies split across a holo row and
+    a normal row is three copies, so the card must not be excluded just because
+    each individual row is small."""
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo", "quantity": 1})
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "normal", "quantity": 2})
     repo.upsert_collection_item({"card_id": "base1-2", "quantity": 1})
 
-    one, _ = repo.list_collection(max_quantity=1)
-    assert {i["card_id"] for i in one} == {"base1-2"}, "Charizard has 3 across two rows"
+    three_plus, _ = repo.list_collection(min_quantity=3)
+    assert {i["card_id"] for i in three_plus} == {"base1-4"}, "3 copies across two rows"
 
-    three, _ = repo.list_collection(max_quantity=3)
-    assert {i["card_id"] for i in three} == {"base1-4", "base1-2"}
+    one_plus, _ = repo.list_collection(min_quantity=1)
+    assert {i["card_id"] for i in one_plus} == {"base1-4", "base1-2"}
+
+    four_plus, _ = repo.list_collection(min_quantity=4)
+    assert four_plus == []
 
 
 def test_filters_compose(repo):
@@ -88,5 +92,5 @@ def test_filters_compose(repo):
                                  "quantity": 1})
     repo.upsert_collection_item({"card_id": "base1-2", "variant": "first_edition",
                                  "quantity": 5})
-    got, _ = repo.list_collection(edition="first_edition", max_quantity=2, card_type="Fire")
+    got, _ = repo.list_collection(edition="first_edition", min_quantity=1, card_type="Fire")
     assert [i["card_id"] for i in got] == ["base1-4"]

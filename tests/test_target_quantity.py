@@ -38,21 +38,47 @@ def test_default_target_is_one_and_stores_no_row(repo):
     assert repo._scalar("SELECT COUNT(*) FROM card_targets") == 0
 
 
-def test_holding_fewer_than_the_target_leaves_the_slot_incomplete(repo):
+def test_holding_a_copy_is_distinct_from_meeting_the_target(repo):
+    """Three states, not two: nothing held, held but short, target met. A card
+    you have one of but want three of is neither missing nor done."""
     repo.upsert_collection_item({"card_id": "base1-4", "quantity": 1})
-    assert repo.set_progress("mine")[0]["owned"] == 1
-
     repo.set_card_target("base1-4", 3)
-    assert repo.set_progress("mine")[0]["owned"] == 0
+
+    p = repo.set_progress("mine")[0]
+    assert p["owned"] == 1, "one copy means it is no longer missing"
+    assert p["complete"] == 0, "but the target is not met"
+
     slot = next(s for s in repo.get_set_slots("mine") if s["label"] == "Charizard")
-    assert bool(slot["owned"]) is False
+    assert bool(slot["owned"]) is True and bool(slot["complete"]) is False
     assert slot["quantity"] == 1 and slot["target"] == 3
 
 
 def test_reaching_the_target_completes_the_slot(repo):
     repo.set_card_target("base1-4", 3)
     repo.upsert_collection_item({"card_id": "base1-4", "quantity": 3})
-    assert repo.set_progress("mine")[0]["owned"] == 1
+    p = repo.set_progress("mine")[0]
+    assert p["owned"] == 1 and p["complete"] == 1
+
+
+def test_copy_progress_caps_each_slot_at_its_target(repo):
+    """Spares must not push a set past 100%: holding ten of a card you wanted one
+    of does not make up for a card you do not have."""
+    repo.upsert_collection_item({"card_id": "base1-4", "quantity": 10})
+    p = repo.set_progress("mine")[0]
+    assert p["copies_target"] == 2, "two slots, default target 1 each"
+    assert p["copies_held"] == 1, "capped at the target for that slot"
+
+
+def test_missing_list_separates_none_at_all_from_short_of_target(repo):
+    """The wishlist needs both figures: how many cards are absent, and how many
+    copies are outstanding."""
+    repo.set_card_target("base1-4", 3)
+    repo.upsert_collection_item({"card_id": "base1-4", "quantity": 1})
+
+    rows = {m["label"]: m for m in repo.missing_slots("mine")}
+    assert bool(rows["Blastoise"]["missing_entirely"]) is True
+    assert bool(rows["Charizard"]["missing_entirely"]) is False
+    assert rows["Charizard"]["still_needed"] == 2
 
 
 def test_copies_count_across_variants(repo):
@@ -60,7 +86,7 @@ def test_copies_count_across_variants(repo):
     repo.set_card_target("base1-4", 3)
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo", "quantity": 1})
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "normal", "quantity": 2})
-    assert repo.set_progress("mine")[0]["owned"] == 1
+    assert repo.set_progress("mine")[0]["complete"] == 1
 
 
 def test_missing_list_reports_the_shortfall(repo):
