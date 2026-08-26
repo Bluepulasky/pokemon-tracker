@@ -45,10 +45,41 @@ def _score(key: str, variant: str) -> int | None:
     return 20 if any(p in ORDINARY for p in (rest or [None])) else 10
 
 
+def _ordinary_printings(keys: list[str]) -> list[str]:
+    """Printings with no special run, stamp or oddity — the plain copy."""
+    out = []
+    for key in keys:
+        rest = key.split(":")[1:]
+        if any(p.startswith("shadowless") for p in rest):
+            continue
+        if any(p not in ("unlimited", "cosmos", "starlight", "galaxy", "set-logo")
+               for p in rest):
+            continue
+        out.append(key)
+    return out
+
+
 def resolve(variant: str, keys: list[str]) -> str | None:
-    """Best TCGdex printing key for this variant, or None if nothing fits."""
+    """Best TCGdex printing key for this variant, or None if nothing fits.
+
+    A special run — shadowless, 1st edition, reverse — never falls back. Choosing
+    between print runs is precisely the mistake this exists to prevent.
+
+    `normal` and `holo` do fall back, and only to a card's single ordinary
+    printing. Those two names describe how a card looks, and a collection may
+    disagree with the catalog about it: a Base Set Hitmonchan recorded as
+    "normal" is a real entry for a card that only ever existed as holo. Refusing
+    to price it would lose a price over a vocabulary mismatch, not over a genuine
+    ambiguity — and the fallback only fires when exactly one ordinary printing
+    exists, so there is nothing to choose between.
+    """
     scored = [(s, k) for k in keys if (s := _score(k, variant)) is not None]
-    if not scored:
-        return None
-    # Ties break on the shorter key: fewer qualifiers means a plainer printing.
-    return max(scored, key=lambda sk: (sk[0], -len(sk[1])))[1]
+    if scored:
+        # Ties break on the shorter key: fewer qualifiers means a plainer printing.
+        return max(scored, key=lambda sk: (sk[0], -len(sk[1])))[1]
+
+    if variant in ("normal", "holo", "other"):
+        ordinary = _ordinary_printings(keys)
+        if len(ordinary) == 1:
+            return ordinary[0]
+    return None

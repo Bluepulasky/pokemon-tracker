@@ -214,13 +214,23 @@ def test_our_variants_map_onto_tcgdex_printings():
     assert resolve("first_edition", keys) == "holo:shadowless:1st-edition"
 
 
-def test_unmatched_variants_resolve_to_nothing():
-    """No match must mean no price, not the nearest printing."""
+def test_a_special_run_never_resolves_to_a_different_one():
+    """No match must mean no price, not the nearest printing — for the runs where
+    picking wrongly changes the number materially."""
     from tombot.services.variant_map import resolve
 
     keys = [v["key"] for v in parse_variants(card("base1-7"))]
     assert resolve("reverse", keys) is None      # Base Set has no reverse holo
-    assert resolve("normal", keys) is None       # this Hitmonchan is holo-only
+
+
+def test_a_plain_variant_falls_back_to_the_single_ordinary_printing():
+    """A live collection had this Hitmonchan recorded as 'normal' even though the
+    card only exists as holo. There is one ordinary printing, so nothing is being
+    chosen between and refusing would lose the price over wording."""
+    from tombot.services.variant_map import resolve
+
+    keys = [v["key"] for v in parse_variants(card("base1-7"))]
+    assert resolve("normal", keys) == "holo:unlimited"
 
 
 def test_reverse_resolves_only_to_a_reverse_printing():
