@@ -34,7 +34,11 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.extensions["repo"] = repo
     app.extensions["source"] = source
     app.extensions["config"] = config
-    app.extensions["pricing"] = PricingService(repo, source, config)
+    # Prices come from their own source. The catalog keeps using pokemontcg.io
+    # until TCGdex is proven to cover images and set data as well.
+    price_source = get_source(getattr(config, "PRICE_SOURCE", config.SOURCE), config)
+    app.extensions["price_source"] = price_source
+    app.extensions["pricing"] = PricingService(repo, price_source, config)
     app.extensions["importer"] = CatalogImporter(repo, source, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
 

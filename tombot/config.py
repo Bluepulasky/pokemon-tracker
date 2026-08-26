@@ -41,7 +41,13 @@ class Config:
     # --- catalog / price source -------------------------------------------
     # Cardmarket's own API is application-gated; pokemontcg.io republishes
     # Cardmarket EUR prices with no account needed. See PLAN.md §2.2.
+    # Catalog and images still come from pokemontcg.io; only prices move.
     SOURCE = os.environ.get("SOURCE", "pokemontcgio")
+    # TCGdex is the only source found that prices print runs apart — pokemontcg.io
+    # reports one number per card id, so Unlimited and Shadowless read the same.
+    PRICE_SOURCE = os.environ.get("PRICE_SOURCE", "tcgdex")
+    TCGDEX_BASE_URL = os.environ.get("TCGDEX_BASE_URL", "https://api.tcgdex.net/v2")
+    TCGDEX_LANG = os.environ.get("TCGDEX_LANG", "en")
     POKEMONTCG_API_KEY = os.environ.get("POKEMONTCG_API_KEY") or None
     POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
@@ -102,4 +108,7 @@ DEFAULT_MODIFIERS = [
     ("condition", "HP", 0.50), ("condition", "DMG", 0.35),
     ("language", "en", 1.00), ("language", "es", 1.00),
     ("language", "pt", 0.85), ("language", "other", 1.00),
+    # The feed never prices a 1st edition apart from its unstamped twin, so
+    # the premium lives here. 2.0 is a starting point, not a measurement.
+    ("variant", "first_edition", 2.00),
 ]

@@ -76,32 +76,38 @@ def test_unlimited_and_shadowless_are_priced_apart():
            variants["shadowless"]["market_product_id"]
 
 
-def test_first_edition_shares_a_product_in_base_team_rocket_and_neo():
-    """Where the 1st-edition entry shares its product with the unstamped one, the
-    stored price is the ordinary print and the multiplier is the only way to
-    value a 1st edition."""
-    for cid in ("base1-4", "base1-58", "base5-1", "neo1-1"):
-        variants = [v for v in parse_variants(card(cid)) if "1st-edition" in v["stamps"]]
-        assert variants, cid
-        for v in variants:
+def test_first_edition_always_needs_the_multiplier():
+    """No set prices a 1st edition apart from its unstamped twin, so the premium
+    can only come from a multiplier."""
+    for cid in ("base1-4", "base1-7", "base1-58", "base5-1", "neo1-1", "gym1-1"):
+        stamped = [v for v in parse_variants(card(cid))
+                   if "1st-edition" in v["stamps"] and v["price"] is not None]
+        assert stamped, cid
+        for v in stamped:
             assert v["first_edition_multiplier_applies"] is True, (cid, v["key"])
-            assert v["price_is_first_edition"] is False
 
 
-def test_gym_sets_price_the_first_edition_directly():
-    """Gym Heroes and Gym Challenge are the exception: the unstamped entry has no
-    product at all, and the only priced product IS the 1st edition. Applying a
-    multiplier there would double a price that already reflects the stamp."""
-    for cid in ("gym1-1", "gym2-1"):
-        variants = {tuple(v["stamps"]): v for v in parse_variants(card(cid))}
-        plain = variants[()]
-        first = variants[("1st-edition",)]
+def test_a_single_product_card_shares_its_price_across_printings():
+    """Gym Heroes lists a product only under the 1st-edition tag, which would
+    otherwise leave an ordinary Blaine's Moltres unpriced. With one product for
+    the whole card, that product is the card's price."""
+    variants = {tuple(v["stamps"]): v for v in parse_variants(card("gym1-1"))}
+    plain, first = variants[()], variants[("1st-edition",)]
 
-        assert plain["price"] is None, f"{cid}: unstamped print is unpriced"
-        assert first["price"] is not None
-        assert first["price_is_first_edition"] is True
-        assert first["first_edition_multiplier_applies"] is False, (
-            f"{cid}: multiplying an already-1st-edition price would double it")
+    assert plain["price"] == first["price"] == 117.91
+    assert plain["price_inherited"] is True, "adopted the card's only product"
+    assert first["price_inherited"] is False
+
+
+def test_multi_product_cards_never_borrow_across_print_runs():
+    """The narrowness of the rule above matters: Charizard prices Unlimited and
+    Shadowless apart, and must keep doing so."""
+    for cid in ("base1-4", "base1-7", "base1-58"):
+        variants = parse_variants(card(cid))
+        assert not any(v["price_inherited"] for v in variants), cid
+    charizard = {v["subtype"]: v for v in parse_variants(card("base1-4"))}
+    assert charizard["unlimited"]["price"] != charizard["shadowless"]["price"]
+    assert charizard["1999-2000-copyright"]["price"] is None
 
 
 def test_the_multiplier_flag_is_never_set_without_a_price():
@@ -193,3 +199,42 @@ def test_the_reported_hitmonchan_prices_its_print_runs_apart():
     assert variants["shadowless"]["price"] == 23.5
     assert variants["unlimited"]["market_product_id"] != \
            variants["shadowless"]["market_product_id"]
+
+
+# ------------------------------------------------- variant resolution
+def test_our_variants_map_onto_tcgdex_printings():
+    """The collection stores variants in the app's own vocabulary; prices come
+    keyed by TCGdex printing. A wrong match here values a Shadowless Charizard as
+    an Unlimited one."""
+    from tombot.services.variant_map import resolve
+
+    keys = [v["key"] for v in parse_variants(card("base1-7"))]
+    assert resolve("holo", keys) == "holo:unlimited"
+    assert resolve("shadowless", keys) == "holo:shadowless"
+    assert resolve("first_edition", keys) == "holo:shadowless:1st-edition"
+
+
+def test_unmatched_variants_resolve_to_nothing():
+    """No match must mean no price, not the nearest printing."""
+    from tombot.services.variant_map import resolve
+
+    keys = [v["key"] for v in parse_variants(card("base1-7"))]
+    assert resolve("reverse", keys) is None      # Base Set has no reverse holo
+    assert resolve("normal", keys) is None       # this Hitmonchan is holo-only
+
+
+def test_reverse_resolves_only_to_a_reverse_printing():
+    from tombot.services.variant_map import resolve
+
+    keys = [v["key"] for v in parse_variants(card("ex7-51"))]
+    assert resolve("reverse", keys) == "reverse:set-logo"
+    assert resolve("normal", keys) == "normal"
+
+
+def test_oddities_are_never_matched_by_a_plain_variant():
+    """base1-58 carries a jumbo and a poketour stamp. Asking for a plain normal
+    Pikachu must not return either."""
+    from tombot.services.variant_map import resolve
+
+    keys = [v["key"] for v in parse_variants(card("base1-58"))]
+    assert resolve("normal", keys) == "normal:unlimited"

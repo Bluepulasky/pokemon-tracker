@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from .variant_map import resolve
+
 log = logging.getLogger(__name__)
 
 # Which Cardmarket field to read for a given physical variant. Cardmarket exposes
@@ -31,41 +33,57 @@ class PricingService:
 
     # ----------------------------------------------------------------- fetch
     def refresh(self, stale_days: int | None = None, all_cards: bool = False) -> dict:
-        """Refresh prices for cards actually in the collection (spec §30)."""
+        """Refresh prices for the printings actually held (spec §30).
+
+        Each owned (card, variant) is matched to a specific TCGdex printing, so a
+        Shadowless Charizard is priced as Shadowless rather than as the Unlimited
+        print. A variant with no matching printing is left unpriced rather than
+        borrowing a neighbouring one.
+
+        Manual prices are never touched.
+        """
         stale_days = self.config.PRICE_STALE_DAYS if stale_days is None else stale_days
         pairs = (self.repo.owned_card_variants() if all_cards
                  else self.repo.stale_priced_pairs(stale_days))
         if not pairs:
-            return {"checked": 0, "updated": 0, "unpriced": 0}
+            return {"checked": 0, "updated": 0, "unpriced": 0, "manual_kept": 0}
 
         card_ids = sorted({p["card_id"] for p in pairs})
         payloads = self.source.fetch_prices(card_ids)
 
         today = date.today().isoformat()
-        updated = unpriced = 0
+        updated = unpriced = manual_kept = 0
         for pair in pairs:
-            data = payloads.get(pair["card_id"])
-            if not data:
+            card_id, variant = pair["card_id"], pair["variant"]
+
+            if self.repo.get_price(card_id, variant, source="manual"):
+                manual_kept += 1
+                continue
+
+            data = payloads.get(card_id)
+            variants = (data or {}).get("variants") or []
+            key = resolve(variant, [v["key"] for v in variants])
+            chosen = next((v for v in variants if v["key"] == key), None)
+
+            if not chosen or chosen["price"] is None:
                 unpriced += 1
                 continue
-            prices = data["prices"]
-            price = self._pick(prices, pair["variant"])
-            if price is None:
-                unpriced += 1
-                continue
+
             self.repo.upsert_price(
-                pair["card_id"], pair["variant"], data["source"], data["currency"],
-                price, prices.get("lowPrice"), prices.get("trendPrice"),
-                prices.get("avg30"), prices,
+                card_id, variant, data["source"], chosen["currency"],
+                chosen["price"], None, None, None, chosen,
+                variant_key=chosen["key"],
+                market_product_id=chosen["market_product_id"],
             )
             self.repo.append_price_history(
-                pair["card_id"], pair["variant"], data["source"],
-                data["currency"], price, today,
+                card_id, variant, data["source"], chosen["currency"],
+                chosen["price"], today,
             )
             updated += 1
 
         self.repo.set_meta("last_price_refresh", today)
-        return {"checked": len(pairs), "updated": updated, "unpriced": unpriced}
+        return {"checked": len(pairs), "updated": updated,
+                "unpriced": unpriced, "manual_kept": manual_kept}
 
     def _pick(self, prices: dict, variant: str) -> float | None:
         """Price for this variant, or None.
@@ -125,7 +143,11 @@ class PricingService:
 
         cond_m = mods.get("condition", {}).get(item.get("condition", "NM"), 1.0)
         lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
-        unit = round(row["price"] * cond_m * lang_m, 2)
+        # A 1st edition is never priced apart from its unstamped twin by the
+        # feed, so the premium is applied here. Editable per variant, because a
+        # single figure cannot be right for both a Charizard and a common.
+        var_m = mods.get("variant", {}).get(item.get("variant", "normal"), 1.0)
+        unit = round(row["price"] * cond_m * lang_m * var_m, 2)
         qty = int(item.get("quantity", 1))
         return {
             "unit": unit,
@@ -135,6 +157,9 @@ class PricingService:
             "priced_variant": row.get("variant"),
             "condition_multiplier": cond_m,
             "language_multiplier": lang_m,
+            "variant_multiplier": var_m,
+            "variant_key": row.get("variant_key"),
+            "manual": row.get("source") == "manual",
             "updated_at": row.get("updated_at"),
         }
 
