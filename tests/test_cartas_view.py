@@ -69,20 +69,24 @@ def test_multiple_owned_variants_produce_multiple_rows(repo):
 
 
 def test_physical_filters_exclude_placeholders(repo):
-    """A placeholder has no condition, variant, language or rank, so any filter
-    describing a physical copy must drop it. The spec requires this for the Hall
-    of Fame filter; it is equally correct for the others."""
+    """Condition, variant and language describe a copy in hand, so a placeholder
+    cannot match them. The rank is deliberately NOT in this group — it belongs to
+    the card, so an unacquired card can still carry one."""
     repo.upsert_collection_item({"card_id": "base1-1", "condition": "NM"})
     repo.upsert_collection_item({"card_id": "base1-2", "condition": "LP"})
-    repo.set_card_rating("base1-1", 8)
-    repo.set_card_rating("base1-2", 2)
-
-    top, _ = repo.list_slots_with_ownership(set_id="mine", rating_min=7, page_size=100)
-    assert [r["label"] for r in top] == ["Alakazam"]
-    assert all(r["owned"] for r in top)
 
     nm, _ = repo.list_slots_with_ownership(set_id="mine", condition="NM", page_size=100)
     assert [r["label"] for r in nm] == ["Alakazam"]
+    assert all(r["owned"] for r in nm)
+
+
+def test_rank_filter_is_not_a_physical_filter(repo):
+    repo.upsert_collection_item({"card_id": "base1-1"})
+    repo.set_card_rating("base1-1", 8)
+    repo.set_card_rating("base1-2", 7)          # ranked, not owned
+
+    top, _ = repo.list_slots_with_ownership(set_id="mine", rating_min=7, page_size=100)
+    assert {r["label"] for r in top} == {"Alakazam", "Blastoise"}
 
 
 def test_sorting_tolerates_placeholders(repo):

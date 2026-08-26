@@ -103,14 +103,24 @@ def test_show_all_switches_the_data_source(client, app):
     assert every["mode"] == "all" and every["total"] == 3, "one row per slot"
 
 
-def test_rating_filter_excludes_placeholders_in_all_mode(client, app):
-    """A card you do not own has no physical copy to rank, so it cannot match."""
+def test_rating_filter_includes_cards_you_have_not_acquired(client, app):
+    """A rank is a judgement about the card, not about a copy in hand. Ranking a
+    card you are still hunting for and then not finding it under the filter was
+    the reported bug."""
     app.repo.upsert_collection_item({"card_id": "base1-4"})
     app.repo.set_card_rating("base1-4", 8)
     app.repo.set_card_rating("base1-2", 8)      # ranked but NOT owned
 
     data = client.get("/api/collection?show_all=1&rating_min=7").get_json()["data"]
-    assert [r["card_id"] for r in data] == ["base1-4"]
+    assert {r["card_id"] for r in data} == {"base1-4", "base1-2"}
+    assert {r["owned"] for r in data} == {True, False}
+
+
+def test_hall_of_fame_toggle_selects_anything_ranked(client, app):
+    """The toggle sends rating_min=1, since 0 means unranked."""
+    app.repo.set_card_rating("base1-2", 3)
+    data = client.get("/api/collection?show_all=1&rating_min=1").get_json()["data"]
+    assert [r["card_id"] for r in data] == ["base1-2"]
 
 
 def test_search_narrows_only_the_collection_half(client, app):
@@ -169,13 +179,24 @@ def test_dashboard_totals_are_derived_not_stored(client, app):
     assert d["unique_cards"] == 2 and d["physical_cards"] == 3
     assert d["owned_cards"] == 2 and d["target_cards"] == 3
     assert d["completion_pct"] == pytest.approx(66.7, abs=0.1)
-    assert d["hall_of_fame"]["rated"] == 1 and d["hall_of_fame"]["average"] == 8.0
+    # Hall of Fame is a ban-list style ranking; averaging it says nothing, so the
+    # dashboard no longer carries a summary of it.
+    assert "hall_of_fame" not in d
 
 
 def test_missing_list_is_the_complement_of_owned(client, app):
     app.repo.upsert_collection_item({"card_id": "base1-4"})
     missing = client.get("/api/sets/mine/missing").get_json()["data"]
     assert {m["card_id"] for m in missing} == {"base1-2", "base1-58"}
+
+
+def test_rating_labels_are_the_number_only(client):
+    """Descriptive labels read as sentiment. Hall of Fame is a power ranking, so
+    the scale is the number and nothing else."""
+    ratings = client.get("/api/meta").get_json()["ratings"]
+    assert ratings[0]["label"] == "—"
+    assert [r["label"] for r in ratings[1:]] == [f"★ {n}" for n in range(1, 9)]
+    assert not any(c.isalpha() for r in ratings for c in r["label"])
 
 
 def test_meta_vocabularies_match_the_validator(client):

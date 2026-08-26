@@ -66,7 +66,6 @@ export async function openCard(cardId) {
           <div class="field card-rank">
             <label>Hall of Fame</label>
             ${rankRow(card.rating || 0)}
-            <div class="rank-label">${esc(RATING_LABEL(card.rating || 0))}</div>
           </div>
         </div>
         <button class="close" aria-label="Cerrar">&times;</button>
@@ -121,9 +120,6 @@ function variantCard(item) {
     <input type="file" accept="image/*" hidden class="photo-input">
   </div>`;
 }
-
-const RATING_LABEL = (r) =>
-  (META.ratings.find((x) => x.value === Number(r)) || {}).label || '';
 
 /* 0-8 as a row of targets. A slider is fiddly on a phone and hides the value,
    and this is the one control the feature exists for. */
@@ -182,7 +178,6 @@ function wireCardRank(root, card) {
       const value = Number(r.dataset.rank);
       box.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
       r.classList.add('on');
-      box.querySelector('.rank-label').textContent = RATING_LABEL(value);
       try {
         await api.rateCard(card.id, value);
         onChange();

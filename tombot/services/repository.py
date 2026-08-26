@@ -802,17 +802,16 @@ class PokemonRepo:
             if val:
                 where.append(f"i.{col} = ?")
                 params.append(val)
-        # The rank now lives on the card, but it still may only match owned rows:
-        # a placeholder is a card you do not have, so it has no physical copy to
-        # filter on even if the card itself carries a rank.
+        # No ownership condition. The rank is a judgement about the card, so a
+        # card you have ranked but not yet acquired must still match.
         if rating is not None:
-            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) = ?")
+            where.append("COALESCE(cr.rating, 0) = ?")
             params.append(int(rating))
         if rating_min is not None:
-            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) >= ?")
+            where.append("COALESCE(cr.rating, 0) >= ?")
             params.append(int(rating_min))
         if rating_max is not None:
-            where.append("i.id IS NOT NULL AND COALESCE(cr.rating, 0) <= ?")
+            where.append("COALESCE(cr.rating, 0) <= ?")
             params.append(int(rating_max))
         w = " AND ".join(where)
 
@@ -837,7 +836,11 @@ class PokemonRepo:
             LEFT JOIN collection_items i
                    ON i.card_id IN (SELECT card_id FROM set_slot_cards
                                      WHERE slot_id = sl.id)
-            LEFT JOIN card_ratings cr ON cr.card_id = i.card_id
+            -- Ranks belong to the card, so a slot has one whether or not a copy
+            -- is in hand. Joining on i.card_id gave placeholders a NULL rank and
+            -- made them invisible to the Hall of Fame filter — you could rank a
+            -- card you were still hunting for and then never find it again.
+            LEFT JOIN card_ratings cr ON cr.card_id = COALESCE(i.card_id, c.id)
             WHERE {w}"""
 
         total = self._scalar(f"SELECT COUNT(*) {base}", params) or 0
@@ -849,8 +852,7 @@ class PokemonRepo:
                        c.external_ids_json, os.name AS set_name,
                        i.id AS id, i.variant, i.condition, i.language,
                        i.quantity, i.notes,
-                       CASE WHEN i.id IS NULL THEN NULL
-                            ELSE COALESCE(cr.rating, 0) END AS rating,
+                       COALESCE(cr.rating, 0) AS rating,
                        i.created_at, i.updated_at,
                        CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS owned
                 {base} ORDER BY {order} LIMIT ? OFFSET ?""",
