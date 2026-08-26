@@ -7,6 +7,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   # A new push supersedes the previous run on the same branch.
@@ -50,6 +51,48 @@ jobs:
         run: |
           python -m pytest tests/ -q \
             --cov=tombot --cov-report=term-missing --cov-fail-under=35
+
+  tcgdex-live:
+    name: tcgdex live check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # api.tcgdex.net refuses connections from some networks — it is unreachable
+    # from where this adapter was written. GitHub's runners can reach it, so this
+    # job is the integration test the developer cannot run locally.
+    #
+    # Only on demand or when the adapter changes: it calls a third-party API once
+    # per card and there is no reason to do that on unrelated pushes.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.title, 'tcgdex') ||
+      contains(github.event.head_commit.message, 'tcgdex')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        # The adapter lives inside the tombot package, and importing anything
+        # from it executes tombot/__init__.py — the Flask app factory. So the
+        # runtime dependencies are needed even though this script only parses.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check the adapter against the live API
+        run: python scripts/tcgdex_live_check.py
+
+      - name: Upload the fetched payloads
+        # These become fixtures. Downloading the artifact is how a developer who
+        # cannot reach the API gets real data to test against.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcgdex-live-payloads
+          path: tcgdex-live/
+          retention-days: 14
 
   image:
     name: docker image

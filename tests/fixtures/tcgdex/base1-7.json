@@ -1,0 +1,195 @@
+{
+  "category": "Pokemon",
+  "id": "base1-7",
+  "illustrator": "Ken Sugimori",
+  "image": "https://assets.tcgdex.net/en/base/base1/7",
+  "localId": "7",
+  "name": "Hitmonchan",
+  "rarity": "Rare",
+  "set": {
+    "cardCount": {
+      "official": 102,
+      "total": 102
+    },
+    "id": "base1",
+    "logo": "https://assets.tcgdex.net/en/base/base1/logo",
+    "name": "Base Set"
+  },
+  "variants": {
+    "firstEdition": true,
+    "holo": true,
+    "normal": false,
+    "reverse": false,
+    "wPromo": false
+  },
+  "variants_detailed": [
+    {
+      "type": "holo",
+      "subtype": "unlimited",
+      "size": "standard",
+      "variantId": "4ffrmhcfiaejakhepqdkx7o",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T20:57:07.241Z",
+          "unit": "EUR",
+          "idProduct": 273702,
+          "avg": 14.29,
+          "low": 0.9,
+          "trend": 19.28,
+          "avg1": 5.59,
+          "avg7": 15.2,
+          "avg30": 14.91,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 9.47,
+          "avg1-holo": 5.1,
+          "avg7-holo": 6.59,
+          "avg30-holo": 8.13
+        },
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T20:57:08.568Z",
+          "holofoil": {
+            "productId": 42415,
+            "lowPrice": 9.99,
+            "midPrice": 16.99,
+            "highPrice": 9999,
+            "marketPrice": 21.94,
+            "directLowPrice": 11.5
+          }
+        }
+      }
+    },
+    {
+      "type": "holo",
+      "subtype": "shadowless",
+      "size": "standard",
+      "stamp": [
+        "1st-edition"
+      ],
+      "variantId": "mtltux8qtgdu4exu903oasum21juxbvx6lx",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T20:57:07.241Z",
+          "unit": "EUR",
+          "idProduct": 660221,
+          "avg": 23.5,
+          "low": 20,
+          "trend": 47.03,
+          "avg1": 45,
+          "avg7": 60.31,
+          "avg30": 56.85,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 0,
+          "avg1-holo": null,
+          "avg7-holo": null,
+          "avg30-holo": null
+        },
+        "tcgplayer": null
+      }
+    },
+    {
+      "type": "holo",
+      "subtype": "shadowless",
+      "size": "standard",
+      "variantId": "3takscxpcqoqcfnxk1ivs2y6",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T20:57:07.241Z",
+          "unit": "EUR",
+          "idProduct": 660221,
+          "avg": 23.5,
+          "low": 20,
+          "trend": 47.03,
+          "avg1": 45,
+          "avg7": 60.31,
+          "avg30": 56.85,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 0,
+          "avg1-holo": null,
+          "avg7-holo": null,
+          "avg30-holo": null
+        },
+        "tcgplayer": null
+      }
+    },
+    {
+      "type": "holo",
+      "subtype": "1999-2000-copyright",
+      "size": "standard",
+      "variantId": "zqq5g2u9n0st0gren5bssktmac2ywqaw"
+    }
+  ],
+  "dexId": [
+    107
+  ],
+  "hp": 70,
+  "types": [
+    "Fighting"
+  ],
+  "description": "While seeming to do nothing, it fires punches in lightning-fast volleys that are impossible to see.",
+  "stage": "Basic",
+  "attacks": [
+    {
+      "cost": [
+        "Fighting"
+      ],
+      "name": "Jab",
+      "damage": 20
+    },
+    {
+      "cost": [
+        "Fighting",
+        "Fighting",
+        "Colorless"
+      ],
+      "name": "Special Punch",
+      "damage": 40
+    }
+  ],
+  "weaknesses": [
+    {
+      "type": "Psychic",
+      "value": "×2"
+    }
+  ],
+  "retreat": 2,
+  "legal": {
+    "standard": false,
+    "expanded": false
+  },
+  "updated": "2026-08-20T08:25:49+01:00",
+  "pricing": {
+    "cardmarket": {
+      "updated": "2026-08-26T20:57:07.241Z",
+      "unit": "EUR",
+      "idProduct": 273702,
+      "avg": 14.29,
+      "low": 0.9,
+      "trend": 19.28,
+      "avg1": 5.59,
+      "avg7": 15.2,
+      "avg30": 14.91,
+      "avg-holo": null,
+      "low-holo": null,
+      "trend-holo": 9.47,
+      "avg1-holo": 5.1,
+      "avg7-holo": 6.59,
+      "avg30-holo": 8.13
+    },
+    "tcgplayer": {
+      "unit": "USD",
+      "updated": "2026-08-26T20:57:08.568Z",
+      "holofoil": {
+        "productId": 42415,
+        "lowPrice": 9.99,
+        "midPrice": 16.99,
+        "highPrice": 9999,
+        "marketPrice": 21.94,
+        "directLowPrice": 11.5
+      }
+    }
+  }
+}

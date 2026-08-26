@@ -1,0 +1,192 @@
+{
+  "category": "Pokemon",
+  "id": "neo1-1",
+  "illustrator": "Ken Sugimori",
+  "image": "https://assets.tcgdex.net/en/neo/neo1/1",
+  "localId": "1",
+  "name": "Ampharos",
+  "rarity": "Rare",
+  "set": {
+    "cardCount": {
+      "official": 111,
+      "total": 111
+    },
+    "id": "neo1",
+    "logo": "https://assets.tcgdex.net/en/neo/neo1/logo",
+    "name": "Neo Genesis",
+    "symbol": "https://assets.tcgdex.net/univ/neo/neo1/symbol"
+  },
+  "variants": {
+    "firstEdition": true,
+    "holo": true,
+    "normal": false,
+    "reverse": false,
+    "wPromo": false
+  },
+  "variants_detailed": [
+    {
+      "type": "holo",
+      "size": "standard",
+      "variantId": "jr7oetx1mqug9",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T15:00:47.038Z",
+          "unit": "EUR",
+          "idProduct": 274401,
+          "avg": 29.96,
+          "low": 2,
+          "trend": 39.99,
+          "avg1": 5.65,
+          "avg7": 42.19,
+          "avg30": 26.36,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 11.37,
+          "avg1-holo": 7.57,
+          "avg7-holo": 7.43,
+          "avg30-holo": 9.64
+        },
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.845Z",
+          "1st-edition-holofoil": {
+            "productId": 83534,
+            "lowPrice": 79.99,
+            "midPrice": 105.95,
+            "highPrice": 541.54,
+            "marketPrice": 87.79,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83534,
+            "lowPrice": 30.48,
+            "midPrice": 43.92,
+            "highPrice": 276.58,
+            "marketPrice": 38.45,
+            "directLowPrice": 150
+          }
+        }
+      }
+    },
+    {
+      "type": "holo",
+      "size": "standard",
+      "stamp": [
+        "1st-edition"
+      ],
+      "variantId": "3a83wf50ts0izj268xwv3crwi",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T15:00:47.038Z",
+          "unit": "EUR",
+          "idProduct": 274401,
+          "avg": 29.96,
+          "low": 2,
+          "trend": 39.99,
+          "avg1": 5.65,
+          "avg7": 42.19,
+          "avg30": 26.36,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 11.37,
+          "avg1-holo": 7.57,
+          "avg7-holo": 7.43,
+          "avg30-holo": 9.64
+        },
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.845Z",
+          "1st-edition-holofoil": {
+            "productId": 83534,
+            "lowPrice": 79.99,
+            "midPrice": 105.95,
+            "highPrice": 541.54,
+            "marketPrice": 87.79,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83534,
+            "lowPrice": 30.48,
+            "midPrice": 43.92,
+            "highPrice": 276.58,
+            "marketPrice": 38.45,
+            "directLowPrice": 150
+          }
+        }
+      }
+    }
+  ],
+  "dexId": [
+    181
+  ],
+  "hp": 80,
+  "types": [
+    "Lightning"
+  ],
+  "evolveFrom": "Flaaffy",
+  "description": "The tail's tip shines brightly and can be seen from far away. It acts as a beacon for lost people.",
+  "stage": "Stage2",
+  "attacks": [
+    {
+      "cost": [
+        "Lightning",
+        "Lightning",
+        "Lightning"
+      ],
+      "name": "Gigaspark",
+      "effect": "Flip a coin. If heads, the Defending Pokémon is now Paralyzed and this attack does 10 damage to each of your opponent's Benched Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)",
+      "damage": 40
+    }
+  ],
+  "weaknesses": [
+    {
+      "type": "Fighting",
+      "value": "×2"
+    }
+  ],
+  "retreat": 2,
+  "legal": {
+    "standard": false,
+    "expanded": false
+  },
+  "updated": "2026-08-11T23:56:41+01:00",
+  "pricing": {
+    "cardmarket": {
+      "updated": "2026-08-26T15:00:47.038Z",
+      "unit": "EUR",
+      "idProduct": 274401,
+      "avg": 29.96,
+      "low": 2,
+      "trend": 39.99,
+      "avg1": 5.65,
+      "avg7": 42.19,
+      "avg30": 26.36,
+      "avg-holo": null,
+      "low-holo": null,
+      "trend-holo": 11.37,
+      "avg1-holo": 7.57,
+      "avg7-holo": 7.43,
+      "avg30-holo": 9.64
+    },
+    "tcgplayer": {
+      "unit": "USD",
+      "updated": "2026-08-26T15:00:46.845Z",
+      "1st-edition-holofoil": {
+        "productId": 83534,
+        "lowPrice": 79.99,
+        "midPrice": 105.95,
+        "highPrice": 541.54,
+        "marketPrice": 87.79,
+        "directLowPrice": null
+      },
+      "unlimited-holofoil": {
+        "productId": 83534,
+        "lowPrice": 30.48,
+        "midPrice": 43.92,
+        "highPrice": 276.58,
+        "marketPrice": 38.45,
+        "directLowPrice": 150
+      }
+    }
+  }
+}
