@@ -200,21 +200,41 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                      color: var(--fg-dim); font-size: 22px; cursor: pointer; line-height: 1; }
 .modal-body { padding: 20px; }
 
-/* Variants strip: horizontally swipeable on mobile (spec §6). */
-.variants { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px;
+/* Variants strip: horizontally swipeable on mobile (spec §6).
+   The photo is the point of this panel — you are comparing copies — so it gets
+   the space and the controls shrink to fit under it. */
+.variants { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;
             scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
 .variant-card {
-  flex: none; width: 200px; scroll-snap-align: start;
+  flex: none; width: 232px; scroll-snap-align: start;
   background: var(--bg-3); border: 1px solid var(--line);
-  border-radius: var(--radius-sm); padding: 12px;
+  border-radius: var(--radius-sm); padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.variant-card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.variant-card .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
        background: var(--bg); border: 1px solid var(--line); color: var(--fg-dim); }
 .tag.ed { border-color: rgba(59,108,246,.4); color: #9db6ff; }
-.variant-card .photos { display: flex; gap: 6px; overflow-x: auto; margin: 8px 0; }
-.variant-card .photos img { width: 52px; aspect-ratio: 245/342; object-fit: cover;
-                            border-radius: 4px; border: 1px solid var(--line); }
+/* Big enough to actually judge a card by. Several photos scroll side by side. */
+.variant-card .photos {
+  display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x mandatory;
+  border-radius: var(--radius-sm); background: var(--bg);
+}
+.variant-card .photos img {
+  width: 100%; flex: none; aspect-ratio: 245/342; object-fit: cover;
+  border-radius: var(--radius-sm); scroll-snap-align: center; cursor: pointer;
+  border: 2px solid transparent; transition: border-color .15s;
+}
+.variant-card .photos img:hover { border-color: var(--fg-faint); }
+.variant-card .photos img.primary { border-color: var(--accent); }
+.variant-card .photos.empty { background: none; }
+.photo-empty {
+  width: 100%; aspect-ratio: 245/342; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; text-align: center;
+  border: 1px dashed var(--line); border-radius: var(--radius-sm);
+  color: var(--fg-faint); font-size: 12px;
+}
+.photo-empty small { font-size: 11px; color: #4d5765; }
 .variant-card .price { font-variant-numeric: tabular-nums; font-weight: 600; }
 .variant-card .price small { color: var(--fg-faint); font-weight: 400; }
 
@@ -239,6 +259,14 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .btn.ghost { background: none; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+/* Discreet controls under the photo: present, but not competing with it. */
+.btn-row.compact { margin-top: 0; gap: 6px; }
+.btn.xs {
+  padding: 5px 10px; font-size: 12px; font-weight: 500;
+  background: var(--bg-2); border-color: var(--line); flex: 1;
+}
+.btn.xs:hover { background: var(--bg); border-color: var(--fg-faint); }
+.btn.xs.danger { flex: 0 0 auto; }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;

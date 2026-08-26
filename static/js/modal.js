@@ -88,11 +88,15 @@ function variantCard(item) {
       <span class="tag">×${item.quantity}</span>
       ${item.printing_name ? `<span class="tag ed">${esc(item.printing_name)}</span>` : ''}
     </div>
-    <div class="photos">
+    <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
-        ? item.photos.map((p) => `<img src="${esc(photoUrl(p))}" data-photo="${p.id}"
+        ? item.photos.map((p) => `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
+             class="${p.is_primary ? 'primary' : ''}"
              title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`).join('')
-        : '<span class="note">Sin fotografía propia</span>'}
+        : `<div class="photo-empty">
+             <span>Sin fotografía</span>
+             <small>Toca «Foto» para añadir una</small>
+           </div>`}
     </div>
     <div class="price">${esc(eur(v.total))}
       <small>${v.basis === 'unpriced' ? 'sin precio'
@@ -100,12 +104,12 @@ function variantCard(item) {
                 : `${eur(v.unit)} × ${item.quantity}`}</small></div>
     ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
        target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
-    <div class="btn-row">
-      <button class="btn ghost act-photo">Foto</button>
-      <button class="btn ghost act-edit">Editar</button>
-      <button class="btn ghost danger act-del">Borrar</button>
+    <div class="btn-row compact">
+      <button class="btn xs act-photo">Foto</button>
+      <button class="btn xs act-edit">Editar</button>
+      <button class="btn xs danger act-del">Borrar</button>
     </div>
-    <input type="file" accept="image/*" capture="environment" hidden class="photo-input">
+    <input type="file" accept="image/*" hidden class="photo-input">
   </div>`;
 }
 
