@@ -183,3 +183,13 @@ def test_every_fixture_parses_without_inventing_prices(card_id):
     for v in variants:
         assert v["price"] is None or v["price"] > 0
         assert (v["price"] is None) == (v["price_field"] is None)
+
+
+def test_the_reported_hitmonchan_prices_its_print_runs_apart():
+    """The card the whole change started from. Under pokemontcg.io it had one
+    price for every print run; here Unlimited and Shadowless differ by 64%."""
+    variants = {v["subtype"]: v for v in parse_variants(card("base1-7"))}
+    assert variants["unlimited"]["price"] == 14.29
+    assert variants["shadowless"]["price"] == 23.5
+    assert variants["unlimited"]["market_product_id"] != \
+           variants["shadowless"]["market_product_id"]
