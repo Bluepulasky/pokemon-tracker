@@ -53,7 +53,6 @@ async function render(keepScroll = false) {
 async function dashboard() {
   const [d, hist] = await Promise.all([api.dashboard(), api.history()]);
   const v = d.value;
-  const h = d.hall_of_fame || { rated: 0, average: 0, top_tier: 0, unrated: 0 };
   const points = hist.data.map((s) => ({ label: s.captured_on.slice(5), value: s.value_eur }));
 
   view().innerHTML = `
@@ -69,11 +68,6 @@ async function dashboard() {
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
       <div class="stat"><div class="k">Sets completos</div>
         <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
-      <div class="stat"><div class="k">Hall of Fame</div>
-        <div class="v">${h.rated ? `${h.average}<small> / 8</small>` : '—'}</div>
-        <div class="note">${h.rated
-          ? `${h.rated} valoradas · ${h.top_tier} top tier · ${h.unrated} sin valorar`
-          : 'Todavía no has valorado ninguna carta'}</div></div>
       <div class="stat"><div class="k">Completitud global</div>
         <div class="v">${pct(d.completion_pct)}</div>
         ${progressBar(d.owned_cards, d.target_cards)}
@@ -89,12 +83,6 @@ async function dashboard() {
 
     <h2>Sets con más cartas faltantes</h2>
     <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
-
-    <h2>Hall of Fame</h2>
-    ${h.rated
-      ? `<div class="card-grid" id="hof-grid"></div>
-         <div class="btn-row"><button class="btn" id="hof-all">Ver todas las valoradas</button></div>`
-      : `<div class="empty">Abre una carta de tu colección y asígnale un rango de 0 a 8.</div>`}
 
     <h2>Cartas de mayor valor</h2>
     <div class="missing-list">${
@@ -112,20 +100,6 @@ async function dashboard() {
       <span class="note" style="align-self:center">
         Última actualización: ${esc(d.last_price_refresh || 'nunca')}</span>
     </div>`;
-
-  if (h.rated) {
-    try {
-      const top = await api.collection({ rating_min: META.rating_top_tier,
-                                         sort: 'rating', page_size: 16 });
-      const grid = view().querySelector('#hof-grid');
-      grid.innerHTML = top.data.length
-        ? top.data.map(itemHtml).join('')
-        : `<div class="empty">Ninguna carta llega a ★${META.rating_top_tier} todavía.</div>`;
-      view().querySelector('#hof-all').onclick = () => {
-        location.hash = `#/collection?rating_min=1&sort=rating`;
-      };
-    } catch (e) { toast(e.message, true); }
-  }
 
   wireCardClicks();
   view().querySelectorAll('[data-set]').forEach((n) => {
@@ -311,11 +285,9 @@ async function collection(r) {
       <span class="spacer">${res.data.length} de ${res.total}</span>
     </div>
 
-    <div class="chips" style="margin:-8px 0 16px">
-      ${[['', 'Todas'],
-         [String(META.rating_top_tier), `Top Tier ★${META.rating_top_tier}+`],
-         [String(META.rating_favourite), `Favoritas ★${META.rating_favourite}+`]]
-        .map(([v, label]) => `<span class="chip${f.rating_min === v && !f.rating ? ' on' : ''}"
+    <div class="mode-toggle" style="margin:-4px 0 16px">
+      ${[['', 'Sin restricción'], ['1', 'En Hall of Fame']]
+        .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
            data-qmin="${v}">${label}</span>`).join('')}
     </div>
 
@@ -342,7 +314,8 @@ async function collection(r) {
   });
   view().querySelectorAll('[data-qmin]').forEach((chip) => {
     chip.onclick = () => {
-      // A quick filter and an exact-rating filter would fight each other.
+      // rating_min=1 is "has any rank at all", since 0 means unranked.
+      // Clearing the exact-rating select avoids the two filters fighting.
       view().querySelector('#f-rating').value = '';
       apply({ rating_min: chip.dataset.qmin, rating: '' });
     };

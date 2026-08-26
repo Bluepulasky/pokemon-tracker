@@ -32,7 +32,6 @@ def dashboard():
         "target_cards": target_total,
         "owned_cards": owned_total,
         "value": value,
-        "hall_of_fame": r.rating_stats(),
         "sets": progress,
         "most_complete": by_completion[:5],
         "most_missing": by_missing[:5],

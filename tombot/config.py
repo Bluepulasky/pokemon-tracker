@@ -72,14 +72,14 @@ class Config:
 
 
 # Domain vocabularies — single source of truth for API validation and the UI.
-# Hall of Fame rank. 0 means unranked, which is why averages skip it.
+# Hall of Fame rank, 0-8. 0 means unranked.
+#
+# Hall of Fame is the Japanese ban-list concept — a statement about how strong a
+# card is — not a favourites list. Descriptive labels ("Joya", "Obra maestra")
+# read as sentiment and were actively misleading, so the scale is the number and
+# nothing else.
 MAX_RATING = 8
-RATING_LABELS = {
-    0: "Sin rango", 1: "Muy bajo", 2: "Bajo", 3: "Correcto", 4: "Buena",
-    5: "Muy buena", 6: "Excelente", 7: "Joya", 8: "Obra maestra",
-}
-RATING_TOP_TIER = 7      # "Top Tier" quick filter
-RATING_FAVOURITE = 5     # "Favoritas" quick filter
+RATING_LABELS = {n: ("—" if n == 0 else f"★ {n}") for n in range(MAX_RATING + 1)}
 
 CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"]
 CONDITION_LABELS = {

@@ -20,8 +20,7 @@ def healthz():
 def meta():
     """Vocabularies the UI needs, so the front end never hardcodes them."""
     from ..config import (CONDITIONS, CONDITION_LABELS, LANGUAGES, LANGUAGE_LABELS,
-                          RATING_FAVOURITE, RATING_LABELS, RATING_TOP_TIER,
-                          VARIANTS, VARIANT_LABELS)
+                          RATING_LABELS, VARIANTS, VARIANT_LABELS)
     r = repo()
     return jsonify({
         "conditions": [{"key": k, "label": CONDITION_LABELS[k]} for k in CONDITIONS],
@@ -30,8 +29,6 @@ def meta():
         "rarities": r.rarities(),
         "ratings": [{"value": v, "label": lbl} for v, lbl in
                     sorted(RATING_LABELS.items())],
-        "rating_top_tier": RATING_TOP_TIER,
-        "rating_favourite": RATING_FAVOURITE,
         "official_sets": r.list_official_sets(),
         "last_price_refresh": r.get_meta("last_price_refresh"),
     })
