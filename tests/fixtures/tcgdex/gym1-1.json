@@ -1,0 +1,160 @@
+{
+  "category": "Pokemon",
+  "id": "gym1-1",
+  "illustrator": "Ken Sugimori",
+  "image": "https://assets.tcgdex.net/en/gym/gym1/1",
+  "localId": "1",
+  "name": "Blaine's Moltres",
+  "rarity": "Holo Rare",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 132
+    },
+    "id": "gym1",
+    "logo": "https://assets.tcgdex.net/en/gym/gym1/logo",
+    "name": "Gym Heroes",
+    "symbol": "https://assets.tcgdex.net/univ/gym/gym1/symbol"
+  },
+  "variants": {
+    "firstEdition": true,
+    "holo": true,
+    "normal": false,
+    "reverse": false,
+    "wPromo": false
+  },
+  "variants_detailed": [
+    {
+      "type": "holo",
+      "size": "standard",
+      "variantId": "jr7oetx1mqug9",
+      "pricing": {
+        "cardmarket": null,
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.832Z",
+          "1st-edition-holofoil": {
+            "productId": 83875,
+            "lowPrice": 350,
+            "midPrice": 999.99,
+            "highPrice": 1539.99,
+            "marketPrice": 189.99,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83875,
+            "lowPrice": 86.71,
+            "midPrice": 146.98,
+            "highPrice": 879.32,
+            "marketPrice": 136.7,
+            "directLowPrice": 879.32
+          }
+        }
+      }
+    },
+    {
+      "type": "holo",
+      "size": "standard",
+      "stamp": [
+        "1st-edition"
+      ],
+      "variantId": "3a83wf50ts0izj268xwv3crwi",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T15:00:47.050Z",
+          "unit": "EUR",
+          "idProduct": 274137,
+          "avg": 117.91,
+          "low": 15,
+          "trend": 129.59,
+          "avg1": 390,
+          "avg7": 140.14,
+          "avg30": 99.72,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 39.55,
+          "avg1-holo": 29.99,
+          "avg7-holo": 46.31,
+          "avg30-holo": 39.25
+        },
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.832Z",
+          "1st-edition-holofoil": {
+            "productId": 83875,
+            "lowPrice": 350,
+            "midPrice": 999.99,
+            "highPrice": 1539.99,
+            "marketPrice": 189.99,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83875,
+            "lowPrice": 86.71,
+            "midPrice": 146.98,
+            "highPrice": 879.32,
+            "marketPrice": 136.7,
+            "directLowPrice": 879.32
+          }
+        }
+      }
+    }
+  ],
+  "dexId": [
+    146
+  ],
+  "hp": 90,
+  "types": [
+    "Fire"
+  ],
+  "stage": "Basic",
+  "attacks": [
+    {
+      "cost": [
+        "Fire",
+        "Fire",
+        "Fire",
+        "Fire",
+        "Fire"
+      ],
+      "name": "Phoenix Flame",
+      "effect": "Flip a coin. If tails, shuffle Blaine's Moltres and all cards attached to it into your deck (after doing damage).",
+      "damage": 90
+    }
+  ],
+  "resistances": [
+    {
+      "type": "Fighting",
+      "value": "-30"
+    }
+  ],
+  "retreat": 3,
+  "legal": {
+    "standard": false,
+    "expanded": false
+  },
+  "updated": "2026-07-25T23:48:29+01:00",
+  "pricing": {
+    "cardmarket": null,
+    "tcgplayer": {
+      "unit": "USD",
+      "updated": "2026-08-26T15:00:46.832Z",
+      "1st-edition-holofoil": {
+        "productId": 83875,
+        "lowPrice": 350,
+        "midPrice": 999.99,
+        "highPrice": 1539.99,
+        "marketPrice": 189.99,
+        "directLowPrice": null
+      },
+      "unlimited-holofoil": {
+        "productId": 83875,
+        "lowPrice": 86.71,
+        "midPrice": 146.98,
+        "highPrice": 879.32,
+        "marketPrice": 136.7,
+        "directLowPrice": 879.32
+      }
+    }
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "category": "Pokemon",
+  "id": "gym2-1",
+  "illustrator": "Ken Sugimori",
+  "image": "https://assets.tcgdex.net/en/gym/gym2/1",
+  "localId": "1",
+  "name": "Blaine's Arcanine",
+  "rarity": "Holo Rare",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 132
+    },
+    "id": "gym2",
+    "logo": "https://assets.tcgdex.net/en/gym/gym2/logo",
+    "name": "Gym Challenge",
+    "symbol": "https://assets.tcgdex.net/univ/gym/gym2/symbol"
+  },
+  "variants": {
+    "firstEdition": true,
+    "holo": true,
+    "normal": false,
+    "reverse": false,
+    "wPromo": false
+  },
+  "variants_detailed": [
+    {
+      "type": "holo",
+      "size": "standard",
+      "variantId": "jr7oetx1mqug9",
+      "pricing": {
+        "cardmarket": null,
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.840Z",
+          "1st-edition-holofoil": {
+            "productId": 83860,
+            "lowPrice": 399.99,
+            "midPrice": 1386.04,
+            "highPrice": 2372.09,
+            "marketPrice": 364.86,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83860,
+            "lowPrice": 70,
+            "midPrice": 100,
+            "highPrice": 1044.9,
+            "marketPrice": 99.38,
+            "directLowPrice": null
+          }
+        }
+      }
+    },
+    {
+      "type": "holo",
+      "size": "standard",
+      "stamp": [
+        "1st-edition"
+      ],
+      "variantId": "3a83wf50ts0izj268xwv3crwi",
+      "pricing": {
+        "cardmarket": {
+          "updated": "2026-08-26T15:00:47.207Z",
+          "unit": "EUR",
+          "idProduct": 274269,
+          "avg": 73.19,
+          "low": 18.95,
+          "trend": 77.65,
+          "avg1": 120,
+          "avg7": 85.39,
+          "avg30": 66.67,
+          "avg-holo": null,
+          "low-holo": null,
+          "trend-holo": 20.65,
+          "avg1-holo": 27.5,
+          "avg7-holo": 18.59,
+          "avg30-holo": 33.79
+        },
+        "tcgplayer": {
+          "unit": "USD",
+          "updated": "2026-08-26T15:00:46.840Z",
+          "1st-edition-holofoil": {
+            "productId": 83860,
+            "lowPrice": 399.99,
+            "midPrice": 1386.04,
+            "highPrice": 2372.09,
+            "marketPrice": 364.86,
+            "directLowPrice": null
+          },
+          "unlimited-holofoil": {
+            "productId": 83860,
+            "lowPrice": 70,
+            "midPrice": 100,
+            "highPrice": 1044.9,
+            "marketPrice": 99.38,
+            "directLowPrice": null
+          }
+        }
+      }
+    }
+  ],
+  "dexId": [
+    59
+  ],
+  "hp": 90,
+  "types": [
+    "Fire"
+  ],
+  "evolveFrom": "Growlithe",
+  "stage": "Stage1",
+  "attacks": [
+    {
+      "cost": [
+        "Fire",
+        "Colorless",
+        "Colorless"
+      ],
+      "name": "Heat Tackle",
+      "effect": "Blaine's Arcanine does 10 damage to itself.",
+      "damage": 40
+    },
+    {
+      "cost": [
+        "Fire",
+        "Fire",
+        "Fire",
+        "Fire"
+      ],
+      "name": "Firestorm",
+      "effect": "Discard 3 Fire Energy cards attached to Blaine's Arcanine in order to use this attack.",
+      "damage": 120
+    }
+  ],
+  "weaknesses": [
+    {
+      "type": "Water",
+      "value": "x2"
+    }
+  ],
+  "retreat": 3,
+  "legal": {
+    "standard": false,
+    "expanded": false
+  },
+  "updated": "2026-07-25T23:39:59+01:00",
+  "pricing": {
+    "cardmarket": null,
+    "tcgplayer": {
+      "unit": "USD",
+      "updated": "2026-08-26T15:00:46.840Z",
+      "1st-edition-holofoil": {
+        "productId": 83860,
+        "lowPrice": 399.99,
+        "midPrice": 1386.04,
+        "highPrice": 2372.09,
+        "marketPrice": 364.86,
+        "directLowPrice": null
+      },
+      "unlimited-holofoil": {
+        "productId": 83860,
+        "lowPrice": 70,
+        "midPrice": 100,
+        "highPrice": 1044.9,
+        "marketPrice": 99.38,
+        "directLowPrice": null
+      }
+    }
+  }
+}
