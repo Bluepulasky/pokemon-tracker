@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, jsonify, request
 
 from . import cfg, page_response, paginate_args, repo, svc
@@ -57,7 +59,21 @@ def get_card(card_id):
     card["market_url"] = market_url(card, locale=cfg().CARDMARKET_LOCALE)
     # Empty when the card has no sibling printings, so the UI can skip the
     # edition selector rather than showing a one-option dropdown.
-    card["available_printings"] = repo().printings_for_card(card_id)
+    printings = repo().printings_for_card(card_id)
+    # Parse the variant list so the client does not have to, and fall back to the
+    # era rules for a card that has no printing row of its own.
+    for pr in printings:
+        pr["variants"] = json.loads(pr.get("variants_json") or "[]")
+    if not printings:
+        from ..services.printing_variants import variants_for
+        printings = [{
+            "id": None, "card_id": card_id,
+            "official_set_id": card["official_set_id"],
+            "display_name": card.get("set_name"), "is_reprint": 0,
+            "variants": variants_for(card["official_set_id"], card.get("rarity")),
+            "source": "single",
+        }]
+    card["available_printings"] = printings
     card["rating"] = repo().get_card_rating(card_id)
     return jsonify(card)
 

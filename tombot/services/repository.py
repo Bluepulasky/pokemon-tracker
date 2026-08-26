@@ -17,6 +17,8 @@ from typing import Any, Iterable, Sequence
 
 log = logging.getLogger(__name__)
 
+from .printing_variants import variants_for
+
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 SCHEMA_VERSION = "1"
 
@@ -130,6 +132,8 @@ class PokemonRepo:
         # schema.sql; upgraded ones keep the column without it.
         ("collection_items", "printing_id",
          "ALTER TABLE collection_items ADD COLUMN printing_id INTEGER"),
+        ("card_printings", "variants_json",
+         "ALTER TABLE card_printings ADD COLUMN variants_json TEXT"),
     )
 
     def _apply_migrations(self, conn) -> list[str]:
@@ -440,8 +444,8 @@ class PokemonRepo:
             for key, ids in groups.items():
                 source = "slot" if key in user_defined else "auto"
                 ordered = c.execute(
-                    f"""SELECT c.id, c.official_set_id, c.name, os.name AS set_name,
-                               os.release_date
+                    f"""SELECT c.id, c.official_set_id, c.name, c.rarity,
+                               os.name AS set_name, os.release_date
                         FROM cards c JOIN official_sets os ON os.id = c.official_set_id
                         WHERE c.id IN ({",".join("?" * len(ids))})
                         ORDER BY os.release_date, c.id""",
@@ -451,13 +455,15 @@ class PokemonRepo:
                     continue
                 group_key = ordered[0]["id"]      # earliest printing names the group
                 for i, r in enumerate(ordered):
+                    variants = variants_for(r["official_set_id"], r["rarity"],
+                                            r["release_date"])
                     c.execute(
                         """INSERT OR IGNORE INTO card_printings
                              (print_group, card_id, official_set_id, is_reprint,
-                              display_name, source)
-                           VALUES (?,?,?,?,?,?)""",
+                              display_name, variants_json, source)
+                           VALUES (?,?,?,?,?,?,?)""",
                         (group_key, r["id"], r["official_set_id"], 1 if i else 0,
-                         r["set_name"], source),
+                         r["set_name"], json.dumps(variants), source),
                     )
                     written += 1
             return {"groups": len(groups), "printings": written}
