@@ -6,7 +6,10 @@
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: "${APP_VERSION:-unknown}"
     image: tombot-tracker:latest
     container_name: tombot-tracker
     restart: unless-stopped

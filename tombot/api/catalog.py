@@ -12,8 +12,10 @@ bp = Blueprint("catalog", __name__, url_prefix="/api")
 @bp.get("/healthz")
 def healthz():
     r = repo()
+    from ..version import VERSION
     return jsonify({"ok": True, "cards": r.count_cards(),
-                    "schema_version": r.get_meta("schema_version")})
+                    "schema_version": r.get_meta("schema_version"),
+                    "version": VERSION})
 
 
 @bp.get("/meta")
@@ -34,6 +36,7 @@ def meta():
                     sorted(RATING_LABELS.items())],
         "official_sets": r.list_official_sets(),
         "last_price_refresh": r.get_meta("last_price_refresh"),
+        "version": __import__("tombot.version", fromlist=["VERSION"]).VERSION,
     })
 
 

@@ -27,6 +27,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN chmod +x /srv/scripts/entrypoint.sh
 
+# Which commit this image was built from. .dockerignore excludes .git, so it has
+# to be passed in — `make docker` does that. Without it the app reports
+# "unknown", which is honest rather than wrong.
+ARG APP_VERSION=unknown
+ENV APP_VERSION=$APP_VERSION
+
 # Defaults. Every one is overridable at run time from .env / compose.
 ENV DATA_DIR=/srv/data \
     MEDIA_DIR=/srv/media \

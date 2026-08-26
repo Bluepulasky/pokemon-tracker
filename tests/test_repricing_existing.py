@@ -103,3 +103,38 @@ def test_no_fallback_when_several_ordinary_printings_exist():
     not be made silently."""
     several = ["normal", "reverse:set-logo"]
     assert resolve("holo", several) is None
+
+
+# ------------------------------------------------ build identification
+def test_the_running_build_is_reported(tmp_path, monkeypatch):
+    """Diagnosing a report against a deployed instance means knowing which commit
+    it serves. Without it, "it still shows the old price" is ambiguous between a
+    bug and an image that was never rebuilt — which came up in practice."""
+    from tombot.config import Config
+    from tombot.version import get_version
+
+    monkeypatch.setenv("APP_VERSION", "deadbee")
+    assert get_version() == "deadbee", "a baked-in version wins"
+
+    monkeypatch.setattr(Config, "DB_PATH", tmp_path / "v.db")
+    monkeypatch.setattr(Config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(Config, "MEDIA_DIR", tmp_path / "media")
+    monkeypatch.setattr(Config, "CATALOG_IMG_DIR", tmp_path / "media" / "catalog")
+    monkeypatch.setattr(Config, "COLLECTION_IMG_DIR", tmp_path / "media" / "collection")
+    monkeypatch.setattr(Config, "THUMB_DIR", tmp_path / "media" / "thumbs")
+    PokemonRepo(Config.DB_PATH).init_db(DEFAULT_MODIFIERS)
+
+    from tombot import create_app
+    client = create_app(Config).test_client()
+    assert client.get("/api/healthz").get_json()["version"] == "deadbee"
+    assert client.get("/api/meta").get_json()["version"] == "deadbee"
+
+
+def test_an_unstamped_build_says_so_rather_than_guessing(monkeypatch):
+    """`.dockerignore` excludes .git, so an image built without the build arg has
+    no way to know. Reporting "unknown" is honest; inventing a version is not."""
+    import tombot.version as version
+
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    monkeypatch.setattr(version, "_from_git", lambda: None)
+    assert version.get_version() == "unknown"
