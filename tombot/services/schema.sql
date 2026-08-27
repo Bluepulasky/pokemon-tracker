@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS collection_items (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id    TEXT NOT NULL REFERENCES cards(id) ON DELETE RESTRICT,
     variant    TEXT NOT NULL DEFAULT 'normal',   -- normal|holo|reverse|first_edition|shadowless|other
-    condition  TEXT NOT NULL DEFAULT 'NM',       -- NM|LP|MP|HP|DMG
+    condition  TEXT NOT NULL DEFAULT 'M/NM',     -- see config.CONDITIONS
     language   TEXT NOT NULL DEFAULT 'es',       -- es|en|pt|other
     quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     -- Which catalog printing this physical card is. Nullable: most cards exist

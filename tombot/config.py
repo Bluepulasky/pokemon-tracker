@@ -146,6 +146,15 @@ CONDITION_LABELS = {
 }
 CONDITION_ORDER = {c: i for i, c in enumerate(CONDITIONS)}   # 0 = best
 
+DEFAULT_CONDITION = CONDITIONS[0]
+
+# What the grades used to be called, so rows written under the old names can be
+# carried over. Kept next to CONDITIONS because that is where anyone renaming
+# them will be looking, and the last rename left four places behind.
+RETIRED_CONDITIONS = {
+    "NM": "M/NM", "LP": "EX", "MP": "GD", "HP": "PL", "DMG": "PO",
+}
+
 LANGUAGES = ["es", "en", "pt", "other"]
 LANGUAGE_LABELS = {"es": "Español", "en": "Inglés", "pt": "Portugués", "other": "Otro"}
 

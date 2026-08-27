@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from ..config import DEFAULT_CONDITION
 from . import trust
 from .variant_map import resolve
 
@@ -283,7 +284,8 @@ class PricingService:
         else:
             basis = "exact"
 
-        cond_m = mods.get("condition", {}).get(item.get("condition", "NM"), 1.0)
+        cond_m = mods.get("condition", {}).get(
+            item.get("condition") or DEFAULT_CONDITION, 1.0)
         lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
         # A 1st edition is never priced apart from its unstamped twin by the
         # feed, so the premium is applied here. Editable per variant, because a
