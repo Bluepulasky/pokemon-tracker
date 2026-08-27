@@ -1204,16 +1204,39 @@ class PokemonRepo:
         )
 
     def stale_priced_pairs(self, stale_days: int) -> list[dict]:
-        """Owned (card, variant) pairs whose cached price is missing or too old."""
+        """Owned (card, variant) pairs that need re-pricing.
+
+        Age is not the only reason a price is stale. A row written before prices
+        were resolved per print run has no `variant_key`, and it is wrong no
+        matter how recently it was fetched — it holds one number for every
+        printing of the card. Those rows must be refreshed on the next run or a
+        collection entered before the change keeps its old prices forever, while
+        newly added cards price correctly. That asymmetry is exactly what was
+        reported.
+
+        Manual prices are excluded: they are never refreshed.
+        """
         return self._all(
             """SELECT DISTINCT i.card_id, i.variant FROM collection_items i
                LEFT JOIN price_cache p
                  ON p.card_id = i.card_id AND p.variant = i.variant
-               WHERE p.card_id IS NULL
-                  OR julianday('now') - julianday(p.updated_at) > ?
+                AND p.source <> 'manual'
+               WHERE NOT EXISTS (SELECT 1 FROM price_cache m
+                                  WHERE m.card_id = i.card_id
+                                    AND m.variant = i.variant
+                                    AND m.source = 'manual')
+                 AND (p.card_id IS NULL
+                      OR p.variant_key IS NULL
+                      OR julianday('now') - julianday(p.updated_at) > ?)
                ORDER BY i.card_id""",
             (stale_days,),
         )
+
+    def count_legacy_prices(self) -> int:
+        """Cached prices that predate per-print-run resolution."""
+        return self._scalar(
+            "SELECT COUNT(*) FROM price_cache "
+            "WHERE variant_key IS NULL AND source <> 'manual'") or 0
 
     def get_modifiers(self) -> dict[str, dict[str, float]]:
         out: dict[str, dict[str, float]] = {}

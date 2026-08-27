@@ -53,6 +53,12 @@ button, input, select { font: inherit; color: inherit; }
 .tabs a.active { color: var(--bg); background: var(--accent); font-weight: 600; }
 
 .search-wrap { margin-left: auto; position: relative; }
+/* Present but quiet: needed when diagnosing, ignorable the rest of the time. */
+.build-stamp {
+  font-size: 10px; color: var(--fg-faint); font-family: ui-monospace, monospace;
+  padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px;
+  white-space: nowrap;
+}
 #global-search {
   width: 220px; padding: 8px 12px; background: var(--bg-2);
   border: 1px solid var(--line); border-radius: 999px; outline: none;

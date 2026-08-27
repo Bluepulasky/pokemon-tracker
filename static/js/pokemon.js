@@ -17,10 +17,22 @@ async function boot() {
     return;
   }
   initModal(META, () => render(true));
+  stampVersion();
   wireSearch();
   // A route change must dismiss the modal, or it lingers over the new view.
   window.addEventListener('hashchange', () => { closeModal(); render(); });
   render();
+}
+
+/* Which build is being served. Without it, "it still shows the old price" is
+   ambiguous between a bug and an image that was never rebuilt. */
+function stampVersion() {
+  if (!META.version) return;
+  const el = document.createElement('span');
+  el.className = 'build-stamp';
+  el.textContent = META.version;
+  el.title = 'Build en ejecución';
+  document.querySelector('.topbar')?.appendChild(el);
 }
 
 function route() {

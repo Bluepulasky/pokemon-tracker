@@ -36,8 +36,9 @@ snapshot:        ## Write a collection snapshot
 monthly:         ## prices + snapshot — what cron should call
 	FLASK_APP=app.py .venv/bin/flask monthly
 
-docker:          ## Build and start (app + scheduler)
-	docker compose up -d --build
+docker:          ## Build and start (app + scheduler), stamping the commit
+	APP_VERSION=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+		docker compose up -d --build
 
 docker-app:      ## Start only the web app, no scheduler
 	docker compose up -d --build app
