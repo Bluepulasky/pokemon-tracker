@@ -210,6 +210,36 @@ CREATE TABLE IF NOT EXISTS price_cache (
     PRIMARY KEY (card_id, variant, source)
 );
 
+-- Every price we were quoted, from every provider and every market.
+--
+-- price_cache holds the ONE number a card is valued at. This holds all the
+-- others, because a single number hides the thing that matters: when two
+-- providers quoting the SAME market disagree by 4x, one of them is describing
+-- a different card. Keeping the quotes is what makes that visible instead of
+-- silently averaging into a number that is wrong in a plausible way.
+CREATE TABLE IF NOT EXISTS price_quotes (
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    provider    TEXT NOT NULL,               -- who told us: tcgdex | pokemontcgio
+    market      TEXT NOT NULL,               -- which market: cardmarket | tcgplayer
+    printing    TEXT NOT NULL DEFAULT '',    -- print run, e.g. 'holo:shadowless'
+    currency    TEXT NOT NULL,
+    price       REAL,                        -- the headline number for this quote
+    price_low   REAL,
+    price_mid   REAL,
+    price_high  REAL,
+    price_trend REAL,
+    price_avg30 REAL,
+    product_id  INTEGER,                     -- the market's own product id
+    -- 0 when this quote cannot be trusted, with the reason in distrust_reason.
+    trusted     INTEGER NOT NULL DEFAULT 1,
+    distrust_reason TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (card_id, variant, provider, market, printing)
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_quotes_card ON price_quotes(card_id, variant);
+
 CREATE TABLE IF NOT EXISTS price_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,

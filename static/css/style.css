@@ -410,6 +410,30 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
   .stat .v { font-size: 22px; }
 }
 
+/* ---- price quotes ------------------------------------------------------ */
+/* Every quote we were given, listed rather than averaged. A refused one stays
+   visible: knowing a source is wrong is worth more than quietly dropping it. */
+.quotes-panel { margin-top: .5rem; font-size: .82rem; }
+.quotes-panel > summary { cursor: pointer; color: var(--muted, #6b7280); }
+.quote-list { list-style: none; margin: .4rem 0 0; padding: 0; }
+.quote-list li { padding: .35rem .5rem; border-left: 3px solid var(--ok, #16a34a);
+                 background: rgba(127, 127, 127, .07); margin-bottom: .3rem;
+                 border-radius: 0 4px 4px 0; }
+.quote-list li.untrusted { border-left-color: var(--bad, #dc2626); opacity: .85; }
+.quote-list .head { display: flex; gap: .45rem; align-items: baseline;
+                    flex-wrap: wrap; }
+.quote-list .market { font-weight: 600; }
+.quote-list .provider,
+.quote-list .printing { color: var(--muted, #6b7280); font-size: .92em; }
+.quote-list .amount { margin-left: auto; font-variant-numeric: tabular-nums;
+                      font-weight: 600; }
+.quote-list li.untrusted .amount { text-decoration: line-through; }
+.quote-list .range { display: block; color: var(--muted, #6b7280);
+                     margin-top: .15rem; }
+.quote-list .refused { margin-top: .2rem; color: var(--bad, #dc2626);
+                       font-size: .92em; }
+.quotes-note, .quotes-empty { color: var(--muted, #6b7280); font-size: .82rem;
+                              margin-top: .45rem; }
 /* ---- bulk target import ------------------------------------------------ */
 .import-summary { margin-top: .6rem; padding: .45rem .6rem; border-radius: 6px;
                   background: rgba(127, 127, 127, .1); font-size: .9rem; }

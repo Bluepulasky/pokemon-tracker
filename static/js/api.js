@@ -46,6 +46,8 @@ export const api = {
   rebuildDb:    ()            => req('POST', '/api/maintenance/rebuild', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
+  quotes:       (cardId, variant) =>
+                                 req('GET', `/api/prices/${cardId}/quotes` + (variant ? `?variant=${encodeURIComponent(variant)}` : '')),
   importTargets: (file) => {
     const body = new FormData();
     body.append('file', file);

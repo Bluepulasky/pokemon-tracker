@@ -202,5 +202,29 @@ class PokemonTcgIoSource:
                         "currency": "EUR",
                         "updated_at": cm.get("updatedAt"),
                         "prices": cm["prices"],
+                        # The same payload carries a second, genuinely
+                        # independent market. It costs no extra request and is
+                        # the only cross-check we have on a Cardmarket figure.
+                        "tcgplayer": self._tcgplayer(c),
                     }
         return out
+
+    @staticmethod
+    def _tcgplayer(card: dict) -> dict:
+        """TCGplayer prices, per print run, in USD.
+
+        Upstream splits them by printing already — `1stEdition`, `unlimited`,
+        `holofoil` — each with low/mid/high/market.
+        """
+        tp = card.get("tcgplayer") or {}
+        prices = tp.get("prices") or {}
+        return {
+            "url": tp.get("url"),
+            "updated_at": tp.get("updatedAt"),
+            "currency": "USD",
+            "printings": {
+                name: {"low": p.get("low"), "mid": p.get("mid"),
+                       "high": p.get("high"), "market": p.get("market")}
+                for name, p in prices.items() if isinstance(p, dict)
+            },
+        }

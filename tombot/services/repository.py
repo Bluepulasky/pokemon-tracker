@@ -1189,6 +1189,41 @@ class PokemonRepo:
     def get_prices_for_card(self, card_id: str) -> list[dict]:
         return self._all("SELECT * FROM price_cache WHERE card_id=?", (card_id,))
 
+    # ---------------------------------------------------------------- quotes
+    def upsert_quote(self, card_id: str, variant: str, provider: str, market: str,
+                     printing: str, currency: str, price, low=None, mid=None,
+                     high=None, trend=None, avg30=None, product_id=None,
+                     trusted: bool = True, distrust_reason: str | None = None) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO price_quotes(card_id, variant, provider, market,
+                       printing, currency, price, price_low, price_mid, price_high,
+                       price_trend, price_avg30, product_id, trusted,
+                       distrust_reason, updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+                   ON CONFLICT(card_id, variant, provider, market, printing)
+                   DO UPDATE SET currency=excluded.currency, price=excluded.price,
+                       price_low=excluded.price_low, price_mid=excluded.price_mid,
+                       price_high=excluded.price_high, price_trend=excluded.price_trend,
+                       price_avg30=excluded.price_avg30, product_id=excluded.product_id,
+                       trusted=excluded.trusted,
+                       distrust_reason=excluded.distrust_reason,
+                       updated_at=datetime('now')""",
+                (card_id, variant, provider, market, printing or "", currency, price,
+                 low, mid, high, trend, avg30, product_id,
+                 1 if trusted else 0, distrust_reason),
+            )
+
+    def quotes_for_card(self, card_id: str, variant: str | None = None) -> list[dict]:
+        """Every quote we hold, worst-trusted last so the UI can lead with the good ones."""
+        sql = "SELECT * FROM price_quotes WHERE card_id=?"
+        params: list = [card_id]
+        if variant is not None:
+            sql += " AND variant=?"
+            params.append(variant)
+        return self._all(sql + " ORDER BY trusted DESC, market, provider, printing",
+                         tuple(params))
+
     def get_price(self, card_id: str, variant: str,
                   source: str | None = None) -> dict | None:
         """Price for this printing. A manual entry always wins over the feed."""
