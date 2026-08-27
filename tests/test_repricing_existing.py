@@ -136,6 +136,59 @@ def test_an_unstamped_build_says_so_rather_than_guessing(monkeypatch):
     import tombot.version as version
 
     monkeypatch.delenv("APP_VERSION", raising=False)
-    monkeypatch.setattr(version, "_from_git", lambda: None)
     monkeypatch.setattr(version, "_git_cache", ...)
+    monkeypatch.setattr(version, "_from_git", lambda: None)
+    monkeypatch.setattr(version, "_from_git_files", lambda: None)
     assert version.get_version() == "unknown"
+
+
+def test_the_commit_is_readable_without_the_git_binary(monkeypatch):
+    """The container has no git installed, so the stamp has to come from the
+    metadata files. Without this a plain `docker compose build` produced an image
+    reporting "unknown" — honest, but indistinguishable from one that was never
+    rebuilt, which is exactly what the stamp exists to tell apart."""
+    import tombot.version as version
+
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    sha = version._from_git_files()
+    assert sha and len(sha) == 7 and all(c in "0123456789abcdef" for c in sha)
+
+
+def test_the_binary_is_preferred_when_available(monkeypatch):
+    """Only the binary can report a dirty tree, which matters when developing."""
+    import tombot.version as version
+
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    monkeypatch.setattr(version, "_git_cache", ...)
+    monkeypatch.setattr(version, "_from_git", lambda: "aaaaaaa+dirty")
+    monkeypatch.setattr(version, "_from_git_files", lambda: "bbbbbbb")
+    assert version.get_version() == "aaaaaaa+dirty"
+
+
+def test_files_are_used_when_the_binary_is_absent(monkeypatch):
+    import tombot.version as version
+
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    monkeypatch.setattr(version, "_git_cache", ...)
+    monkeypatch.setattr(version, "_from_git", lambda: None)
+    monkeypatch.setattr(version, "_from_git_files", lambda: "bbbbbbb")
+    assert version.get_version() == "bbbbbbb"
+
+
+def test_a_placeholder_version_does_not_shadow_the_real_one(monkeypatch):
+    """The Dockerfile defaulted the build argument to the literal "unknown",
+    which is truthy, so it won the lookup and the mounted .git was never
+    consulted. The container then reported "unknown" while sitting on the
+    metadata that would have answered."""
+    import tombot.version as version
+
+    monkeypatch.setattr(version, "_git_cache", ...)
+    monkeypatch.setattr(version, "_from_git", lambda: None)
+    monkeypatch.setattr(version, "_from_git_files", lambda: "051ba3f")
+
+    for placeholder in ("unknown", "", "   "):
+        monkeypatch.setenv("APP_VERSION", placeholder)
+        assert version.get_version() == "051ba3f", placeholder
+
+    monkeypatch.setenv("APP_VERSION", "deadbee")
+    assert version.get_version() == "deadbee", "a real value still wins"

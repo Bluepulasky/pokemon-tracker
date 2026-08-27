@@ -23,6 +23,13 @@ services:
     volumes:
       - ${DATA_PATH:-./data}:/srv/data
       - ${MEDIA_PATH:-./media}:/srv/media
+      # Read-only, and only so the app can report which commit it serves.
+      # Mounting beats baking it in: it works with a plain `docker compose build`
+      # rather than only with the make target that passes a build argument, and
+      # an image reporting "unknown" cannot be told apart from one that was never
+      # rebuilt. Harmless if the deployment is not a checkout — it reads
+      # "unknown" again, which is the honest answer.
+      - ./.git:/srv/.git:ro
 
     environment:
       PORT: "8080"

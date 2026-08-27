@@ -13,6 +13,10 @@ data/
 media/
 !media/**/.gitkeep
 
+# .git stays out of the image. The commit is identified two other ways: a build
+# argument, or a read-only mount of .git at run time — see docker-compose.yml.
+# Re-including files from an excluded directory here is unreliable across Docker
+# versions, and it failed silently when tried.
 .git/
 .gitignore
 dist/

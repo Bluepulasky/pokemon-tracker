@@ -18,6 +18,40 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 
 
+def _from_git_files() -> str | None:
+    """Read the commit straight out of .git, without needing the git binary.
+
+    The container has no git installed, and shelling out would not help anyway.
+    Reading the files works wherever the metadata is present, which is what makes
+    the stamp appear without anyone remembering to pass a build argument.
+    """
+    head = _ROOT / ".git" / "HEAD"
+    if not head.exists():
+        return None
+    try:
+        ref = head.read_text().strip()
+        if not ref.startswith("ref: "):
+            return ref[:7]                      # detached HEAD holds the sha itself
+        name = ref[5:]
+
+        loose = _ROOT / ".git" / name
+        if loose.exists():
+            return loose.read_text().strip()[:7]
+
+        # A repository that has been packed keeps its refs in one file instead.
+        packed = _ROOT / ".git" / "packed-refs"
+        if packed.exists():
+            for line in packed.read_text().splitlines():
+                if line.startswith("#") or " " not in line:
+                    continue
+                sha, _, refname = line.partition(" ")
+                if refname.strip() == name:
+                    return sha[:7]
+    except OSError:
+        return None
+    return None
+
+
 def _from_git() -> str | None:
     if not (_ROOT / ".git").exists():
         return None
@@ -49,9 +83,14 @@ def get_version() -> str:
     lookup is cached because it shells out; the environment read is free.
     """
     global _git_cache
-    baked = os.environ.get("APP_VERSION")
-    if baked:
+    # "unknown" is a placeholder, not a version. Accepting it would shadow the
+    # mounted .git and report nothing useful -- which is exactly what happened
+    # when the Dockerfile defaulted the build argument to that string.
+    baked = (os.environ.get("APP_VERSION") or "").strip()
+    if baked and baked != "unknown":
         return baked
     if _git_cache is ...:
-        _git_cache = _from_git()
+        # The binary first (it can report a dirty tree), then the files, which
+        # are all the container has.
+        _git_cache = _from_git() or _from_git_files()
     return _git_cache or "unknown"
