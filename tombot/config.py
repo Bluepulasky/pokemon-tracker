@@ -49,6 +49,18 @@ class Config:
     TCGDEX_BASE_URL = os.environ.get("TCGDEX_BASE_URL", "https://api.tcgdex.net/v2")
     TCGDEX_LANG = os.environ.get("TCGDEX_LANG", "en")
     POKEMONTCG_API_KEY = os.environ.get("POKEMONTCG_API_KEY") or None
+
+    # --- tcggo (CardMarket API TCG, via RapidAPI) --------------------------
+    # Metered: the plan bills per request past a daily allowance, so the cap
+    # below is enforced in code and deliberately sits under the real limit.
+    # Raising it costs money, so it is an explicit decision, not a default.
+    TCGGO_API_KEY = os.environ.get("TCGGO_API_KEY") or None
+    TCGGO_BASE_URL = os.environ.get(
+        "TCGGO_BASE_URL", "https://cardmarket-api-tcg.p.rapidapi.com")
+    TCGGO_RAPIDAPI_HOST = os.environ.get(
+        "TCGGO_RAPIDAPI_HOST", "cardmarket-api-tcg.p.rapidapi.com")
+    TCGGO_GAME = os.environ.get("TCGGO_GAME", "pokemon")
+    TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "80"))
     POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine

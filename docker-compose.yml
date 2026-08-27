@@ -38,20 +38,22 @@ services:
       TZ: "${TZ:-Europe/Madrid}"
 
       AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-1}"
-      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-2}"
       WEB_THREADS: "${WEB_THREADS:-4}"
       WEB_TIMEOUT: "${WEB_TIMEOUT:-120}"
 
       APP_TOKEN: "${APP_TOKEN:-}"
       POKEMONTCG_API_KEY: "${POKEMONTCG_API_KEY:-}"
+      # Metered: billed per request past the plan's daily allowance.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-80}"
       CARDMARKET_LOCALE: "${CARDMARKET_LOCALE:-es}"
       PRICE_BASIS: "${PRICE_BASIS:-averageSellPrice}"
       PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"
       MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-25}"
 
   # Monthly price refresh + collection snapshot.
-  # Its own container on purpose: an in-process scheduler inside gunicorn would
-  # fire once per worker, so every price run would happen WEB_CONCURRENCY times.
+  # Its own container on purpose: an in-process scheduler would tie the monthly
+  # run to the web server's lifetime, and a restart mid-refresh would lose it.
   # Turn it off with:  docker compose up -d app
   scheduler:
     build: .
@@ -77,5 +79,9 @@ services:
       SCHEDULER_CRON_DAY: "${SCHEDULER_CRON_DAY:-1}"
       SCHEDULER_CRON_HOUR: "${SCHEDULER_CRON_HOUR:-4}"
       POKEMONTCG_API_KEY: "${POKEMONTCG_API_KEY:-}"
+      # Shares the same daily allowance as the app container: the count lives
+      # in the database, so the two cannot each spend a full cap.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-80}"
       PRICE_BASIS: "${PRICE_BASIS:-averageSellPrice}"
       PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"

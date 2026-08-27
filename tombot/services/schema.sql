@@ -217,6 +217,17 @@ CREATE TABLE IF NOT EXISTS price_cache (
 -- providers quoting the SAME market disagree by 4x, one of them is describing
 -- a different card. Keeping the quotes is what makes that visible instead of
 -- silently averaging into a number that is wrong in a plausible way.
+-- Requests spent against a metered API, per UTC day.
+--
+-- Persisted rather than held in memory: a restart must not hand back a fresh
+-- allowance, because the allowance is what keeps the card from being billed.
+CREATE TABLE IF NOT EXISTS api_budget (
+    provider TEXT NOT NULL,
+    day      TEXT NOT NULL,              -- YYYY-MM-DD, UTC
+    count    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (provider, day)
+);
+
 CREATE TABLE IF NOT EXISTS price_quotes (
     card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
     variant     TEXT NOT NULL DEFAULT 'normal',

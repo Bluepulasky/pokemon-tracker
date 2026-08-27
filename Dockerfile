@@ -39,7 +39,6 @@ ENV APP_VERSION=$APP_VERSION
 ENV DATA_DIR=/srv/data \
     MEDIA_DIR=/srv/media \
     PORT=8080 \
-    WEB_CONCURRENCY=2 \
     WEB_THREADS=4 \
     WEB_TIMEOUT=120 \
     PUID=1000 \
