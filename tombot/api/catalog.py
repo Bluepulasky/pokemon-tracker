@@ -1,6 +1,6 @@
 import json
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from . import cfg, page_response, paginate_args, repo, svc
 from .. import ApiError
@@ -236,7 +236,29 @@ def import_targets():
 
 @bp.get("/maintenance/status")
 def maintenance_status():
-    return jsonify(svc("jobs").status())
+    """Job state, plus what is left of the metered allowance.
+
+    Shown because the number is otherwise invisible until a run stops halfway:
+    knowing 62 of 80 remain is what lets someone decide whether to press the
+    button now or tomorrow.
+    """
+    return jsonify({**svc("jobs").status(), "budgets": _budget_status()})
+
+
+def _budget_status() -> list[dict]:
+    budgets = current_app.extensions.get("budgets") or {}
+    out = []
+    for name, budget in budgets.items():
+        if not budget.limit:
+            continue                    # not configured, nothing to report
+        out.append({
+            "provider": name,
+            "used": budget.used(),
+            "limit": budget.limit,
+            "remaining": budget.remaining(),
+            "window_hours": 24,
+        })
+    return out
 
 
 @bp.post("/catalog/import")

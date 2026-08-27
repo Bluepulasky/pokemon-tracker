@@ -324,7 +324,7 @@ Put the key in `.env` in the same folder as `docker-compose.yml`:
 
 ```ini
 TCGGO_API_KEY=your-key-here
-TCGGO_DAILY_LIMIT=80
+TCGGO_DAILY_LIMIT=40
 ```
 
 `.env` is gitignored, so the key stays on your machine. Never put it in
@@ -339,7 +339,7 @@ docker compose up -d          # picks up .env automatically
 **`TCGGO_DAILY_LIMIT` is a hard stop, not a suggestion.** The app counts every
 request in its own database and refuses to send one past the limit. Keep it
 *below* the number your plan actually allows: the gap absorbs retries and the
-day boundary. The default of 80 assumes a plan of 100.
+day boundary. The default of 40 sits well under a plan of 100. A monthly refresh of a 200-card collection costs about ten requests, so the ceiling is not the thing that will limit you.
 
 Some details worth knowing before you change it:
 
@@ -349,7 +349,10 @@ Some details worth knowing before you change it:
 * A request is counted *before* it is sent. If something dies mid-request the
   slot is still spent — wasting a request is better than being billed for one.
 * Setting `TCGGO_DAILY_LIMIT=0` blocks the source entirely.
-* The allowance resets at 00:00 UTC.
+* The allowance is a **rolling 24 hours**, not a calendar day. RapidAPI reports
+  usage as "Aug 27 - Aug 28", anchored to the subscription rather than to
+  midnight, so a per-day counter would allow the cap twice across that
+  boundary. Mantenimiento shows what is left.
 
 To check what is left, or to test the key without touching the app:
 
