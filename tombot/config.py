@@ -87,10 +87,10 @@ class Config:
 MAX_RATING = 8
 RATING_LABELS = {n: ("—" if n == 0 else f"★ {n}") for n in range(MAX_RATING + 1)}
 
-CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"]
+CONDITIONS = ["M/NM", "EX", "GD", "PL", "PO"]
 CONDITION_LABELS = {
-    "NM": "Near Mint", "LP": "Lightly Played", "MP": "Moderately Played",
-    "HP": "Heavily Played", "DMG": "Damaged",
+    "M/NM": "Mint/Near Mint", "EX": "Excellent", "GD": "Good",
+    "PL": "Played", "PO": "Poor",
 }
 CONDITION_ORDER = {c: i for i, c in enumerate(CONDITIONS)}   # 0 = best
 
@@ -104,8 +104,8 @@ VARIANT_LABELS = {
 }
 
 DEFAULT_MODIFIERS = [
-    ("condition", "NM", 1.00), ("condition", "LP", 0.85), ("condition", "MP", 0.70),
-    ("condition", "HP", 0.50), ("condition", "DMG", 0.35),
+    ("condition", "M/NM", 1.00), ("condition", "EX", 0.85), ("condition", "GD", 0.70),
+    ("condition", "PL", 0.50), ("condition", "PO", 0.35),
     ("language", "en", 1.00), ("language", "es", 1.00),
     ("language", "pt", 0.85), ("language", "other", 1.00),
     # The feed never prices a 1st edition apart from its unstamped twin, so
