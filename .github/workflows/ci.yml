@@ -128,5 +128,18 @@ jobs:
           # A booting container returns 200 long before the schema exists, so
           # assert on the payload rather than the status code.
           grep -q '"ok": *true' /tmp/health.json
+
+          # The image must be able to say which commit it is. A deployment that
+          # reports "unknown" cannot be told apart from one that was never
+          # rebuilt, which is the whole reason the stamp exists — and it is what
+          # a plain `docker compose build` produced before .git metadata was let
+          # into the context.
+          python - <<'PY'
+          import json, sys
+          v = json.load(open("/tmp/health.json")).get("version")
+          print(f"reported version: {v}")
+          if not v or v == "unknown":
+              sys.exit("image cannot identify its own commit")
+          PY
           docker logs tombot-ci-run
           docker rm -f tombot-ci-run

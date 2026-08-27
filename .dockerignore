@@ -13,7 +13,14 @@ data/
 media/
 !media/**/.gitkeep
 
-.git/
+# .git is excluded except the few files that identify the commit. Without them
+# an image built with a plain `docker compose build` reports its version as
+# "unknown", which is honest but useless — and that is the command people
+# actually run. These three add a couple of KB.
+.git/*
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 .gitignore
 dist/
 .env
