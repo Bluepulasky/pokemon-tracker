@@ -42,4 +42,12 @@ export const api = {
   deletePhoto: (id)           => req('DELETE', `/api/collection/photos/${id}`),
   setPrimary:  (id)           => req('PUT', `/api/collection/photos/${id}`, { is_primary: true }),
   refreshPrices: ()           => req('POST', '/api/prices/refresh', {}),
+  refreshAsync: ()            => req('POST', '/api/prices/refresh-async', {}),
+  rebuildDb:    ()            => req('POST', '/api/maintenance/rebuild', {}),
+  jobStatus:    ()            => req('GET', '/api/maintenance/status'),
+  modifiers:    ()            => req('GET', '/api/prices/modifiers'),
+  setModifier:  (kind, key, multiplier) =>
+                                 req('PUT', `/api/prices/modifiers/${kind}/${key}`, { multiplier }),
+  setManualPrice: (cardId, variant, price) =>
+                                 req('PUT', `/api/prices/manual/${cardId}/${variant}`, { price }),
 };

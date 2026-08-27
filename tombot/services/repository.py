@@ -1238,6 +1238,14 @@ class PokemonRepo:
             "SELECT COUNT(*) FROM price_cache "
             "WHERE variant_key IS NULL AND source <> 'manual'") or 0
 
+    def set_modifier(self, kind: str, key: str, multiplier: float) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?) "
+                "ON CONFLICT(kind, key) DO UPDATE SET multiplier=excluded.multiplier",
+                (kind, key, float(multiplier)),
+            )
+
     def get_modifiers(self) -> dict[str, dict[str, float]]:
         out: dict[str, dict[str, float]] = {}
         for r in self._all("SELECT * FROM price_modifiers"):

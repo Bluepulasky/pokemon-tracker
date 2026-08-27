@@ -10,6 +10,7 @@ from .services.repository import PokemonRepo
 from .services.sources import get_source
 from .services.pricing import PricingService
 from .services.importer import CatalogImporter
+from .services.jobs import JobRunner
 from .services.setbuilder import SetBuilder
 
 
@@ -41,6 +42,7 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.extensions["pricing"] = PricingService(repo, price_source, config)
     app.extensions["importer"] = CatalogImporter(repo, source, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
+    app.extensions["jobs"] = JobRunner()
 
     # --- optional shared secret (PLAN.md §2.7) -----------------------------
     @app.before_request

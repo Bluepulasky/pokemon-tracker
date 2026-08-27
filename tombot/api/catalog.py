@@ -149,6 +149,30 @@ def search():
                     "collection": items})
 
 
+@bp.post("/maintenance/rebuild")
+def rebuild_database():
+    """The web equivalent of `flask bootstrap`.
+
+    Same code path as the CLI: schema, any incomplete sets, personal sets,
+    printings. Idempotent, so pressing it twice is harmless.
+    """
+    from flask import current_app
+
+    def work():
+        runner = current_app._get_current_object()
+        with runner.app_context():
+            from ..cli import run_bootstrap
+            return run_bootstrap()
+
+    started, state = svc("jobs").start("rebuild", work)
+    return jsonify({"started": started, **state}), (202 if started else 409)
+
+
+@bp.get("/maintenance/status")
+def maintenance_status():
+    return jsonify(svc("jobs").status())
+
+
 @bp.post("/catalog/import")
 def import_catalog():
     """Long-running: kept as an explicit POST, not something a page load triggers."""
