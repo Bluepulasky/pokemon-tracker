@@ -46,6 +46,8 @@ export const api = {
   rebuildDb:    ()            => req('POST', '/api/maintenance/rebuild', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
+  quotes:       (cardId, variant) =>
+                                 req('GET', `/api/prices/${cardId}/quotes` + (variant ? `?variant=${encodeURIComponent(variant)}` : '')),
   setModifier:  (kind, key, multiplier) =>
                                  req('PUT', `/api/prices/modifiers/${kind}/${key}`, { multiplier }),
   setManualPrice: (cardId, variant, price) =>

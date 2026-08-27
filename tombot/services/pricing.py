@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from . import trust
 from .variant_map import resolve
 
 log = logging.getLogger(__name__)
@@ -25,11 +26,20 @@ VARIANT_PRICE_FIELDS = {
 DEFAULT_FIELDS = ["averageSellPrice", "trendPrice", "avg30", "lowPrice"]
 
 
+def _provider_name(source) -> str:
+    """Short label for whoever supplied a quote."""
+    return getattr(source, "name", None) or source.__class__.__name__.lower()
+
+
 class PricingService:
-    def __init__(self, repo, source, config):
+    def __init__(self, repo, source, config, crosscheck=None):
         self.repo = repo
         self.source = source
         self.config = config
+        # Optional second provider quoting the same market. Used to price a card
+        # whose primary quote had to be refused, and recorded either way so the
+        # UI can show what each provider said.
+        self.crosscheck = crosscheck
 
     # ----------------------------------------------------------------- fetch
     def refresh(self, stale_days: int | None = None, all_cards: bool = False) -> dict:
@@ -51,8 +61,16 @@ class PricingService:
         card_ids = sorted({p["card_id"] for p in pairs})
         payloads = self.source.fetch_prices(card_ids)
 
+        # Quotes from the second provider, for the cross-check and the fallback.
+        alt = {}
+        if self.crosscheck is not None:
+            try:
+                alt = self.crosscheck.fetch_prices(card_ids) or {}
+            except Exception:                                # noqa: BLE001
+                log.warning("cross-check provider unavailable", exc_info=True)
+
         today = date.today().isoformat()
-        updated = unpriced = manual_kept = 0
+        updated = unpriced = manual_kept = refused = recovered = 0
         for pair in pairs:
             card_id, variant = pair["card_id"], pair["variant"]
 
@@ -65,8 +83,42 @@ class PricingService:
             key = resolve(variant, [v["key"] for v in variants])
             chosen = next((v for v in variants if v["key"] == key), None)
 
-            if not chosen or chosen["price"] is None:
-                unpriced += 1
+            # Always record what the second provider says, even when the primary
+            # is fine. That is what makes a disagreement visible later, and it
+            # is the difference between showing one number and showing the
+            # evidence behind it.
+            fallback = self._crosscheck_price(card_id, variant, alt.get(card_id))
+
+            reason = None
+            if chosen:
+                reason = trust.distrust_reason(chosen["market_product_id"], card_id)
+                self.repo.upsert_quote(
+                    card_id, variant, provider=_provider_name(self.source), market="cardmarket",
+                    printing=chosen["key"], currency=chosen["currency"],
+                    price=chosen["price"], product_id=chosen["market_product_id"],
+                    trusted=reason is None, distrust_reason=reason,
+                )
+                if reason:
+                    refused += 1
+                    log.info("refused %s %s: %s", card_id, variant, reason)
+
+            if not chosen or chosen["price"] is None or reason:
+                # Either nothing matched, or what matched belongs to another
+                # card. Fall back to the second provider before giving up.
+                if fallback is None:
+                    unpriced += 1
+                    continue
+                self.repo.upsert_price(
+                    card_id, variant, "cardmarket", fallback["currency"],
+                    fallback["price"], None, None, None, fallback,
+                    variant_key=None, market_product_id=None,
+                )
+                self.repo.append_price_history(
+                    card_id, variant, "cardmarket", fallback["currency"],
+                    fallback["price"], today,
+                )
+                recovered += 1
+                updated += 1
                 continue
 
             self.repo.upsert_price(
@@ -83,7 +135,41 @@ class PricingService:
 
         self.repo.set_meta("last_price_refresh", today)
         return {"checked": len(pairs), "updated": updated,
-                "unpriced": unpriced, "manual_kept": manual_kept}
+                "unpriced": unpriced, "manual_kept": manual_kept,
+                "refused": refused, "recovered": recovered}
+
+    def _crosscheck_price(self, card_id: str, variant: str, alt: dict | None):
+        """Record the second provider's quotes and return a usable Cardmarket one.
+
+        This provider maps one product per card, which is exactly what the
+        primary gets wrong, so it is what a refused card falls back to. Its
+        TCGplayer figures are stored too — a different market in a different
+        currency, kept for display rather than folded into the valuation.
+        """
+        if not alt:
+            return None
+
+        for name, p in ((alt.get("tcgplayer") or {}).get("printings") or {}).items():
+            if p.get("market") or p.get("mid") or p.get("low"):
+                self.repo.upsert_quote(
+                    card_id, variant, provider=_provider_name(self.crosscheck),
+                    market="tcgplayer", printing=name, currency="USD",
+                    price=p.get("market") or p.get("mid"),
+                    low=p.get("low"), mid=p.get("mid"), high=p.get("high"),
+                )
+
+        prices = alt.get("prices") or {}
+        value = self._pick(prices, variant)
+        if value is None:
+            return None
+        self.repo.upsert_quote(
+            card_id, variant, provider=_provider_name(self.crosscheck), market="cardmarket",
+            printing="", currency=alt.get("currency") or "EUR", price=value,
+            low=prices.get("lowPrice"), trend=prices.get("trendPrice"),
+            avg30=prices.get("avg30"),
+        )
+        return {"currency": alt.get("currency") or "EUR", "price": value,
+                "provider": _provider_name(self.crosscheck), "prices": prices}
 
     def _pick(self, prices: dict, variant: str) -> float | None:
         """Price for this variant, or None.

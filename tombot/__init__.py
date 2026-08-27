@@ -39,7 +39,11 @@ def create_app(config: type[Config] = Config) -> Flask:
     # until TCGdex is proven to cover images and set data as well.
     price_source = get_source(getattr(config, "PRICE_SOURCE", config.SOURCE), config)
     app.extensions["price_source"] = price_source
-    app.extensions["pricing"] = PricingService(repo, price_source, config)
+    # The catalog source doubles as the cross-check: it quotes the same
+    # Cardmarket market as the price source, so a large disagreement between
+    # them means one of the two is describing a different card.
+    app.extensions["pricing"] = PricingService(
+        repo, price_source, config, crosscheck=source)
     app.extensions["importer"] = CatalogImporter(repo, source, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
     app.extensions["jobs"] = JobRunner(app)

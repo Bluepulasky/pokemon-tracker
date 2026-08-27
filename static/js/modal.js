@@ -127,6 +127,8 @@ function variantCard(item) {
                 : `${eur(v.unit)} × ${item.quantity}`}</small></div>
     ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
        target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
+    <div class="quotes" data-quotes-for="${esc(item.card_id)}"
+         data-variant="${esc(item.variant || '')}"></div>
     <div class="field manual-price">
       <label>Precio manual</label>
       <input type="number" step="0.01" min="0" placeholder="usar el del feed"
@@ -383,6 +385,15 @@ function wireVariants(root, cardId) {
 
 
 
+    /* Every quote we hold, not one blended number.
+
+       Two providers quoting the same market and disagreeing several times over
+       means one of them has the wrong card. An average would turn that into a
+       believable figure and hide it, so they are listed side by side and a
+       refused quote says who else claims its product. */
+    const qbox = vc.querySelector('.quotes');
+    if (qbox) renderQuotes(qbox, cardId, vc.dataset.variant);
+
     vc.querySelectorAll('[data-photo]').forEach((img) => {
       img.onclick = async () => {
         try { await api.setPrimary(Number(img.dataset.photo)); toast('Foto principal actualizada');
@@ -429,4 +440,63 @@ function editVariant(vc, id, cardId) {
       openCard(cardId);
     } catch (e) { toast(e.message, true); }
   };
+}
+
+
+/* ------------------------------------------------------------------ quotes */
+
+const MARKET_LABEL = { cardmarket: 'Cardmarket', tcgplayer: 'TCGplayer' };
+const PROVIDER_LABEL = { tcgdex: 'TCGdex', pokemontcgio: 'pokemontcg.io' };
+
+function money(value, currency) {
+  if (value === null || value === undefined) return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return currency === 'USD' ? `$${n.toFixed(2)}` : `${n.toFixed(2)} €`;
+}
+
+function quoteRow(q) {
+  const range = [q.price_low, q.price_mid ?? q.price_trend, q.price_high]
+    .some((v) => v !== null && v !== undefined)
+    ? `<small class="range">bajo ${money(q.price_low, q.currency)}
+         · medio ${money(q.price_mid ?? q.price_trend, q.currency)}
+         · alto ${money(q.price_high, q.currency)}</small>`
+    : '';
+  const printing = q.printing ? `<span class="printing">${esc(q.printing)}</span>` : '';
+  const refused = !q.trusted
+    ? `<div class="refused" title="${esc(q.distrust_reason || '')}">
+         no se usa — ${esc(q.distrust_reason || 'fuente poco fiable')}</div>`
+    : '';
+  return `<li class="${q.trusted ? '' : 'untrusted'}">
+      <div class="head">
+        <span class="market">${esc(MARKET_LABEL[q.market] || q.market)}</span>
+        <span class="provider">${esc(PROVIDER_LABEL[q.provider] || q.provider)}</span>
+        ${printing}
+        <span class="amount">${money(q.price, q.currency)}</span>
+      </div>
+      ${range}${refused}
+    </li>`;
+}
+
+async function renderQuotes(box, cardId, variant) {
+  let quotes = [];
+  try {
+    ({ quotes } = await api.quotes(cardId, variant));
+  } catch {
+    return;                       // the panel is extra context, never the point
+  }
+  if (!quotes.length) {
+    box.innerHTML = '<div class="quotes-empty">Sin cotizaciones guardadas todavía.</div>';
+    return;
+  }
+  const eur = quotes.filter((q) => q.currency !== 'USD');
+  const usd = quotes.filter((q) => q.currency === 'USD');
+  box.innerHTML = `
+    <details class="quotes-panel" ${quotes.some((q) => !q.trusted) ? 'open' : ''}>
+      <summary>Cotizaciones (${quotes.length})</summary>
+      ${eur.length ? `<ul class="quote-list">${eur.map(quoteRow).join('')}</ul>` : ''}
+      ${usd.length ? `<div class="quotes-note">Otro mercado, otra moneda —
+           referencia, no entra en el total.</div>
+         <ul class="quote-list">${usd.map(quoteRow).join('')}</ul>` : ''}
+    </details>`;
 }

@@ -11,7 +11,24 @@ bp = Blueprint("prices", __name__, url_prefix="/api/prices")
 def card_prices(card_id):
     if not repo().get_card(card_id):
         raise ApiError("carta no encontrada", "not_found", 404)
-    return jsonify({"card_id": card_id, "prices": repo().get_prices_for_card(card_id)})
+    return jsonify({"card_id": card_id,
+                    "prices": repo().get_prices_for_card(card_id),
+                    "quotes": repo().quotes_for_card(card_id)})
+
+
+@bp.get("/<card_id>/quotes")
+def card_quotes(card_id):
+    """Every quote we hold for this card, from every provider and market.
+
+    Deliberately not reduced to one number: two providers quoting the same
+    market and disagreeing by several times is the signal that one of them has
+    the wrong card, and averaging would bury exactly that.
+    """
+    if not repo().get_card(card_id):
+        raise ApiError("carta no encontrada", "not_found", 404)
+    return jsonify({"card_id": card_id,
+                    "quotes": repo().quotes_for_card(card_id,
+                                                     request.args.get("variant"))})
 
 
 @bp.post("/refresh")
