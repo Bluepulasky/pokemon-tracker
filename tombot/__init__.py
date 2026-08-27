@@ -44,6 +44,17 @@ def create_app(config: type[Config] = Config) -> Flask:
                                       getattr(config, "TCGGO_DAILY_LIMIT", 0))}
     app.extensions["budgets"] = budgets
 
+    # The version picker always talks to tcggo, whatever prices the app is
+    # configured to use: it is the only source that knows what a Cardmarket
+    # product is, and choosing one is what makes a card priceable at all.
+    from .services.httpcache import HttpCache
+    from .services.sources.tcggo import TcggoSource
+    app.extensions["versions_source"] = TcggoSource(
+        config, budget=budgets["tcggo"],
+        cache=HttpCache(getattr(config, "DATA_DIR", ".") / ".cache-tcggo"
+                        if hasattr(getattr(config, "DATA_DIR", None), "__truediv__")
+                        else ".cache/tcggo"))
+
     price_source_name = getattr(config, "PRICE_SOURCE", config.SOURCE)
     price_source = get_source(price_source_name, config,
                               budget=budgets.get(price_source_name))

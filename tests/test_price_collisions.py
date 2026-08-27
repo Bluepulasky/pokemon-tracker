@@ -172,3 +172,79 @@ def test_a_refused_card_with_no_second_opinion_stays_unpriced(tmp_path):
     assert result["refused"] == 1
     assert result["unpriced"] == 1
     assert repo.get_price("base2-19", "normal") is None
+
+
+# ------------------------------------------- pricing from the chosen product
+
+class ProductFixture:
+    """A source that only answers product lookups, like tcggo does."""
+    name = "tcggo"
+
+    def __init__(self, by_id):
+        self.by_id = by_id
+        self.asked = []
+
+    def fetch_by_products(self, ids):
+        self.asked.append(sorted(ids))
+        return {i: self.by_id[i] for i in ids if i in self.by_id}
+
+    def fetch_prices(self, card_ids):
+        raise AssertionError("must not resolve when the product is known")
+
+
+def test_a_row_that_names_its_product_is_priced_by_lookup(tmp_path):
+    """No variant translated, no printing resolved — the two steps that broke."""
+    repo = build(tmp_path, JUNGLE_FLAREON, [])
+    repo.upsert_collection_item({"card_id": "base2-19", "variant": "normal",
+                                 "condition": "NM", "language": "en",
+                                 "market_product_id": 273816})
+
+    source = ProductFixture({273816: {
+        "currency": "EUR", "price": 12.24, "lowest_near_mint": 1.49,
+        "version": "Unlimited",
+    }})
+    svc = PricingService(repo, source, Config, crosscheck=CrosscheckFixture())
+
+    result = svc.refresh(all_cards=True)
+
+    assert result["by_product"] == 1
+    assert source.asked == [[273816]]
+    row = repo.get_price("base2-19", "normal")
+    assert row["price"] == pytest.approx(12.24)
+    assert row["market_product_id"] == 273816
+
+
+def test_products_are_looked_up_in_one_batch(tmp_path):
+    """Twenty per request is the difference between 10 requests and 200."""
+    cards = JUNGLE_FLAREON + [
+        {"id": "base2-1", "official_set_id": "base2", "name": "Clefable", "number": "1"},
+    ]
+    repo = build(tmp_path, cards, [])
+    for card_id, pid in (("base2-19", 273816), ("base2-3", 273800), ("base2-1", 273798)):
+        repo.upsert_collection_item({"card_id": card_id, "variant": "normal",
+                                     "condition": "NM", "language": "en",
+                                     "market_product_id": pid})
+
+    source = ProductFixture({pid: {"currency": "EUR", "price": 10.0,
+                                   "lowest_near_mint": 9.0, "version": "Unlimited"}
+                             for pid in (273816, 273800, 273798)})
+    PricingService(repo, source, Config,
+                   crosscheck=CrosscheckFixture()).refresh(all_cards=True)
+
+    assert len(source.asked) == 1, "one call, not one per card"
+    assert source.asked[0] == [273798, 273800, 273816]
+
+
+def test_rows_without_a_product_still_use_the_old_path(tmp_path):
+    """Cards registered before the picker existed must keep being priced."""
+    repo = build(tmp_path, JUNGLE_FLAREON, [("base2-19", "normal")])
+    alt = CrosscheckFixture({"base2-19": {
+        "source": "cardmarket", "currency": "EUR",
+        "prices": {"averageSellPrice": 10.39},
+    }})
+    svc = PricingService(repo, TcgdexFixture(), Config, crosscheck=alt)
+
+    result = svc.refresh(all_cards=True)
+
+    assert result["by_product"] == 0
+    assert repo.get_price("base2-19", "normal")["price"] == pytest.approx(10.39)

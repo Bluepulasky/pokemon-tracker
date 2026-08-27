@@ -150,7 +150,25 @@ class PokemonRepo:
                 conn.execute(ddl)
                 applied.append(f"{table}.{column}")
         applied += self._migrate_ratings_to_cards(conn)
+        applied += self._migrate_add_market_product(conn)
         return applied
+
+    @staticmethod
+    def _migrate_add_market_product(conn) -> list[str]:
+        """Give existing rows somewhere to record their Cardmarket product.
+
+        Left NULL for rows added before the version picker existed: they keep
+        being priced the old way until someone picks a version for them.
+        """
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
+        if not cols:
+            # Migrations run before schema.sql on a fresh database, so there is
+            # nothing to alter yet — the CREATE TABLE already has the column.
+            return []
+        if "market_product_id" in cols:
+            return []
+        conn.execute("ALTER TABLE collection_items ADD COLUMN market_product_id INTEGER")
+        return ["collection_items.market_product_id"]
 
     @staticmethod
     def _migrate_ratings_to_cards(conn) -> list[str]:
@@ -661,6 +679,7 @@ class PokemonRepo:
             "variant": item.get("variant", "normal"),
             "condition": item.get("condition", "NM"),
             "language": item.get("language", "es"),
+            "market_product_id": item.get("market_product_id"),
             "quantity": int(item.get("quantity", 1)),
             "printing_id": item.get("printing_id"),
             "notes": item.get("notes"),
@@ -670,13 +689,16 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute(
                 f"""INSERT INTO collection_items
-                      (card_id,variant,condition,language,quantity,printing_id,notes)
+                      (card_id,variant,condition,language,quantity,printing_id,
+                       market_product_id,notes)
                     VALUES (:card_id,:variant,:condition,:language,:quantity,
-                            :printing_id,:notes)
+                            :printing_id,:market_product_id,:notes)
                     ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
                       {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
                       printing_id=COALESCE(excluded.printing_id,
                                            collection_items.printing_id),
+                      market_product_id=COALESCE(excluded.market_product_id,
+                                                 collection_items.market_product_id),
                       updated_at=datetime('now')""",
                 payload,
             )
@@ -1043,7 +1065,8 @@ class PokemonRepo:
         """Distinct (card, variant) pairs actually held — the price job's work list.
         Spec §11/§30: one lookup per card/variant, never one per physical copy."""
         return self._all(
-            "SELECT DISTINCT card_id, variant FROM collection_items ORDER BY card_id"
+            """SELECT card_id, variant, MAX(market_product_id) AS market_product_id
+                 FROM collection_items GROUP BY card_id, variant ORDER BY card_id"""
         )
 
     # ---------------------------------------------------------------- photos
@@ -1185,6 +1208,28 @@ class PokemonRepo:
                 (card_id, variant, source, currency, price,
                  captured_on or date.today().isoformat()),
             )
+
+    def get_official_set(self, set_id: str) -> dict | None:
+        return self._one("SELECT * FROM official_sets WHERE id=?", (set_id,))
+
+    # -------------------------------------------------------------- episodes
+    def get_set_episode(self, official_set_id: str) -> dict | None:
+        return self._one("SELECT * FROM set_episodes WHERE official_set_id=?",
+                         (official_set_id,))
+
+    def set_set_episode(self, official_set_id: str, episode_id: int,
+                        name: str | None = None, code: str | None = None) -> None:
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO set_episodes(official_set_id, episode_id,
+                       episode_name, episode_code, updated_at)
+                   VALUES(?,?,?,?,datetime('now'))
+                   ON CONFLICT(official_set_id) DO UPDATE SET
+                     episode_id=excluded.episode_id,
+                     episode_name=excluded.episode_name,
+                     episode_code=excluded.episode_code,
+                     updated_at=datetime('now')""",
+                (official_set_id, episode_id, name, code))
 
     # ---------------------------------------------------------------- budget
     def budget_used(self, provider: str, day: str) -> int:

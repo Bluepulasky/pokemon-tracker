@@ -28,7 +28,6 @@ log = logging.getLogger(__name__)
 class JobRunner:
     def __init__(self, app=None):
         self._app = app
-        self._warn_if_multiprocess()
         self._lock = threading.Lock()
         self._state: dict = {"name": None, "status": "idle", "started_at": None,
                              "finished_at": None, "result": None, "error": None}
@@ -86,24 +85,3 @@ class JobRunner:
             self._app.extensions["repo"].close()
         except Exception:                                # noqa: BLE001
             log.warning("could not close the job connection", exc_info=True)
-
-    @staticmethod
-    def _warn_if_multiprocess() -> None:
-        """Say so if this state is about to be split across processes.
-
-        The status this runner reports, and its one-job-at-a-time rule, live in
-        the memory of whichever process started the job. Run two workers and
-        the other one answers "idle" to half the polls and starts a second job
-        happily — which, with a metered price source, is billable.
-        """
-        import os
-
-        workers = os.environ.get("WEB_CONCURRENCY")
-        try:
-            if workers and int(workers) > 1:
-                log.warning(
-                    "WEB_CONCURRENCY=%s: job status is per-process, so polls "
-                    "will disagree and two maintenance jobs can run at once. "
-                    "Use 1 worker and raise WEB_THREADS instead.", workers)
-        except ValueError:
-            pass
