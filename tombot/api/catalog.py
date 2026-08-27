@@ -1,9 +1,10 @@
 import json
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from . import cfg, page_response, paginate_args, repo, svc
 from .. import ApiError
+from ..services import bulk
 from ..services.market import attach, market_url
 
 bp = Blueprint("catalog", __name__, url_prefix="/api")
@@ -162,6 +163,75 @@ def rebuild_database():
 
     started, state = svc("jobs").start("rebuild", work)
     return jsonify({"started": started, **state}), (202 if started else 409)
+
+
+@bp.get("/maintenance/targets/export")
+def export_targets():
+    """The current targets as CSV, ready to edit and send back.
+
+    The import needs card ids, and copying 100 of them by hand is the tedium it
+    was meant to remove, so the file the user edits comes from here.
+    """
+    import csv
+    import io
+
+    set_id = request.args.get("set_id")
+    if set_id:
+        if not repo().get_collection_set(set_id):
+            raise ApiError("set no encontrado", "not_found", 404)
+        slots = repo().get_set_slots(set_id)
+    else:
+        slots = [s for cs in repo().list_collection_sets()
+                 for s in repo().get_set_slots(cs["id"])]
+
+    buf = io.StringIO()
+    # utf-8-sig on the way out: Excel shows accents as mojibake without a BOM.
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow(["card_id", "card_name", "target_quantity"])
+    seen = set()
+    for slot in slots:
+        card_id = slot.get("card_id")
+        if not card_id or card_id in seen:
+            continue
+        seen.add(card_id)
+        writer.writerow([card_id, slot.get("name") or slot.get("label") or "",
+                         slot.get("target") or 1])
+
+    name = f"objetivos-{set_id}.csv" if set_id else "objetivos.csv"
+    return Response(
+        "\ufeff" + buf.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@bp.post("/maintenance/targets/import")
+def import_targets():
+    """Apply a CSV of target quantities.
+
+    Every problem is reported at once with its line number: a spreadsheet gets
+    fixed in one pass, not by resubmitting to discover the next bad row.
+    """
+    if "file" in request.files:
+        raw = request.files["file"].read()
+    else:
+        raw = request.get_data()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        # Excel on Windows still writes cp1252 unless told otherwise.
+        text = raw.decode("cp1252", errors="replace")
+
+    rows, errors = bulk.parse_csv(text)
+    result = bulk.apply_targets(repo(), rows)
+    problems = errors + result["missing"]
+    return jsonify({
+        "updated": len(result["updated"]),
+        "unchanged": len(result["unchanged"]),
+        "errors": len(problems),
+        "changes": result["updated"][:200],
+        "problems": problems[:200],
+    })
 
 
 @bp.get("/maintenance/status")

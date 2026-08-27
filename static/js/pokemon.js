@@ -404,6 +404,21 @@ async function mantenimiento() {
       </div>
     </div>
 
+    <h2>Objetivos por lote</h2>
+    <p class="sub">Cuántas copias querés de cada carta, desde un CSV.
+      Descargá el actual, editá la columna y volvé a subirlo.</p>
+    <div class="stat">
+      <div class="btn-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <a class="btn" id="dl-targets" download>Descargar CSV actual</a>
+        <label class="btn primary" for="up-targets" style="cursor:pointer">Subir CSV</label>
+        <input type="file" id="up-targets" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="note">Columnas: <code>card_id</code>, <code>card_name</code>
+        (referencia), <code>target_quantity</code>. El objetivo es de la carta, así
+        que vale en todos los sets donde aparezca.</div>
+      <div id="targets-result"></div>
+    </div>
+
     <h2>Estado</h2>
     <div id="job-state" class="missing-list"></div>
 
@@ -428,6 +443,25 @@ async function mantenimiento() {
       startJob(api.rebuildDb);
     }
   };
+  const dl = view().querySelector('#dl-targets');
+  if (dl) dl.href = api.exportTargetsUrl();
+
+  const up = view().querySelector('#up-targets');
+  if (up) {
+    up.onchange = async () => {
+      const file = up.files && up.files[0];
+      if (!file) return;
+      const box = view().querySelector('#targets-result');
+      box.innerHTML = '<div class="note">Procesando…</div>';
+      try {
+        renderTargetImport(box, await api.importTargets(file));
+      } catch (e) {
+        box.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`;
+      }
+      up.value = '';        // same file twice in a row must re-trigger
+    };
+  }
+
   view().querySelectorAll('.modifier-grid input').forEach((input) => {
     input.onchange = async () => {
       try {
@@ -437,6 +471,27 @@ async function mantenimiento() {
     };
   });
   if (job.status === 'running') pollJob();
+}
+
+/* The summary leads with what changed, because "45 updated" on a file the user
+   already applied would be a lie — unchanged rows are counted separately. Every
+   rejected row keeps its line number so the spreadsheet is fixed in one pass. */
+function renderTargetImport(box, r) {
+  const changes = (r.changes || []).map((c) =>
+    `<li><code>${esc(c.card_id)}</code> ${c.from} → <strong>${c.to}</strong></li>`).join('');
+  const problems = (r.problems || []).map((p) =>
+    `<li>línea ${p.line}${p.card_id ? ` · <code>${esc(p.card_id)}</code>` : ''} — ${esc(p.error)}</li>`).join('');
+
+  box.innerHTML = `
+    <div class="import-summary ${r.errors ? 'partial' : 'ok'}">
+      <strong>${r.updated}</strong> actualizados ·
+      ${r.unchanged} sin cambios ·
+      <span class="${r.errors ? 'bad' : ''}">${r.errors} con problemas</span>
+    </div>
+    ${changes ? `<details class="import-detail"><summary>Cambios (${r.updated})</summary>
+       <ul>${changes}</ul></details>` : ''}
+    ${problems ? `<details class="import-detail" open><summary>Problemas (${r.errors})</summary>
+       <ul class="bad">${problems}</ul></details>` : ''}`;
 }
 
 function renderJob(job) {
