@@ -434,3 +434,15 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                        font-size: .92em; }
 .quotes-note, .quotes-empty { color: var(--muted, #6b7280); font-size: .82rem;
                               margin-top: .45rem; }
+/* ---- bulk target import ------------------------------------------------ */
+.import-summary { margin-top: .6rem; padding: .45rem .6rem; border-radius: 6px;
+                  background: rgba(127, 127, 127, .1); font-size: .9rem; }
+.import-summary.partial { border-left: 3px solid var(--warn, #d97706); }
+.import-summary.ok { border-left: 3px solid var(--ok, #16a34a); }
+.import-summary .bad, .import-detail ul.bad { color: var(--bad, #dc2626); }
+.import-detail { margin-top: .4rem; font-size: .85rem; }
+.import-detail > summary { cursor: pointer; color: var(--muted, #6b7280); }
+.import-detail ul { margin: .3rem 0 0; padding-left: 1.2rem; max-height: 260px;
+                    overflow-y: auto; }
+.import-detail li { margin: .12rem 0; }
+.import-bad { margin-top: .6rem; color: var(--bad, #dc2626); font-size: .9rem; }

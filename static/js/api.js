@@ -48,6 +48,18 @@ export const api = {
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
   quotes:       (cardId, variant) =>
                                  req('GET', `/api/prices/${cardId}/quotes` + (variant ? `?variant=${encodeURIComponent(variant)}` : '')),
+  importTargets: (file) => {
+    const body = new FormData();
+    body.append('file', file);
+    return fetch('/api/maintenance/targets/import', { method: 'POST', body })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      });
+  },
+  exportTargetsUrl: (setId) =>
+    '/api/maintenance/targets/export' + (setId ? `?set_id=${encodeURIComponent(setId)}` : ''),
   setModifier:  (kind, key, multiplier) =>
                                  req('PUT', `/api/prices/modifiers/${kind}/${key}`, { multiplier }),
   setManualPrice: (cardId, variant, price) =>
