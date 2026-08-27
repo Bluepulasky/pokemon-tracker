@@ -36,19 +36,19 @@ def test_best_condition_photo_wins(repo):
     """Showing a Damaged scan when a Near Mint copy exists misrepresents the
     collection."""
     hp = repo.upsert_collection_item({"card_id": "base1-12", "variant": "holo",
-                                      "condition": "HP"})
+                                      "condition": "PO"})
     nm = repo.upsert_collection_item({"card_id": "base1-12", "variant": "normal",
-                                      "condition": "NM"})
+                                      "condition": "M/NM"})
     _photo(repo, hp["id"], "bad.jpg")
     _photo(repo, nm["id"], "good.jpg")
 
     best = repo.best_photos_for_cards(["base1-12"])["base1-12"]
     assert best["filename"] == "collection/good.jpg"
-    assert best["condition"] == "NM"
+    assert best["condition"] == "M/NM"
 
 
 def test_primary_flag_breaks_ties_within_a_condition(repo):
-    item = repo.upsert_collection_item({"card_id": "base1-12", "condition": "NM"})
+    item = repo.upsert_collection_item({"card_id": "base1-12", "condition": "M/NM"})
     _photo(repo, item["id"], "first.jpg")
     second = _photo(repo, item["id"], "second.jpg")
     repo.set_primary_photo(second["id"])
