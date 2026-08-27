@@ -10,6 +10,7 @@ from .services.repository import PokemonRepo
 from .services.sources import get_source
 from .services.pricing import PricingService
 from .services.importer import CatalogImporter
+from .services.budget import RequestBudget
 from .services.jobs import JobRunner
 from .services.setbuilder import SetBuilder
 
@@ -37,7 +38,15 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.extensions["config"] = config
     # Prices come from their own source. The catalog keeps using pokemontcg.io
     # until TCGdex is proven to cover images and set data as well.
-    price_source = get_source(getattr(config, "PRICE_SOURCE", config.SOURCE), config)
+    # One budget per metered provider, counted in the database so a restart
+    # cannot hand back a fresh allowance.
+    budgets = {"tcggo": RequestBudget(repo, "tcggo",
+                                      getattr(config, "TCGGO_DAILY_LIMIT", 0))}
+    app.extensions["budgets"] = budgets
+
+    price_source_name = getattr(config, "PRICE_SOURCE", config.SOURCE)
+    price_source = get_source(price_source_name, config,
+                              budget=budgets.get(price_source_name))
     app.extensions["price_source"] = price_source
     # The catalog source doubles as the cross-check: it quotes the same
     # Cardmarket market as the price source, so a large disagreement between

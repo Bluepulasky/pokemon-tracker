@@ -1186,6 +1186,36 @@ class PokemonRepo:
                  captured_on or date.today().isoformat()),
             )
 
+    # ---------------------------------------------------------------- budget
+    def budget_used(self, provider: str, day: str) -> int:
+        row = self._one("SELECT count FROM api_budget WHERE provider=? AND day=?",
+                        (provider, day))
+        return int(row["count"]) if row else 0
+
+    def budget_reserve(self, provider: str, day: str, n: int,
+                       limit: int) -> int | None:
+        """Claim n requests for today, or return None if that would exceed limit.
+
+        The read and the write share one transaction: two threads must not both
+        see the same last slot as free and each spend it.
+        """
+        with self.tx() as c:
+            row = c.execute(
+                "SELECT count FROM api_budget WHERE provider=? AND day=?",
+                (provider, day)).fetchone()
+            used = int(row["count"]) if row else 0
+            # Note the absence of a truthiness check on limit: `if limit and
+            # ...` would read a limit of 0 as "no limit" and allow every
+            # request, which is the exact opposite of what 0 means here.
+            if used + n > limit:
+                return None
+            c.execute(
+                """INSERT INTO api_budget(provider, day, count) VALUES(?,?,?)
+                   ON CONFLICT(provider, day)
+                   DO UPDATE SET count = count + excluded.count""",
+                (provider, day, n))
+            return used + n
+
     def get_prices_for_card(self, card_id: str) -> list[dict]:
         return self._all("SELECT * FROM price_cache WHERE card_id=?", (card_id,))
 
