@@ -13,14 +13,11 @@ data/
 media/
 !media/**/.gitkeep
 
-# .git is excluded except the few files that identify the commit. Without them
-# an image built with a plain `docker compose build` reports its version as
-# "unknown", which is honest but useless — and that is the command people
-# actually run. These three add a couple of KB.
-.git/*
-!.git/HEAD
-!.git/refs
-!.git/packed-refs
+# .git stays out of the image. The commit is identified two other ways: a build
+# argument, or a read-only mount of .git at run time — see docker-compose.yml.
+# Re-including files from an excluded directory here is unreliable across Docker
+# versions, and it failed silently when tried.
+.git/
 .gitignore
 dist/
 .env

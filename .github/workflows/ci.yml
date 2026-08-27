@@ -102,6 +102,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build the image
+        # Built WITHOUT the version argument on purpose, so the run below proves
+        # the mount path works — that is what a plain `docker compose build`
+        # does, and it is the path that actually gets used.
         run: docker build -t tombot-ci .
 
       - name: Entrypoint and CLI work inside the image
@@ -119,7 +122,8 @@ jobs:
       - name: Container boots and serves
         run: |
           docker run -d --name tombot-ci-run -p 8080:8080 \
-            -e AUTO_BOOTSTRAP=0 -e PUID=1000 -e PGID=1000 tombot-ci
+            -e AUTO_BOOTSTRAP=0 -e PUID=1000 -e PGID=1000 \
+            -v "$PWD/.git:/srv/.git:ro" tombot-ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/healthz > /tmp/health.json; then break; fi
             sleep 2
