@@ -758,8 +758,8 @@ class PokemonRepo:
             "JOIN official_sets os ON os.id = c.official_set_id "
             "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id "
             "WHERE i.card_id=? "
-            "ORDER BY CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1 WHEN 'MP' THEN 2 "
-            "WHEN 'HP' THEN 3 ELSE 4 END, i.variant",
+            "ORDER BY CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1 "
+            "WHEN 'GD' THEN 2 WHEN 'PL' THEN 3 ELSE 4 END, i.variant",
             (card_id,),
         )
         for r in rows:
@@ -1115,8 +1115,12 @@ class PokemonRepo:
                 JOIN collection_items i ON i.id = p.item_id
                 WHERE i.card_id IN ({",".join("?" * len(ids))})
                 ORDER BY i.card_id,
-                         CASE i.condition WHEN 'NM' THEN 0 WHEN 'LP' THEN 1
-                                          WHEN 'MP' THEN 2 WHEN 'HP' THEN 3
+                         -- Best condition first. These are the grade keys
+                         -- from config.CONDITIONS; a key that is not listed
+                         -- sorts last rather than failing, so a rename here
+                         -- goes unnoticed unless a test catches it.
+                         CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1
+                                          WHEN 'GD' THEN 2 WHEN 'PL' THEN 3
                                           ELSE 4 END,
                          p.is_primary DESC, p.position""",
             ids,
