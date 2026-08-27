@@ -24,11 +24,11 @@ REDIRECTOR = "https://prices.pokemontcg.io/cardmarket/{card_id}"
 # Verified against the live site: minCondition=2 selects "Near Mint" in the
 # product page's filter panel. Cardmarket's condition ladder, best first.
 MIN_CONDITION_PARAM = {
-    "NM": 2,     # Near Mint
-    "LP": 5,     # Light Played
-    "MP": 6,     # Played
-    "HP": 7,     # Poor
-    "DMG": 7,
+    "M/NM": 2,     # Mint/Near Mint
+    "EX": 5,     # Excellent
+    "GD": 6,     # Played
+    "PL": 7,     # Poor
+    "PO": 7,
 }
 
 # NOT verified: `language=<n>` was accepted in the query string but checked no
