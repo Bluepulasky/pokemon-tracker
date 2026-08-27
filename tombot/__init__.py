@@ -42,7 +42,7 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.extensions["pricing"] = PricingService(repo, price_source, config)
     app.extensions["importer"] = CatalogImporter(repo, source, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
-    app.extensions["jobs"] = JobRunner()
+    app.extensions["jobs"] = JobRunner(app)
 
     # --- optional shared secret (PLAN.md §2.7) -----------------------------
     @app.before_request

@@ -156,13 +156,9 @@ def rebuild_database():
     Same code path as the CLI: schema, any incomplete sets, personal sets,
     printings. Idempotent, so pressing it twice is harmless.
     """
-    from flask import current_app
-
     def work():
-        runner = current_app._get_current_object()
-        with runner.app_context():
-            from ..cli import run_bootstrap
-            return run_bootstrap()
+        from ..cli import run_bootstrap
+        return run_bootstrap()
 
     started, state = svc("jobs").start("rebuild", work)
     return jsonify({"started": started, **state}), (202 if started else 409)
