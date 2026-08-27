@@ -25,6 +25,24 @@ def repo(tmp_path):
     return r
 
 
+@pytest.fixture()
+def app(tmp_path, monkeypatch):
+    from tombot.config import Config
+
+    for attr, value in (("DB_PATH", tmp_path / "a.db"), ("DATA_DIR", tmp_path),
+                        ("MEDIA_DIR", tmp_path / "m"),
+                        ("CATALOG_IMG_DIR", tmp_path / "m" / "c"),
+                        ("COLLECTION_IMG_DIR", tmp_path / "m" / "i"),
+                        ("THUMB_DIR", tmp_path / "m" / "t")):
+        monkeypatch.setattr(Config, attr, value)
+    monkeypatch.setattr(Config, "TCGGO_DAILY_LIMIT", 40, raising=False)
+    PokemonRepo(Config.DB_PATH).init_db(DEFAULT_MODIFIERS)
+    from tombot import create_app
+    a = create_app(Config)
+    a.config["TESTING"] = True
+    return a
+
+
 # ------------------------------------------------------------------- budget
 
 def test_the_cap_is_a_hard_stop(repo):
@@ -257,3 +275,69 @@ def test_different_params_are_different_cache_entries(repo, tmp_path, monkeypatc
     p2 = source._get("/x", {"page": 2})
     assert p1 != p2
     assert source._get("/x", {"page": 1}) == p1     # served from cache
+
+
+def test_the_status_endpoint_reports_what_is_left(app):
+    """The number is only useful before you press the button, so it is shown."""
+    budget = app.extensions["budgets"]["tcggo"]
+    budget.reserve(3)
+
+    body = app.test_client().get("/api/maintenance/status").get_json()
+
+    tcggo = next(b for b in body["budgets"] if b["provider"] == "tcggo")
+    assert tcggo["used"] == 3
+    assert tcggo["remaining"] == budget.limit - 3
+    assert tcggo["window_hours"] == 24
+
+
+# ------------------------------------------------------ the rolling window
+
+def test_the_window_rolls_rather_than_resetting_at_midnight(repo):
+    """A calendar day lets the whole allowance through twice across a midnight.
+
+    RapidAPI reports usage as "Aug 27 - Aug 28" — anchored to the subscription,
+    not to midnight — so a per-day counter is measuring something the plan does
+    not measure.
+    """
+    b = RequestBudget(repo, "tcggo", limit=3)
+    b.reserve(3)
+    assert b.remaining() == 0
+
+    with repo.tx() as c:
+        c.execute("""UPDATE api_requests SET sent_at = datetime('now', '-23 hours')
+                      WHERE provider='tcggo'""")
+
+    assert RequestBudget(repo, "tcggo", limit=3).remaining() == 0, \
+        "23 hours ago is still inside the window"
+    with pytest.raises(BudgetExhausted):
+        RequestBudget(repo, "tcggo", limit=3).reserve()
+
+
+def test_requests_age_out_of_the_window(repo):
+    """Past 24 hours they stop counting, or the cap would be permanent."""
+    RequestBudget(repo, "tcggo", limit=3).reserve(3)
+    with repo.tx() as c:
+        c.execute("""UPDATE api_requests SET sent_at = datetime('now', '-25 hours')
+                      WHERE provider='tcggo'""")
+
+    fresh = RequestBudget(repo, "tcggo", limit=3)
+    assert fresh.used() == 0
+    assert fresh.reserve() == 1
+
+
+def test_the_cap_holds_across_a_midnight(repo):
+    """The number Tom asked about: never more than the limit in any 24 hours."""
+    limit = 40
+    b = RequestBudget(repo, "tcggo", limit=limit)
+    for _ in range(limit):
+        b.reserve()
+
+    # Midnight passes. A per-day counter frees the whole allowance here.
+    with repo.tx() as c:
+        c.execute("""UPDATE api_requests SET sent_at = datetime('now', '-2 hours')
+                      WHERE provider='tcggo'""")
+
+    after = RequestBudget(repo, "tcggo", limit=limit)
+    assert after.remaining() == 0
+    with pytest.raises(BudgetExhausted):
+        after.reserve()
