@@ -83,8 +83,11 @@ def get_version() -> str:
     lookup is cached because it shells out; the environment read is free.
     """
     global _git_cache
-    baked = os.environ.get("APP_VERSION")
-    if baked:
+    # "unknown" is a placeholder, not a version. Accepting it would shadow the
+    # mounted .git and report nothing useful -- which is exactly what happened
+    # when the Dockerfile defaulted the build argument to that string.
+    baked = (os.environ.get("APP_VERSION") or "").strip()
+    if baked and baked != "unknown":
         return baked
     if _git_cache is ...:
         # The binary first (it can report a dirty tree), then the files, which

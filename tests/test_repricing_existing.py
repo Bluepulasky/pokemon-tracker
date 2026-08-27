@@ -173,3 +173,22 @@ def test_files_are_used_when_the_binary_is_absent(monkeypatch):
     monkeypatch.setattr(version, "_from_git", lambda: None)
     monkeypatch.setattr(version, "_from_git_files", lambda: "bbbbbbb")
     assert version.get_version() == "bbbbbbb"
+
+
+def test_a_placeholder_version_does_not_shadow_the_real_one(monkeypatch):
+    """The Dockerfile defaulted the build argument to the literal "unknown",
+    which is truthy, so it won the lookup and the mounted .git was never
+    consulted. The container then reported "unknown" while sitting on the
+    metadata that would have answered."""
+    import tombot.version as version
+
+    monkeypatch.setattr(version, "_git_cache", ...)
+    monkeypatch.setattr(version, "_from_git", lambda: None)
+    monkeypatch.setattr(version, "_from_git_files", lambda: "051ba3f")
+
+    for placeholder in ("unknown", "", "   "):
+        monkeypatch.setenv("APP_VERSION", placeholder)
+        assert version.get_version() == "051ba3f", placeholder
+
+    monkeypatch.setenv("APP_VERSION", "deadbee")
+    assert version.get_version() == "deadbee", "a real value still wins"
