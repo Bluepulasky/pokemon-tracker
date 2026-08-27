@@ -83,7 +83,7 @@ def test_variants_sharing_a_card_id_share_the_price(pricing):
 
 def test_missing_price_reports_itself(repo, pricing):
     est = pricing.estimate_item({"card_id": "base1-4", "variant": "reverse",
-                                 "condition": "NM", "language": "en", "quantity": 1})
+                                 "condition": "M/NM", "language": "en", "quantity": 1})
     assert est["basis"] == "no_data"
     assert est["total"] is None
     assert "impresión" in est["reason"]
@@ -95,7 +95,7 @@ def test_a_price_is_never_taken_from_another_variant(repo, pricing):
     repo.upsert_price("base1-4", "reverse", "cardmarket", "EUR", 9.0,
                       None, None, None, None)
     est = pricing.estimate_item({"card_id": "base1-4", "variant": "first_edition",
-                                 "condition": "NM", "language": "en", "quantity": 1})
+                                 "condition": "M/NM", "language": "en", "quantity": 1})
     assert est["basis"] == "no_data", "a reverse price must not value a 1st Edition"
 
 
@@ -140,7 +140,7 @@ def test_print_runs_of_one_card_price_apart(tmp_path):
                         "name": "Hitmonchan", "number": "7"}])
     for variant in ("holo", "shadowless", "first_edition"):
         repo.upsert_collection_item({"card_id": "base1-7", "variant": variant,
-                                     "condition": "MP", "language": "en"})
+                                     "condition": "GD", "language": "en"})
 
     svc = PricingService(repo, FixtureSource(), Config)
     assert svc.refresh(all_cards=True)["updated"] == 3
@@ -189,7 +189,7 @@ def test_a_manual_price_wins_and_survives_a_refresh(tmp_path):
     repo.upsert_cards([{"id": "base1-7", "official_set_id": "base1",
                         "name": "Hitmonchan", "number": "7"}])
     repo.upsert_collection_item({"card_id": "base1-7", "variant": "holo",
-                                 "condition": "NM", "language": "en"})
+                                 "condition": "M/NM", "language": "en"})
 
     svc = PricingService(repo, FixtureSource(), Config)
     svc.refresh(all_cards=True)
