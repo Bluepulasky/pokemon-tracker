@@ -6,11 +6,13 @@ import { api } from './api.js';
 import { cardArt, el, esc, eur, hofBadge, photoUrl, toast } from './ui.js';
 
 let META = null;
+let MULTIPLIERS = {};
 let onChange = () => {};
 
 export function initModal(meta, changeHandler) {
   META = meta;
   onChange = changeHandler;
+  api.modifiers().then((m) => { MULTIPLIERS = m.variant || {}; }).catch(() => {});
   document.getElementById('modal-root').addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
   });
@@ -25,10 +27,16 @@ export function closeModal() {
 
 /* Variants offered are the ones the chosen edition was actually printed in —
    a Base Set holo can be 1st Edition or Shadowless, a modern card cannot. */
+/* Print runs live in the Edición dropdown, so they are excluded here. Offering
+   "1st Edition" in both boxes asks the same question twice and leaves it unclear
+   which one the saved row reflects. */
+const EDITION_KEYS = ["first_edition", "shadowless"];
+
 function variantOpts(variants, selected) {
-  const allowed = (variants && variants.length)
+  const allowed = ((variants && variants.length)
     ? META.variants.filter((v) => variants.includes(v.key))
-    : META.variants;
+    : META.variants
+  ).filter((v) => !EDITION_KEYS.includes(v.key));
   return opts(allowed, selected);
 }
 
@@ -95,7 +103,7 @@ export async function openCard(cardId) {
 function variantCard(item) {
   const v = item.value || {};
   const label = (kind, key) => (META[kind].find((x) => x.key === key) || {}).label || key;
-  return `<div class="variant-card" data-item="${item.id}">
+  return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}">
     <div class="tags">
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
@@ -119,6 +127,14 @@ function variantCard(item) {
                 : `${eur(v.unit)} × ${item.quantity}`}</small></div>
     ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
        target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
+    <div class="field manual-price">
+      <label>Precio manual</label>
+      <input type="number" step="0.01" min="0" placeholder="usar el del feed"
+             value="${item.value?.manual ? item.value.unit : ''}">
+      <div class="note">${item.value?.manual
+        ? 'Fijado a mano; el refresco no lo toca.'
+        : 'Vacío = precio de la fuente.'}</div>
+    </div>
     <div class="btn-row compact">
       <button class="btn xs act-photo">Foto</button>
       <button class="btn xs act-edit">Editar</button>
@@ -152,6 +168,15 @@ function addForm(card) {
       </select>
       <div class="note">Esta carta existe en varias ediciones. Elige la que tienes.</div>
     </div>` : ''}
+    <div class="field" style="margin-bottom:12px">
+      <label>Edición</label>
+      <select name="edition">
+        <option value="">Unlimited</option>
+        <option value="first_edition">1st Edition</option>
+        <option value="shadowless">Shadowless</option>
+      </select>
+      <div class="note edition-note"></div>
+    </div>
     <div class="form-row">
       <div class="field"><label>Variante</label>
         <select name="variant">${variantOpts(current.variants)}</select></div>
@@ -166,6 +191,12 @@ function addForm(card) {
            title="${esc(c.label)}">${esc(c.key)}</span>`).join('')}</div>
     </div>
 
+    <div class="field mult-box" hidden style="margin-top:12px">
+      <label>Multiplicador 1st Edition</label>
+      <input type="number" step="0.1" min="0.1" inputmode="decimal">
+      <div class="note">Ninguna fuente cotiza la 1st Edition por separado, así que
+        el sobreprecio se aplica con este factor. Editable y compartido por todas.</div>
+    </div>
     <div class="btn-row">
       <button type="submit" class="btn primary">Guardar</button>
       <button type="button" class="btn ghost cancel">Cancelar</button>
@@ -219,16 +250,60 @@ function wireForm(root, card) {
       condition = chip.dataset.cond;
     };
   });
-  // Changing the edition re-offers the variants that edition exists in.
   const printingSel = form.querySelector('[name=printing]');
-  if (printingSel) {
-    printingSel.onchange = () => {
-      const chosen = (card.available_printings || [])
-        .find((p) => String(p.id ?? '') === printingSel.value);
-      form.querySelector('[name=variant]').innerHTML =
-        variantOpts(chosen && chosen.variants);
-    };
+  const editionSel = form.querySelector('[name=edition]');
+  const variantSel = form.querySelector('[name=variant]');
+
+  /* A printing's variant list comes from the catalogue, so a single option means
+     there is nothing to choose — showing an active dropdown with one entry only
+     invites a pointless click. */
+  const refreshVariants = () => {
+    const chosen = (card.available_printings || [])
+      .find((p) => String(p.id ?? '') === (printingSel ? printingSel.value : ''))
+      || (card.available_printings || [])[0];
+    variantSel.innerHTML = variantOpts(chosen && chosen.variants);
+    variantSel.disabled = variantSel.options.length <= 1;
+
+    /* 1st Edition and Shadowless only exist for the early WOTC print runs. The
+       catalogue knows which, so the options are disabled rather than hidden —
+       the absence is itself information. */
+    const keys = (chosen && chosen.variants) || [];
+    for (const opt of editionSel.options) {
+      if (!opt.value) continue;
+      opt.disabled = !keys.includes(opt.value);
+    }
+    if (editionSel.selectedOptions[0]?.disabled) editionSel.value = '';
+    const available = [...editionSel.options].filter((o) => !o.disabled).length;
+    editionSel.disabled = available <= 1;
+    form.querySelector('.edition-note').textContent = editionSel.disabled
+      ? 'Este set no tuvo tiradas 1st Edition ni Shadowless.'
+      : '';
+    updateMultiplierField();
+  };
+
+  /* The premium is shown only when it applies, because that is the moment it
+     means something — and it is editable there because one figure cannot be
+     right for a Charizard and a common at once. */
+  function updateMultiplierField() {
+    const box = form.querySelector('.mult-box');
+    const active = editionSel.value === 'first_edition';
+    box.hidden = !active;
+    if (active) box.querySelector('input').value = MULTIPLIERS.first_edition ?? 2;
   }
+
+  if (printingSel) printingSel.onchange = refreshVariants;
+  editionSel.onchange = updateMultiplierField;
+  refreshVariants();
+
+  form.querySelector('.mult-box input').onchange = async (e) => {
+    const value = Number(e.target.value) || 1;
+    try {
+      await api.setModifier('variant', 'first_edition', value);
+      MULTIPLIERS.first_edition = value;
+      toast(`Multiplicador 1st Edition: ×${value}`);
+      onChange();
+    } catch (err) { toast(err.message, true); }
+  };
 
   form.querySelector('.cancel').onclick = closeModal;
 
@@ -244,7 +319,9 @@ function wireForm(root, card) {
         card_id: chosen ? chosen.dataset.card : card.id,
         printing_id: (printingSel && printingSel.value)
           ? Number(printingSel.value) : undefined,
-        variant: form.variant.value,
+        // A chosen edition IS the variant we store: 1st Edition and Shadowless
+        // are print runs, and the collection records one variant per row.
+        variant: editionSel.value || form.variant.value,
         language: form.language.value,
         condition,
         quantity: Number(form.quantity.value) || 1,
@@ -287,6 +364,22 @@ function wireVariants(root, cardId) {
     };
 
     vc.querySelector('.act-edit').onclick = () => editVariant(vc, id, cardId);
+
+    /* Typed prices exist because the feed has real gaps — every WOTC promo comes
+       back with none — and because a listing in front of you beats an average.
+       Clearing the box hands the printing back to the feed. */
+    const manual = vc.querySelector('.manual-price input');
+    if (manual) {
+      manual.onchange = async () => {
+        const raw = manual.value.trim();
+        try {
+          await api.setManualPrice(cardId, vc.dataset.variant, raw === '' ? null : Number(raw));
+          toast(raw === '' ? 'Precio manual quitado' : `Precio fijado en ${raw}`);
+          onChange();
+          openCard(cardId);
+        } catch (e) { toast(e.message, true); }
+      };
+    }
 
 
 

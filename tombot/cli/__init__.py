@@ -225,6 +225,38 @@ def _bool_env(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def run_bootstrap(force_catalog: bool = False, echo=lambda _m: None) -> dict:
+    """Set up or repair the install. Shared by the CLI and the maintenance API so
+    the button and the command cannot drift apart."""
+    repo = _repo()
+    repo.init_db(DEFAULT_MODIFIERS)
+
+    required = required_official_sets()
+    gaps = repo.catalog_gaps(required)
+    imported = {}
+
+    importer = current_app.extensions["importer"]
+    if force_catalog or gaps:
+        targets = required if force_catalog else [g["set"] for g in gaps]
+        echo(f"importing {len(targets)} set(s)")
+        result = importer.import_sets(targets)
+        imported = result.get("sets", {})
+        if not result.get("rate_limited"):
+            importer.cache_images()
+
+    current_app.extensions["setbuilder"].build_all()
+    printings = repo.rebuild_printings()
+    remaining = repo.catalog_gaps(required)
+
+    return {
+        "cards": repo.count_cards(),
+        "imported_sets": imported,
+        "printings": printings,
+        "incomplete_sets": [g["set"] for g in remaining],
+        "unresolved_links": len(repo.cards_missing_market_url(100000)),
+    }
+
+
 @click.command("bootstrap")
 @click.option("--force-catalog", is_flag=True,
               help="Re-import every set even if the catalog looks complete")

@@ -42,7 +42,7 @@ function route() {
 }
 
 const VIEWS = { dashboard, sets, set: setDetail, cartas: collection,
-                collection, missing };   // /collection kept as an alias
+                collection, missing, mantenimiento };   // /collection kept as an alias
 
 async function render(keepScroll = false) {
   const r = route();
@@ -379,6 +379,106 @@ function itemHtml(i) {
       <span class="no">#${esc(i.number)}${owned && i.condition ? ` · ${esc(i.condition)}` : ''}</span>
     </div>
   </div>`;
+}
+
+/* ---------------------------------------------------------- mantenimiento */
+async function mantenimiento() {
+  const [job, mods] = await Promise.all([api.jobStatus(), api.modifiers()]);
+
+  view().innerHTML = `
+    <h1>Mantenimiento</h1>
+    <p class="sub">Tareas que hablan con fuentes externas y tardan minutos.</p>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="k">Actualizar precios</div>
+        <div class="note">Vuelve a consultar el precio de cada impresión que tenés.
+          Los precios manuales no se tocan.</div>
+        <div class="btn-row"><button class="btn primary" id="do-prices">Actualizar precios ahora</button></div>
+      </div>
+      <div class="stat">
+        <div class="k">Actualizar base de datos</div>
+        <div class="note">Equivale a <code>flask bootstrap</code>: esquema, sets
+          incompletos, sets personales e impresiones. Se puede repetir sin riesgo.</div>
+        <div class="btn-row"><button class="btn" id="do-rebuild">Actualizar base de datos</button></div>
+      </div>
+    </div>
+
+    <h2>Estado</h2>
+    <div id="job-state" class="missing-list"></div>
+
+    <h2>Multiplicadores de precio</h2>
+    <p class="sub">El precio de una impresión se ajusta por estos factores.</p>
+    <div class="modifier-grid">${Object.entries(mods).map(([kind, rows]) => `
+      <div class="stat">
+        <div class="k">${esc(kind)}</div>
+        ${Object.entries(rows).map(([key, value]) => `
+          <div class="form-row" style="align-items:center;gap:8px;margin:6px 0">
+            <span style="flex:1">${esc(key)}</span>
+            <input type="number" step="0.05" min="0.05" value="${value}"
+                   data-kind="${esc(kind)}" data-key="${esc(key)}"
+                   style="width:90px">
+          </div>`).join('')}
+      </div>`).join('')}</div>`;
+
+  renderJob(job);
+  view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
+  view().querySelector('#do-rebuild').onclick = () => {
+    if (confirm('Vuelve a importar lo que falte del catálogo. Puede tardar varios minutos. ¿Seguir?')) {
+      startJob(api.rebuildDb);
+    }
+  };
+  view().querySelectorAll('.modifier-grid input').forEach((input) => {
+    input.onchange = async () => {
+      try {
+        await api.setModifier(input.dataset.kind, input.dataset.key, Number(input.value));
+        toast(`${input.dataset.key}: ×${input.value}`);
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+  if (job.status === 'running') pollJob();
+}
+
+function renderJob(job) {
+  const box = view().querySelector('#job-state');
+  if (!box) return;
+  if (!job || job.status === 'idle') {
+    box.innerHTML = '<div class="empty">Sin tareas ejecutadas en esta sesión.</div>';
+    return;
+  }
+  const label = { running: 'En curso', done: 'Terminada', failed: 'Falló' }[job.status];
+  box.innerHTML = `
+    <div class="missing-row">
+      <span class="n">${esc(job.name || '')}</span>
+      <span>${esc(label)}${job.started_at ? ` · ${esc(job.started_at)}` : ''}</span>
+      <span class="r">${job.error
+        ? `<span style="color:var(--bad)">${esc(job.error)}</span>`
+        : esc(job.result ? JSON.stringify(job.result) : '')}</span>
+    </div>`;
+}
+
+async function startJob(fn) {
+  try {
+    renderJob(await fn());
+    pollJob();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* Polled rather than streamed: these finish in minutes, and a socket for two
+   buttons would be more moving parts than the job itself. */
+function pollJob() {
+  clearInterval(window.__jobPoll);
+  window.__jobPoll = setInterval(async () => {
+    try {
+      const job = await api.jobStatus();
+      renderJob(job);
+      if (job.status !== 'running') {
+        clearInterval(window.__jobPoll);
+        toast(job.status === 'done' ? 'Tarea terminada' : `Tarea fallida: ${job.error}`,
+              job.status !== 'done');
+      }
+    } catch { clearInterval(window.__jobPoll); }
+  }, 3000);
 }
 
 /* --------------------------------------------------------------- missing */
