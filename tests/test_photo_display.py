@@ -38,7 +38,7 @@ def test_best_condition_photo_wins(repo):
     hp = repo.upsert_collection_item({"card_id": "base1-12", "variant": "holo",
                                       "condition": "HP"})
     nm = repo.upsert_collection_item({"card_id": "base1-12", "variant": "normal",
-                                      "condition": "NM"})
+                                      "condition": "M/NM"})
     _photo(repo, hp["id"], "bad.jpg")
     _photo(repo, nm["id"], "good.jpg")
 
@@ -48,7 +48,7 @@ def test_best_condition_photo_wins(repo):
 
 
 def test_primary_flag_breaks_ties_within_a_condition(repo):
-    item = repo.upsert_collection_item({"card_id": "base1-12", "condition": "NM"})
+    item = repo.upsert_collection_item({"card_id": "base1-12", "condition": "M/NM"})
     _photo(repo, item["id"], "first.jpg")
     second = _photo(repo, item["id"], "second.jpg")
     repo.set_primary_photo(second["id"])

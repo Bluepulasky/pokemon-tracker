@@ -51,7 +51,7 @@ def build(tmp_path, cards, owned):
     repo.upsert_cards(cards)
     for card_id, variant in owned:
         repo.upsert_collection_item({"card_id": card_id, "variant": variant,
-                                     "condition": "NM", "language": "en"})
+                                     "condition": "M/NM", "language": "en"})
     return repo
 
 
@@ -124,7 +124,7 @@ def test_a_clean_product_still_uses_the_primary_provider(tmp_path):
     repo.upsert_cards([{"id": "base1-7", "official_set_id": "base1",
                         "name": "Hitmonchan", "number": "7"}])
     repo.upsert_collection_item({"card_id": "base1-7", "variant": "holo",
-                                 "condition": "NM", "language": "en"})
+                                 "condition": "M/NM", "language": "en"})
     alt = CrosscheckFixture()
     svc = PricingService(repo, TcgdexFixture(), Config, crosscheck=alt)
 
@@ -196,7 +196,7 @@ def test_a_row_that_names_its_product_is_priced_by_lookup(tmp_path):
     """No variant translated, no printing resolved — the two steps that broke."""
     repo = build(tmp_path, JUNGLE_FLAREON, [])
     repo.upsert_collection_item({"card_id": "base2-19", "variant": "normal",
-                                 "condition": "NM", "language": "en",
+                                 "condition": "M/NM", "language": "en",
                                  "market_product_id": 273816})
 
     source = ProductFixture({273816: {
@@ -222,7 +222,7 @@ def test_products_are_looked_up_in_one_batch(tmp_path):
     repo = build(tmp_path, cards, [])
     for card_id, pid in (("base2-19", 273816), ("base2-3", 273800), ("base2-1", 273798)):
         repo.upsert_collection_item({"card_id": card_id, "variant": "normal",
-                                     "condition": "NM", "language": "en",
+                                     "condition": "M/NM", "language": "en",
                                      "market_product_id": pid})
 
     source = ProductFixture({pid: {"currency": "EUR", "price": 10.0,

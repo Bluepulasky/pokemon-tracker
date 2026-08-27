@@ -75,13 +75,13 @@ def test_card_detail_assembles_catalog_collection_and_printings(client, app):
 
 def test_collection_rows_carry_a_computed_value(client, app):
     """The value block is assembled in the API layer, not stored."""
-    app.repo.upsert_collection_item({"card_id": "base1-4", "condition": "LP",
+    app.repo.upsert_collection_item({"card_id": "base1-4", "condition": "EX",
                                      "language": "en", "quantity": 3})
     app.repo.upsert_price("base1-4", "normal", "cardmarket", "EUR", 100.0,
                           None, None, None, None)
 
     row = client.get("/api/collection").get_json()["data"][0]
-    # 100 * 0.85 (LP) * 1.00 (en) = 85, times 3 copies
+    # 100 * 0.85 (EX) * 1.00 (en) = 85, times 3 copies
     assert row["value"]["unit"] == 85.0
     assert row["value"]["total"] == 255.0
 

@@ -61,7 +61,7 @@ def test_owning_any_member_of_a_grouped_slot_marks_it_owned(repo):
 
 
 def test_multiple_owned_variants_produce_multiple_rows(repo):
-    repo.upsert_collection_item({"card_id": "base1-1", "condition": "NM"})
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "M/NM"})
     repo.upsert_collection_item({"card_id": "base1-1", "condition": "LP"})
     rows, total = repo.list_slots_with_ownership(set_id="mine", page_size=100)
     assert total == 4, "two owned variants + two placeholders"
@@ -72,7 +72,7 @@ def test_physical_filters_exclude_placeholders(repo):
     """Condition, variant and language describe a copy in hand, so a placeholder
     cannot match them. The rank is deliberately NOT in this group — it belongs to
     the card, so an unacquired card can still carry one."""
-    repo.upsert_collection_item({"card_id": "base1-1", "condition": "NM"})
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "M/NM"})
     repo.upsert_collection_item({"card_id": "base1-2", "condition": "LP"})
 
     nm, _ = repo.list_slots_with_ownership(set_id="mine", condition="NM", page_size=100)
