@@ -65,17 +65,17 @@ def test_quantity_adds_to_physical_not_to_completion(repo):
 def test_duplicate_combination_increments_instead_of_duplicating(repo):
     """PLAN.md §2.5: without the unique constraint the physical count silently doubles."""
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
-                                 "condition": "NM", "language": "es", "quantity": 1})
+                                 "condition": "M/NM", "language": "es", "quantity": 1})
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
-                                 "condition": "NM", "language": "es", "quantity": 2})
+                                 "condition": "M/NM", "language": "es", "quantity": 2})
     assert repo.collection_totals()["item_rows"] == 1
     assert repo.collection_totals()["physical_cards"] == 3
 
 
 def test_different_condition_is_a_separate_row(repo):
     """Condition affects value, so NM and LP must not be merged."""
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "NM", "quantity": 1})
-    repo.upsert_collection_item({"card_id": "base1-4", "condition": "LP", "quantity": 1})
+    repo.upsert_collection_item({"card_id": "base1-4", "condition": "M/NM", "quantity": 1})
+    repo.upsert_collection_item({"card_id": "base1-4", "condition": "EX", "quantity": 1})
     assert repo.collection_totals()["item_rows"] == 2
     assert repo.set_progress("mine")[0]["owned"] == 1
 

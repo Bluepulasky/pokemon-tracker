@@ -13,6 +13,46 @@ def _path(name: str, default: Path) -> Path:
     return Path(os.environ.get(name, str(default))).expanduser().resolve()
 
 
+def load_dotenv(path=None) -> None:
+    """Read .env into the environment before the settings are read.
+
+    Docker Compose reads .env itself, so inside a container this finds nothing
+    and does nothing. Run the app or a script straight from a shell, though,
+    and without this the file is ignored — which reads as "the key is not
+    configured" while the key is sitting right there.
+
+    Anything already exported wins, so an inline override still works.
+    """
+    import os
+    import pathlib as _pathlib
+
+    f = _pathlib.Path(path or _pathlib.Path(__file__).resolve().parent.parent / ".env")
+    if not f.exists():
+        return
+    for line in f.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) > 1:
+            value = value[1:-1]
+        else:
+            # Unquoted values here carry trailing comments; only a # after
+            # whitespace starts one, so a # inside a key survives.
+            cut = value.find(" #")
+            if cut == -1:
+                cut = value.find("\t#")
+            if cut != -1:
+                value = value[:cut]
+            value = value.strip()
+        if key:
+            os.environ.setdefault(key, value)
+
+
+load_dotenv()
+
+
 class Config:
     # --- storage -----------------------------------------------------------
     DATA_DIR = _path("DATA_DIR", BASE_DIR / "data")
@@ -49,6 +89,18 @@ class Config:
     TCGDEX_BASE_URL = os.environ.get("TCGDEX_BASE_URL", "https://api.tcgdex.net/v2")
     TCGDEX_LANG = os.environ.get("TCGDEX_LANG", "en")
     POKEMONTCG_API_KEY = os.environ.get("POKEMONTCG_API_KEY") or None
+
+    # --- tcggo (CardMarket API TCG, via RapidAPI) --------------------------
+    # Metered: the plan bills per request past a daily allowance, so the cap
+    # below is enforced in code and deliberately sits under the real limit.
+    # Raising it costs money, so it is an explicit decision, not a default.
+    TCGGO_API_KEY = os.environ.get("TCGGO_API_KEY") or None
+    TCGGO_BASE_URL = os.environ.get(
+        "TCGGO_BASE_URL", "https://cardmarket-api-tcg.p.rapidapi.com")
+    TCGGO_RAPIDAPI_HOST = os.environ.get(
+        "TCGGO_RAPIDAPI_HOST", "cardmarket-api-tcg.p.rapidapi.com")
+    TCGGO_GAME = os.environ.get("TCGGO_GAME", "pokemon")
+    TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "80"))
     POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine

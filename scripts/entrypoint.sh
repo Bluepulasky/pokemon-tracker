@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint.
 #
-#   serve       (default) prepare, then run gunicorn
+#   serve       (default) prepare, then run the web server
 #   scheduler   run the monthly price/snapshot job on a cron schedule
 #   <anything>  run it verbatim, e.g. `docker compose run --rm app flask prices`
 set -euo pipefail
@@ -61,14 +61,19 @@ case "${1:-serve}" in
     serve)
         prepare_dirs
         bootstrap
-        log "serving on 0.0.0.0:${PORT} (${WEB_CONCURRENCY} workers x ${WEB_THREADS} threads)"
-        as_app gunicorn \
-            --workers "${WEB_CONCURRENCY}" \
-            --threads "${WEB_THREADS}" \
-            --bind "0.0.0.0:${PORT}" \
-            --timeout "${WEB_TIMEOUT}" \
-            --access-logfile - \
-            --error-logfile - \
+        log "serving on 0.0.0.0:${PORT} (${WEB_THREADS} threads, one process)"
+        # One process, threads for concurrency.
+        #
+        # This is a single-user app, so nothing here needed multiple worker
+        # processes — and having them was actively wrong: background job state
+        # lives in the process that started the job, so a second worker
+        # answered "idle" to half the status polls and would happily start a
+        # second price refresh against a metered API.
+        as_app waitress-serve \
+            --host=0.0.0.0 \
+            --port="${PORT}" \
+            --threads="${WEB_THREADS}" \
+            --channel-timeout="${WEB_TIMEOUT}" \
             app:app
         ;;
     scheduler)

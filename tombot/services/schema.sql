@@ -133,6 +133,10 @@ CREATE TABLE IF NOT EXISTS collection_items (
     -- Which catalog printing this physical card is. Nullable: most cards exist
     -- in one printing, and card_id already identifies it.
     printing_id INTEGER REFERENCES card_printings(id) ON DELETE SET NULL,
+    -- The Cardmarket product this row IS. Chosen in the modal from the real
+    -- version list, so pricing becomes a lookup rather than a guess: no
+    -- variant to translate, no printing to resolve, no field to pick.
+    market_product_id INTEGER,
     notes      TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -217,6 +221,31 @@ CREATE TABLE IF NOT EXISTS price_cache (
 -- providers quoting the SAME market disagree by 4x, one of them is describing
 -- a different card. Keeping the quotes is what makes that visible instead of
 -- silently averaging into a number that is wrong in a plausible way.
+-- Requests spent against a metered API, per UTC day.
+--
+-- Persisted rather than held in memory: a restart must not hand back a fresh
+-- allowance, because the allowance is what keeps the card from being billed.
+-- Which tcggo episode a set is, resolved once and kept.
+--
+-- Set filtering is the only reliable way to reach every printing of a card:
+-- card numbers are stored inconsistently upstream ("BS 4" in Base Set, 19 in
+-- Jungle), so a number filter silently drops versions. Looking the episode up
+-- costs a request, so it is looked up once.
+CREATE TABLE IF NOT EXISTS set_episodes (
+    official_set_id TEXT PRIMARY KEY REFERENCES official_sets(id) ON DELETE CASCADE,
+    episode_id      INTEGER NOT NULL,
+    episode_name    TEXT,
+    episode_code    TEXT,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS api_budget (
+    provider TEXT NOT NULL,
+    day      TEXT NOT NULL,              -- YYYY-MM-DD, UTC
+    count    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (provider, day)
+);
+
 CREATE TABLE IF NOT EXISTS price_quotes (
     card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
     variant     TEXT NOT NULL DEFAULT 'normal',

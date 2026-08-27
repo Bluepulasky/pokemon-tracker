@@ -58,19 +58,32 @@ class PricingService:
         if not pairs:
             return {"checked": 0, "updated": 0, "unpriced": 0, "manual_kept": 0}
 
-        card_ids = sorted({p["card_id"] for p in pairs})
-        payloads = self.source.fetch_prices(card_ids)
+        # Rows that already know their Cardmarket product need no resolution at
+        # all: the product IS the answer, and twenty of them fit in one request.
+        # This is the whole point of picking a version when the card is added.
+        priced_by_product = self._prices_by_product(pairs)
+
+        # Only the leftovers cost a resolution lookup. Fetching for everything
+        # would spend requests answering questions already answered — which,
+        # against a metered source, is spending money for nothing.
+        needs_resolving = sorted({
+            p["card_id"] for p in pairs
+            if not (p.get("market_product_id")
+                    and p["market_product_id"] in priced_by_product)
+        })
+        payloads = self.source.fetch_prices(needs_resolving) if needs_resolving else {}
 
         # Quotes from the second provider, for the cross-check and the fallback.
         alt = {}
         if self.crosscheck is not None:
             try:
-                alt = self.crosscheck.fetch_prices(card_ids) or {}
+                alt = self.crosscheck.fetch_prices(needs_resolving) or {}
             except Exception:                                # noqa: BLE001
                 log.warning("cross-check provider unavailable", exc_info=True)
 
         today = date.today().isoformat()
         updated = unpriced = manual_kept = refused = recovered = 0
+        by_product = 0
         for pair in pairs:
             card_id, variant = pair["card_id"], pair["variant"]
 
@@ -82,6 +95,26 @@ class PricingService:
             variants = (data or {}).get("variants") or []
             key = resolve(variant, [v["key"] for v in variants])
             chosen = next((v for v in variants if v["key"] == key), None)
+
+            product_id = pair.get("market_product_id")
+            direct = priced_by_product.get(product_id) if product_id else None
+            if direct is not None:
+                self.repo.upsert_quote(
+                    card_id, variant, provider="tcggo", market="cardmarket",
+                    printing=direct.get("version") or "", currency=direct["currency"],
+                    price=direct["price"], low=direct.get("lowest_near_mint"),
+                    product_id=product_id, trusted=True)
+                self.repo.upsert_price(
+                    card_id, variant, "cardmarket", direct["currency"],
+                    direct["price"], None, None, None, direct,
+                    variant_key=direct.get("version"),
+                    market_product_id=product_id)
+                self.repo.append_price_history(
+                    card_id, variant, "cardmarket", direct["currency"],
+                    direct["price"], today)
+                updated += 1
+                by_product += 1
+                continue
 
             # Always record what the second provider says, even when the primary
             # is fine. That is what makes a disagreement visible later, and it
@@ -136,7 +169,30 @@ class PricingService:
         self.repo.set_meta("last_price_refresh", today)
         return {"checked": len(pairs), "updated": updated,
                 "unpriced": unpriced, "manual_kept": manual_kept,
-                "refused": refused, "recovered": recovered}
+                "refused": refused, "recovered": recovered,
+                "by_product": by_product}
+
+    def _prices_by_product(self, pairs: list[dict]) -> dict:
+        """Look up every already-chosen Cardmarket product, twenty per request.
+
+        A row that names its product needs no variant translated and no
+        printing resolved — the two steps that produced every mispriced card so
+        far. It is a lookup, and a batched one.
+        """
+        ids = [p["market_product_id"] for p in pairs if p.get("market_product_id")]
+        if not ids:
+            return {}
+        fetch = getattr(self.source, "fetch_by_products", None)
+        if fetch is None:
+            fetch = getattr(self.crosscheck, "fetch_by_products", None)
+        if fetch is None:
+            return {}
+        try:
+            return fetch(ids)
+        except Exception:                                    # noqa: BLE001
+            log.warning("product lookup failed; falling back to resolution",
+                        exc_info=True)
+            return {}
 
     def _crosscheck_price(self, card_id: str, variant: str, alt: dict | None):
         """Record the second provider's quotes and return a usable Cardmarket one.

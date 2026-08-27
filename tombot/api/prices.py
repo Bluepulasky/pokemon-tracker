@@ -1,6 +1,6 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from . import repo, svc
+from . import cfg, repo, svc
 from .. import ApiError
 from ..config import VARIANTS
 
@@ -114,3 +114,80 @@ def set_manual(card_id, variant):
         raise ApiError("el precio no puede ser negativo", "invalid_price")
     repo().set_manual_price(card_id, variant, price)
     return jsonify({"card_id": card_id, "variant": variant, "price": price})
+
+
+@bp.get("/versions")
+def card_versions():
+    """Versions of a card that exist on the market, for the add-card picker.
+
+    Answers the question the old dropdown could not: what can I actually own,
+    and what does each one look like. Every row carries the product it maps to,
+    so choosing one removes the guessing that used to happen at price time.
+    """
+    name = (request.args.get("name") or "").strip()
+    episode_id = request.args.get("episode_id", type=int)
+
+    # Given a card, work out both from what we already know. The set is what
+    # makes the answer complete, so it is resolved here rather than left to the
+    # caller to remember.
+    card_id = request.args.get("card_id")
+    if card_id:
+        card = repo().get_card(card_id)
+        if not card:
+            raise ApiError("carta no encontrada", "not_found", 404)
+        name = name or card["name"]
+        if episode_id is None:
+            episode_id = _episode_for_set(card["official_set_id"])
+
+    if not name:
+        raise ApiError("hace falta un nombre o un card_id", "invalid_request")
+
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        raise ApiError("no hay fuente de versiones configurada (TCGGO_API_KEY)",
+                       "not_configured", 503)
+    try:
+        rows = source.search_versions(
+            name,
+            number=request.args.get("number"),
+            episode_id=episode_id,          # resolved above, not re-read here
+        )
+    except Exception as e:                                   # noqa: BLE001
+        # Includes the daily budget being spent: a clear message beats a 500.
+        raise ApiError(str(e), "source_error", 502) from None
+    return jsonify({"name": name, "versions": rows})
+
+
+def _episode_for_set(official_set_id: str) -> int | None:
+    """The tcggo episode for one of our sets, looked up once and remembered.
+
+    Costs a request the first time and nothing afterwards, which matters when
+    the allowance is 80 a day.
+    """
+    known = repo().get_set_episode(official_set_id)
+    if known:
+        return known["episode_id"]
+
+    oset = repo().get_official_set(official_set_id)
+    if not oset:
+        return None
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        return None
+    try:
+        episode = source.find_episode(oset["name"], oset.get("ptcgo_code"))
+    except Exception:                                        # noqa: BLE001
+        # Swallowing this silently is how the set filter came back as "no
+        # filter" and returned every Charizard ever printed, which reads like
+        # data rather than a failure.
+        current_app.logger.warning("episode lookup failed for %s",
+                                   official_set_id, exc_info=True)
+        return None
+    if not episode:
+        current_app.logger.warning("no tcggo episode matched set %s (%s)",
+                                   official_set_id, oset.get("name"))
+    if not episode:
+        return None
+    repo().set_set_episode(official_set_id, episode["id"],
+                           episode.get("name"), episode.get("code"))
+    return episode["id"]

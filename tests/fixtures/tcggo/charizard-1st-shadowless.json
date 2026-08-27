@@ -1,0 +1,8 @@
+{"data":{"id":19395,"name":"Charizard","name_numbered":"Charizard 4","slug":"charizard",
+"type":"singles","card_number":4,"card_code_number":"BS 4","hp":120,"rarity":"Rare Holo",
+"version":"1st Edition Shadowless","supertype":"Pokémon","tcgid":"base1-4",
+"cardmarket_id":660224,"tcgplayer_id":42382,
+"prices":{"cardmarket":{"currency":"EUR","lowest_near_mint":null,
+"lowest_near_mint_EU_only":null,"30d_average":10.46,"7d_average":10.46,
+"available_items":509,"graded":[]},
+"ebay":{"currency":"USD","graded":{"psa":{"10":{"median_price":1063.67,"sample_size":5}}}}}}}

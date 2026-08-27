@@ -160,6 +160,15 @@ function addForm(card) {
   const printings = card.available_printings || [];
   const current = printings.find((p) => p.card_id === card.id) || printings[0] || {};
   return `<form class="add-form" data-card="${esc(card.id)}">
+    <div class="field versions-field" style="margin-bottom:12px">
+      <label>Versión en Cardmarket</label>
+      <div class="version-list" data-versions-for="${esc(card.id)}">
+        <div class="note">Buscando versiones…</div>
+      </div>
+      <div class="note">Cada opción es un producto real con su propio precio.
+        La imagen y el stock son para reconocer cuál tenés.</div>
+      <div class="version-picked" hidden></div>
+    </div>
     ${printings.length > 1 ? `
     <div class="field" style="margin-bottom:12px">
       <label>Edición / Set actual</label>
@@ -170,6 +179,7 @@ function addForm(card) {
       </select>
       <div class="note">Esta carta existe en varias ediciones. Elige la que tienes.</div>
     </div>` : ''}
+    <div class="legacy-fields">
     <div class="field" style="margin-bottom:12px">
       <label>Edición</label>
       <select name="edition">
@@ -182,6 +192,9 @@ function addForm(card) {
     <div class="form-row">
       <div class="field"><label>Variante</label>
         <select name="variant">${variantOpts(current.variants)}</select></div>
+    </div>
+    </div>
+    <div class="form-row">
       <div class="field"><label>Idioma</label>
         <select name="language">${opts(META.languages, 'es')}</select></div>
       <div class="field" style="flex:0 0 90px"><label>Cantidad</label>
@@ -243,6 +256,9 @@ function wireCardTarget(root, card) {
 
 function wireForm(root, card) {
   const form = root.querySelector('.add-form');
+  const versionBox = root.querySelector('.version-list');
+  if (versionBox) renderVersions(versionBox, form, versionBox.dataset.versionsFor);
+
   let condition = META.conditions[0].key;
 
   form.querySelectorAll('.chip').forEach((chip) => {
@@ -327,6 +343,10 @@ function wireForm(root, card) {
         language: form.language.value,
         condition,
         quantity: Number(form.quantity.value) || 1,
+        // The version the user actually picked. Once this is set the card no
+        // longer needs resolving at price time: it IS a Cardmarket product.
+        market_product_id: form.dataset.productId
+          ? Number(form.dataset.productId) : undefined,
       });
       toast(`${card.name} añadida`);
       onChange();
@@ -445,58 +465,135 @@ function editVariant(vc, id, cardId) {
 
 /* ------------------------------------------------------------------ quotes */
 
-const MARKET_LABEL = { cardmarket: 'Cardmarket', tcgplayer: 'TCGplayer' };
-const PROVIDER_LABEL = { tcgdex: 'TCGdex', pokemontcgio: 'pokemontcg.io' };
+/* One price, from the source that maps a version to a real Cardmarket
+   product. Other stores appear only when that one has nothing to say, because
+   a second opinion is noise when the first is authoritative. */
+
+const STORE = { cardmarket: 'Cardmarket', tcgplayer: 'TCGplayer' };
+const PREFERRED = 'tcggo';
 
 function money(value, currency) {
-  if (value === null || value === undefined) return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
   return currency === 'USD' ? `$${n.toFixed(2)}` : `${n.toFixed(2)} €`;
-}
-
-function quoteRow(q) {
-  const range = [q.price_low, q.price_mid ?? q.price_trend, q.price_high]
-    .some((v) => v !== null && v !== undefined)
-    ? `<small class="range">bajo ${money(q.price_low, q.currency)}
-         · medio ${money(q.price_mid ?? q.price_trend, q.currency)}
-         · alto ${money(q.price_high, q.currency)}</small>`
-    : '';
-  const printing = q.printing ? `<span class="printing">${esc(q.printing)}</span>` : '';
-  const refused = !q.trusted
-    ? `<div class="refused" title="${esc(q.distrust_reason || '')}">
-         no se usa — ${esc(q.distrust_reason || 'fuente poco fiable')}</div>`
-    : '';
-  return `<li class="${q.trusted ? '' : 'untrusted'}">
-      <div class="head">
-        <span class="market">${esc(MARKET_LABEL[q.market] || q.market)}</span>
-        <span class="provider">${esc(PROVIDER_LABEL[q.provider] || q.provider)}</span>
-        ${printing}
-        <span class="amount">${money(q.price, q.currency)}</span>
-      </div>
-      ${range}${refused}
-    </li>`;
 }
 
 async function renderQuotes(box, cardId, variant) {
   let quotes = [];
   try {
     ({ quotes } = await api.quotes(cardId, variant));
-  } catch {
-    return;                       // the panel is extra context, never the point
-  }
-  if (!quotes.length) {
-    box.innerHTML = '<div class="quotes-empty">Sin cotizaciones guardadas todavía.</div>';
+  } catch { return; }
+
+  const usable = quotes.filter((q) => q.trusted && q.price != null);
+  const best = usable.find((q) => q.provider === PREFERRED && q.market === 'cardmarket');
+
+  if (best) {                       // the authoritative one: say where, nothing more
+    box.innerHTML = `<div class="price-src">${esc(STORE[best.market])}</div>`;
     return;
   }
-  const eur = quotes.filter((q) => q.currency !== 'USD');
-  const usd = quotes.filter((q) => q.currency === 'USD');
-  box.innerHTML = `
-    <details class="quotes-panel" ${quotes.some((q) => !q.trusted) ? 'open' : ''}>
-      <summary>Cotizaciones (${quotes.length})</summary>
-      ${eur.length ? `<ul class="quote-list">${eur.map(quoteRow).join('')}</ul>` : ''}
-      ${usd.length ? `<div class="quotes-note">Otro mercado, otra moneda —
-           referencia, no entra en el total.</div>
-         <ul class="quote-list">${usd.map(quoteRow).join('')}</ul>` : ''}
-    </details>`;
+  if (!usable.length) { box.innerHTML = ''; return; }
+
+  box.innerHTML = `<ul class="price-alts">${usable.map((q) =>
+    `<li><span>${esc(STORE[q.market] || q.market)}</span>
+         <span>${money(q.price, q.currency)}</span></li>`).join('')}</ul>`;
+}
+
+
+/* ---------------------------------------------------------------- versions */
+
+/* Every product Cardmarket sells for this card, not a filtered guess at which
+   one you meant. Two entries can look alike — Jungle Flareon comes back twice
+   with nearly the same price and stock, and only one is a real product — so
+   the image, the stock and the price are all shown and the choice is yours. */
+
+function versionTile(v) {
+  const price = v.price != null ? `${Number(v.price).toFixed(2)} €` : '—';
+  const stock = v.available != null ? `${v.available} en venta` : 'sin stock';
+  return `<button type="button" class="version" data-product="${v.market_product_id}">
+      ${v.image ? `<img src="${esc(v.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
+      <span class="v-code">${esc(v.code || '')}</span>
+      ${v.version ? `<span class="v-name">${esc(v.version)}</span>` : ''}
+      <span class="v-price">${price}</span>
+      <span class="v-stock">${esc(stock)}</span>
+    </button>`;
+}
+
+async function renderVersions(box, form, cardId) {
+  let versions = [];
+  try {
+    ({ versions } = await api.versions(cardId));
+  } catch (e) {
+    box.innerHTML = `<div class="note">No se pudieron cargar las versiones
+      (${esc(e.message)}). Usá los campos de abajo.</div>`;
+    return;                     // legacy fields stay visible
+  }
+  if (!versions.length) {
+    box.innerHTML = `<div class="note">Sin versiones conocidas para esta carta.
+      Usá los campos de abajo.</div>`;
+    return;                     // legacy fields stay visible
+  }
+  box.innerHTML = versions.map(versionTile).join('');
+
+  /* The dropdowns stay. The picker fills them in, it does not replace them.
+
+     Replacing them would mean trusting the version list to be complete, and it
+     is not: Jungle Flareon comes back with three products where Cardmarket has
+     two, and the label on JU 19 says "1st Edition" for a card Cardmarket does
+     not split at all. Extra entries and wrong labels are both confirmed;
+     "never omits" is not. Until it is, the person holding the card keeps the
+     final say. */
+  const byId = new Map(versions.map((v) => [String(v.market_product_id), v]));
+  box.querySelectorAll('.version').forEach((btn) => {
+    btn.onclick = () => {
+      box.querySelectorAll('.version').forEach((b) => b.classList.remove('picked'));
+      btn.classList.add('picked');
+      form.dataset.productId = btn.dataset.product;
+      applyVersion(form, byId.get(btn.dataset.product));
+    };
+  });
+}
+
+
+/* What the picked version means for the rest of the form.
+
+   Choosing a product answers questions the fields below were asking, so it
+   answers them: leaving "Unlimited" selected while a Shadowless product is
+   picked would record a card nobody chose. The fields stay editable — the
+   version label upstream is not always right, and the person holding the card
+   is a better judge than the label. */
+
+const EDITION_FROM_VERSION = [
+  [/1st\s*edition\s*shadowless/i, 'shadowless'],
+  [/shadowless/i, 'shadowless'],
+  [/1st\s*edition/i, 'first_edition'],
+  [/unlimited/i, ''],
+];
+
+function applyVersion(form, v) {
+  if (!v) return;
+
+  const edition = form.querySelector('[name=edition]');
+  const label = v.version || '';
+  const match = EDITION_FROM_VERSION.find(([re]) => re.test(label));
+  if (edition && match) {
+    const wanted = match[1];
+    const opt = [...edition.options].find((o) => o.value === wanted && !o.disabled);
+    if (opt) edition.value = wanted;
+  }
+
+  // Holo or not is in the rarity, which is the one thing the label never says.
+  const variant = form.querySelector('[name=variant]');
+  if (variant) {
+    const wanted = /holo/i.test(v.rarity || '') ? 'holo' : 'normal';
+    const opt = [...variant.options].find((o) => o.value === wanted);
+    if (opt) variant.value = wanted;
+  }
+
+  const summary = form.querySelector('.version-picked');
+  if (summary) {
+    const bits = [v.code, v.version, v.rarity].filter(Boolean).map(esc);
+    summary.innerHTML = `Se guardará como <strong>${bits.join(' · ')}</strong>
+      — producto Cardmarket <code>${v.market_product_id}</code>`;
+    summary.hidden = false;
+  }
 }

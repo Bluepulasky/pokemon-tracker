@@ -410,30 +410,17 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
   .stat .v { font-size: 22px; }
 }
 
-/* ---- price quotes ------------------------------------------------------ */
-/* Every quote we were given, listed rather than averaged. A refused one stays
-   visible: knowing a source is wrong is worth more than quietly dropping it. */
-.quotes-panel { margin-top: .5rem; font-size: .82rem; }
-.quotes-panel > summary { cursor: pointer; color: var(--muted, #6b7280); }
-.quote-list { list-style: none; margin: .4rem 0 0; padding: 0; }
-.quote-list li { padding: .35rem .5rem; border-left: 3px solid var(--ok, #16a34a);
-                 background: rgba(127, 127, 127, .07); margin-bottom: .3rem;
-                 border-radius: 0 4px 4px 0; }
-.quote-list li.untrusted { border-left-color: var(--bad, #dc2626); opacity: .85; }
-.quote-list .head { display: flex; gap: .45rem; align-items: baseline;
-                    flex-wrap: wrap; }
-.quote-list .market { font-weight: 600; }
-.quote-list .provider,
-.quote-list .printing { color: var(--muted, #6b7280); font-size: .92em; }
-.quote-list .amount { margin-left: auto; font-variant-numeric: tabular-nums;
-                      font-weight: 600; }
-.quote-list li.untrusted .amount { text-decoration: line-through; }
-.quote-list .range { display: block; color: var(--muted, #6b7280);
-                     margin-top: .15rem; }
-.quote-list .refused { margin-top: .2rem; color: var(--bad, #dc2626);
-                       font-size: .92em; }
-.quotes-note, .quotes-empty { color: var(--muted, #6b7280); font-size: .82rem;
-                              margin-top: .45rem; }
+/* ---- price source ------------------------------------------------------ */
+/* One line. The price above it is the answer; this only says where it came
+   from. Alternatives appear as plain rows, and only when there is no
+   authoritative price to show. */
+.price-src { color: var(--muted, #6b7280); font-size: .78rem; margin-top: .15rem; }
+.price-alts { list-style: none; margin: .35rem 0 0; padding: 0;
+              font-size: .82rem; }
+.price-alts li { display: flex; justify-content: space-between; gap: .75rem;
+                 color: var(--muted, #6b7280); padding: .12rem 0; }
+.price-alts li span:last-child { font-variant-numeric: tabular-nums; }
+
 /* ---- bulk target import ------------------------------------------------ */
 .import-summary { margin-top: .6rem; padding: .45rem .6rem; border-radius: 6px;
                   background: rgba(127, 127, 127, .1); font-size: .9rem; }
@@ -446,3 +433,29 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                     overflow-y: auto; }
 .import-detail li { margin: .12rem 0; }
 .import-bad { margin-top: .6rem; color: var(--bad, #dc2626); font-size: .9rem; }
+
+/* ---- version picker ---------------------------------------------------- */
+/* All of them, laid out so the card art does the identifying. Two products
+   can carry nearly the same price and stock; the picture is what tells them
+   apart, which is why it leads. */
+.version-list { display: grid; gap: 8px; margin-top: .4rem;
+                grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+                max-height: 340px; overflow-y: auto; padding: 2px; }
+.version { display: flex; flex-direction: column; align-items: stretch;
+           gap: 2px; padding: 6px; border-radius: 8px; cursor: pointer;
+           background: rgba(127,127,127,.08); border: 2px solid transparent;
+           color: inherit; font: inherit; text-align: left; }
+.version:hover { background: rgba(127,127,127,.16); }
+.version.picked { border-color: var(--accent, #f5b301);
+                  background: rgba(245,179,1,.12); }
+.version img, .version .noimg { width: 100%; aspect-ratio: 5 / 7;
+                                object-fit: contain; border-radius: 4px; }
+.version .noimg { background: rgba(127,127,127,.18); }
+.version .v-code { font-weight: 600; font-size: .78rem; }
+.version .v-name { font-size: .72rem; color: var(--muted, #6b7280); }
+.version .v-price { font-size: .82rem; font-variant-numeric: tabular-nums; }
+.version .v-stock { font-size: .7rem; color: var(--muted, #6b7280); }
+.version-picked { margin-top: .45rem; font-size: .82rem;
+                  color: var(--muted, #6b7280); }
+.version-picked strong { color: inherit; }
+.version-picked code { font-size: .95em; }
