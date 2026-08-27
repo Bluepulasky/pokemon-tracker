@@ -1199,22 +1199,30 @@ class PokemonRepo:
         The read and the write share one transaction: two threads must not both
         see the same last slot as free and each spend it.
         """
+        # Note the absence of a truthiness check on limit: `if limit and ...`
+        # would read a limit of 0 as "no limit" and allow every request, which
+        # is the exact opposite of what 0 means here.
+        if n > limit:
+            return None
         with self.tx() as c:
+            # One statement decides and writes. Reading the count first and
+            # then updating loses the race: two threads both see the last slot
+            # free, both increment, and the day ends one request over the cap —
+            # which is a charge, not a rounding error. The WHERE on DO UPDATE
+            # makes the check part of the write, and the write takes SQLite's
+            # lock before anyone else can read.
+            cur = c.execute(
+                """INSERT INTO api_budget(provider, day, count) VALUES(?,?,?)
+                   ON CONFLICT(provider, day)
+                   DO UPDATE SET count = api_budget.count + excluded.count
+                    WHERE api_budget.count + excluded.count <= ?""",
+                (provider, day, n, limit))
+            if cur.rowcount == 0:
+                return None
             row = c.execute(
                 "SELECT count FROM api_budget WHERE provider=? AND day=?",
                 (provider, day)).fetchone()
-            used = int(row["count"]) if row else 0
-            # Note the absence of a truthiness check on limit: `if limit and
-            # ...` would read a limit of 0 as "no limit" and allow every
-            # request, which is the exact opposite of what 0 means here.
-            if used + n > limit:
-                return None
-            c.execute(
-                """INSERT INTO api_budget(provider, day, count) VALUES(?,?,?)
-                   ON CONFLICT(provider, day)
-                   DO UPDATE SET count = count + excluded.count""",
-                (provider, day, n))
-            return used + n
+            return int(row["count"])
 
     def get_prices_for_card(self, card_id: str) -> list[dict]:
         return self._all("SELECT * FROM price_cache WHERE card_id=?", (card_id,))

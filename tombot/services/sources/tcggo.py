@@ -50,11 +50,13 @@ PRICE_FIELDS = ("30d_average", "7d_average", "lowest_near_mint")
 class TcggoSource:
     name = "tcggo"
 
-    def __init__(self, config, budget=None):
+    def __init__(self, config, budget=None, cache=None):
         self.base = getattr(config, "TCGGO_BASE_URL", BASE_URL)
         self.api_key = getattr(config, "TCGGO_API_KEY", None)
         self.game = getattr(config, "TCGGO_GAME", "pokemon")
         self.budget = budget
+        # A response already paid for must never be paid for twice.
+        self.cache = cache
         self.session = requests.Session()
         if self.api_key:
             self.session.headers.update({
@@ -74,6 +76,13 @@ class TcggoSource:
         A retry is a second billable request, so a failure is reported rather
         than quietly re-sent.
         """
+        # The cache is consulted before the budget: a hit costs nothing, so it
+        # must not consume an allowance slot or require a key.
+        if self.cache is not None:
+            hit = self.cache.get(path, params)
+            if hit is not None:
+                return hit
+
         if not self.api_key:
             raise RuntimeError("tcggo: no API key configured (TCGGO_API_KEY)")
         if self.budget is not None:
@@ -86,7 +95,10 @@ class TcggoSource:
             raise RuntimeError("tcggo: rate limited by the plan (429)")
         if r.status_code >= 400:
             raise RuntimeError(f"tcggo: HTTP {r.status_code} for {path}")
-        return r.json()
+        payload = r.json()
+        if self.cache is not None:
+            self.cache.put(path, params, payload)
+        return payload
 
     # --------------------------------------------------------------- parsing
     @staticmethod
@@ -131,7 +143,10 @@ class TcggoSource:
     # ---------------------------------------------------------------- prices
     def fetch_by_tcgid(self, tcgid: str) -> list[dict]:
         """Every printing tcggo holds for one pokemontcg.io card id."""
-        payload = self._get(f"/{self.game}/cards/search", {"tcg_id": tcgid})
+        # The parameter is `tcgid`, not `tcg_id`. An unknown parameter is not
+        # rejected — it is ignored, and the endpoint cheerfully returns page 1
+        # of every card in the game, which reads exactly like a real answer.
+        payload = self._get(f"/{self.game}/cards/search", {"tcgid": tcgid})
         rows = payload.get("data") or []
         if isinstance(rows, dict):
             rows = [rows]

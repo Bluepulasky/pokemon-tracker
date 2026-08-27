@@ -193,3 +193,67 @@ def test_stock_and_country_prices_survive_parsing():
     assert p["lowest_by_country"]["es"] == 199
     assert p["lowest_by_country"]["de"] == 65
     assert p["currency"] == "EUR"
+
+
+# -------------------------------------------------------------------- cache
+
+def test_a_cached_response_costs_no_budget(repo, tmp_path, monkeypatch):
+    """A request already paid for must never be paid for twice."""
+    from tombot.config import Config
+    from tombot.services.httpcache import HttpCache
+
+    monkeypatch.setattr(Config, "TCGGO_API_KEY", "test-key", raising=False)
+    budget = RequestBudget(repo, "tcggo", limit=10)
+    cache = HttpCache(tmp_path / "cache")
+    source = TcggoSource(Config, budget=budget, cache=cache)
+
+    calls = []
+    payload = json.loads((FIX / "flareon-ju19.json").read_text())
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            calls.append(1)
+            return payload
+
+    monkeypatch.setattr(source.session, "get", lambda *a, **k: FakeResponse())
+
+    first = source._get("/pokemon/cards/search", {"tcg_id": "base2-19"})
+    assert budget.used() == 1
+
+    for _ in range(5):
+        again = source._get("/pokemon/cards/search", {"tcg_id": "base2-19"})
+        assert again == first
+
+    assert budget.used() == 1, "cached reads must not spend the allowance"
+    assert len(calls) == 1, "only the first call should reach the network"
+
+
+def test_different_params_are_different_cache_entries(repo, tmp_path, monkeypatch):
+    """A page number must not silently return another page's data."""
+    from tombot.config import Config
+    from tombot.services.httpcache import HttpCache
+
+    monkeypatch.setattr(Config, "TCGGO_API_KEY", "test-key", raising=False)
+    source = TcggoSource(Config, budget=RequestBudget(repo, "tcggo", limit=10),
+                         cache=HttpCache(tmp_path / "c"))
+    seq = [{"data": [{"id": 1}]}, {"data": [{"id": 2}]}]
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, body):
+            self._body = body
+
+        def json(self):
+            return self._body
+
+    monkeypatch.setattr(source.session, "get",
+                        lambda *a, **k: FakeResponse(seq.pop(0)))
+
+    p1 = source._get("/x", {"page": 1})
+    p2 = source._get("/x", {"page": 2})
+    assert p1 != p2
+    assert source._get("/x", {"page": 1}) == p1     # served from cache

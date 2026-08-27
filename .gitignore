@@ -13,3 +13,6 @@ media/thumbs/*
 dist/
 .DS_Store
 .pytest_cache/
+
+# cached API responses; never committed
+.cache/

@@ -39,7 +39,20 @@ def load_env(path=ROOT / ".env"):
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip().strip('"').strip("'")
+        key, value = key.strip(), value.strip()
+        if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) > 1:
+            value = value[1:-1]                 # quoted: take it verbatim
+        else:
+            # Unquoted values in this file carry trailing comments, e.g.
+            #   HTTP_MAX_BACKOFF=30    # longest a retry waits
+            # Only a # that follows whitespace starts one, so a # inside a key
+            # or password survives.
+            cut = value.find(" #")
+            if cut == -1:
+                cut = value.find("\t#")
+            if cut != -1:
+                value = value[:cut]
+            value = value.strip()
         if key and key not in os.environ:
             os.environ[key] = value
 
@@ -68,6 +81,8 @@ if not budget.can_afford(CALLS):
 source = TcggoSource(Config, budget=budget)
 
 print(f"\nspending {CALLS} requests.\n")
+print("sanity: two different cards must not return identical results;\n"
+      "        if they do, the filter was ignored rather than matched.\n")
 try:
     holo = source.fetch_by_tcgid("base2-3")     # Jungle Flareon, holo
     plain = source.fetch_by_tcgid("base2-19")   # Jungle Flareon, non-holo
