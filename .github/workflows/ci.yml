@@ -128,6 +128,16 @@ jobs:
             if curl -fsS http://127.0.0.1:8080/api/healthz > /tmp/health.json; then break; fi
             sleep 2
           done
+          echo "--- what the container can see of .git ---"
+          docker exec tombot-ci-run sh -c 'ls -la /srv/.git 2>&1 | head -5; echo "HEAD:"; cat /srv/.git/HEAD 2>&1' || true
+          docker exec tombot-ci-run python -c "
+import tombot.version as v
+print('_ROOT      =', v._ROOT)
+print('HEAD exists=', (v._ROOT / '.git' / 'HEAD').exists())
+print('from_files =', v._from_git_files())
+print('from_git   =', v._from_git())
+print('get_version=', v.get_version())" 2>&1 || true
+          echo "--- end ---"
           cat /tmp/health.json
           # A booting container returns 200 long before the schema exists, so
           # assert on the payload rather than the status code.
