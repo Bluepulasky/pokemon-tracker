@@ -311,6 +311,58 @@ Notable: `APP_TOKEN`. The app has no login by design (single user). It binds to
 `127.0.0.1` by default. If you expose it beyond your LAN, set `APP_TOKEN` and every
 `/api/*` call will require an `X-App-Token` header.
 
+### The tcggo key (optional, and it costs money if you get it wrong)
+
+`tcggo` is a second price source. It is worth having because it maps one
+Cardmarket product per card, which is what TCGdex gets wrong for the non-holo
+print of every WOTC rare — see PLAN.md §2.19.
+
+**Its plan bills per request past a daily allowance.** Everything below exists
+to make going over that allowance hard.
+
+Put the key in `.env` in the same folder as `docker-compose.yml`:
+
+```ini
+TCGGO_API_KEY=your-key-here
+TCGGO_DAILY_LIMIT=80
+```
+
+`.env` is gitignored, so the key stays on your machine. Never put it in
+`.env.example`, in `docker-compose.yml`, or in a commit.
+
+Then:
+
+```bash
+docker compose up -d          # picks up .env automatically
+```
+
+**`TCGGO_DAILY_LIMIT` is a hard stop, not a suggestion.** The app counts every
+request in its own database and refuses to send one past the limit. Keep it
+*below* the number your plan actually allows: the gap absorbs retries and the
+day boundary. The default of 80 assumes a plan of 100.
+
+Some details worth knowing before you change it:
+
+* The count lives in the database, so restarting the container does **not**
+  hand back a fresh allowance.
+* The app and the scheduler share one allowance, for the same reason.
+* A request is counted *before* it is sent. If something dies mid-request the
+  slot is still spent — wasting a request is better than being billed for one.
+* Setting `TCGGO_DAILY_LIMIT=0` blocks the source entirely.
+* The allowance resets at 00:00 UTC.
+
+To check what is left, or to test the key without touching the app:
+
+```bash
+docker compose exec tombot-tracker python scripts/tcggo_live_check.py
+```
+
+That spends exactly two requests, prints how many remain, and refuses to run
+if the budget cannot cover them.
+
+Nothing uses tcggo unless you set `PRICE_SOURCE=tcggo`. With the key absent,
+the app carries on with the sources it already had.
+
 ## Layout
 
 ```

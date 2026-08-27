@@ -44,6 +44,9 @@ services:
 
       APP_TOKEN: "${APP_TOKEN:-}"
       POKEMONTCG_API_KEY: "${POKEMONTCG_API_KEY:-}"
+      # Metered: billed per request past the plan's daily allowance.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-80}"
       CARDMARKET_LOCALE: "${CARDMARKET_LOCALE:-es}"
       PRICE_BASIS: "${PRICE_BASIS:-averageSellPrice}"
       PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"
@@ -77,5 +80,9 @@ services:
       SCHEDULER_CRON_DAY: "${SCHEDULER_CRON_DAY:-1}"
       SCHEDULER_CRON_HOUR: "${SCHEDULER_CRON_HOUR:-4}"
       POKEMONTCG_API_KEY: "${POKEMONTCG_API_KEY:-}"
+      # Shares the same daily allowance as the app container: the count lives
+      # in the database, so the two cannot each spend a full cap.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-80}"
       PRICE_BASIS: "${PRICE_BASIS:-averageSellPrice}"
       PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"

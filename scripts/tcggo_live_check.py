@@ -15,9 +15,36 @@ It answers the two questions that decide whether we adopt the source:
   2. Are print runs separate cards with their own products?
 """
 import os
+import pathlib
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+
+def load_env(path=ROOT / ".env"):
+    """Read .env into the environment.
+
+    Docker Compose reads .env by itself, but a script run straight from a shell
+    does not, and python-dotenv is not a dependency. Without this the key would
+    sit in .env and the script would still report it missing.
+
+    Anything already exported wins, so `TCGGO_API_KEY=... script.py` overrides
+    the file rather than being silently ignored.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_env()
 
 from tombot.config import Config, DEFAULT_MODIFIERS          # noqa: E402
 from tombot.services.budget import BudgetExhausted, RequestBudget  # noqa: E402
