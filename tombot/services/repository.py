@@ -17,6 +17,7 @@ from typing import Any, Iterable, Sequence
 
 log = logging.getLogger(__name__)
 
+from ..config import CONDITIONS, DEFAULT_CONDITION, RETIRED_CONDITIONS
 from .printing_variants import variants_for
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -150,6 +151,8 @@ class PokemonRepo:
                 conn.execute(ddl)
                 applied.append(f"{table}.{column}")
         applied += self._migrate_ratings_to_cards(conn)
+        applied += self._migrate_retired_conditions(conn)
+        applied += self._migrate_drop_unknown_condition_modifiers(conn)
         applied += self._migrate_add_market_product(conn)
         return applied
 
@@ -169,6 +172,83 @@ class PokemonRepo:
             return []
         conn.execute("ALTER TABLE collection_items ADD COLUMN market_product_id INTEGER")
         return ["collection_items.market_product_id"]
+
+    @staticmethod
+    def _migrate_retired_conditions(conn) -> list[str]:
+        """Carry rows written under the old grade names onto the new ones.
+
+        A grade with no multiplier row does not fail — it falls back to 1.00 —
+        so a card left on "NM" keeps being valued as if it were mint. Silent,
+        and wrong in the direction that flatters the collection.
+
+        Merging matters as much as renaming: (card, variant, condition,
+        language) is unique, so a card held as both "NM" and "M/NM" would
+        collide. The quantities are added rather than one row losing.
+        """
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
+        if not cols:
+            return []                    # fresh database; schema.sql handles it
+
+        applied = []
+        for old, new in RETIRED_CONDITIONS.items():
+            rows = conn.execute(
+                "SELECT COUNT(*) FROM collection_items WHERE condition = ?",
+                (old,)).fetchone()[0]
+            if not rows:
+                continue
+
+            # Fold any row that would collide into its counterpart first.
+            conn.execute(
+                """UPDATE collection_items AS keep
+                      SET quantity = keep.quantity + (
+                            SELECT SUM(dup.quantity) FROM collection_items dup
+                             WHERE dup.condition = ?
+                               AND dup.card_id = keep.card_id
+                               AND dup.variant = keep.variant
+                               AND dup.language = keep.language)
+                    WHERE keep.condition = ?
+                      AND EXISTS (SELECT 1 FROM collection_items dup
+                                   WHERE dup.condition = ?
+                                     AND dup.card_id = keep.card_id
+                                     AND dup.variant = keep.variant
+                                     AND dup.language = keep.language)""",
+                (old, new, old))
+            conn.execute(
+                """DELETE FROM collection_items
+                    WHERE condition = ?
+                      AND EXISTS (SELECT 1 FROM collection_items keep
+                                   WHERE keep.condition = ?
+                                     AND keep.card_id = collection_items.card_id
+                                     AND keep.variant = collection_items.variant
+                                     AND keep.language = collection_items.language)""",
+                (old, new))
+            conn.execute("UPDATE collection_items SET condition = ? WHERE condition = ?",
+                         (new, old))
+            applied.append(f"collection_items.condition {old}->{new} ({rows} row(s))")
+        return applied
+
+    @staticmethod
+    def _migrate_drop_unknown_condition_modifiers(conn) -> list[str]:
+        """Remove condition multipliers for grades that no longer exist.
+
+        Renaming the grades left the old multiplier rows in place beside the
+        new ones, so the Mantenimiento table listed both sets at once — eleven
+        rows for five grades, including a typo nobody could have edited on
+        purpose. They are dead weight: nothing reads a multiplier for a grade
+        no card can have.
+        """
+        try:
+            existing = {r["key"] for r in conn.execute(
+                "SELECT key FROM price_modifiers WHERE kind = 'condition'")}
+        except Exception:                                    # noqa: BLE001
+            return []                    # table not created yet
+        stale = sorted(existing - set(CONDITIONS))
+        if not stale:
+            return []
+        conn.executemany(
+            "DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
+            [(k,) for k in stale])
+        return [f"price_modifiers: dropped {', '.join(stale)}"]
 
     @staticmethod
     def _migrate_ratings_to_cards(conn) -> list[str]:
@@ -677,7 +757,7 @@ class PokemonRepo:
         payload = {
             "card_id": item["card_id"],
             "variant": item.get("variant", "normal"),
-            "condition": item.get("condition", "NM"),
+            "condition": item.get("condition") or DEFAULT_CONDITION,
             "language": item.get("language", "es"),
             "market_product_id": item.get("market_product_id"),
             "quantity": int(item.get("quantity", 1)),

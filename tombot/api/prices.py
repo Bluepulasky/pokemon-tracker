@@ -2,7 +2,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from . import cfg, repo, svc
 from .. import ApiError
-from ..config import VARIANTS
+from ..config import CONDITIONS, VARIANTS
 
 bp = Blueprint("prices", __name__, url_prefix="/api/prices")
 
@@ -77,6 +77,11 @@ def set_modifier(kind, key):
     """
     if kind not in ("condition", "language", "variant"):
         raise ApiError(f"tipo de multiplicador desconocido: {kind}", "invalid_modifier")
+    # The key was never checked, so a typo wrote a new row that nothing reads
+    # and nothing removes — which is how a stray "N/NM" ended up sitting in the
+    # multiplier table next to the real grades.
+    if kind == "condition" and key not in CONDITIONS:
+        raise ApiError(f"condición desconocida: {key}", "invalid_modifier")
     body = request.get_json(silent=True) or {}
     try:
         value = float(body.get("multiplier"))

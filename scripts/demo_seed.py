@@ -31,7 +31,7 @@ FILL = [
 
 # Weighted so the collection looks like a real one: mostly NM Spanish singles,
 # with a tail of played cards, English/Portuguese copies and a few duplicates.
-CONDITIONS = (["NM"] * 60) + (["LP"] * 22) + (["MP"] * 11) + (["HP"] * 5) + ["DMG"] * 2
+CONDITIONS = (["M/NM"] * 60) + (["EX"] * 22) + (["GD"] * 11) + (["PL"] * 5) + ["PO"] * 2
 LANGUAGES = (["es"] * 62) + (["en"] * 27) + (["pt"] * 8) + ["other"] * 3
 QUANTITIES = ([1] * 74) + ([2] * 18) + ([3] * 6) + [4, 5]
 
