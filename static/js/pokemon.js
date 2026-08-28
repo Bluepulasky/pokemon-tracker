@@ -181,6 +181,18 @@ async function setDetail(r) {
   let slots = [...s.slots];
   if (filter === 'owned') slots = slots.filter((x) => x.owned);
   if (filter === 'missing') slots = slots.filter((x) => !x.owned);
+  /* Cards the rule left out are not slots. They are shown so that nothing in a
+     set is invisible: a rule that removes nineteen cards should say so, rather
+     than leaving them indistinguishable from cards that do not exist. */
+  if (filter === 'excluded') {
+    slots = (s.excluded || []).map((c) => ({
+      card_id: c.id, label: c.name, name: c.name, number: c.number,
+      number_sort: c.number_sort, rarity: c.rarity,
+      image_small_url: c.image_small_url, image_local: c.image_local,
+      official_set_id: c.official_set_id,
+      owned: 0, quantity: 0, target: 1, complete: 0, excluded: true,
+    }));
+  }
   slots.sort(sorter(sort));
 
   view().innerHTML = `
@@ -194,6 +206,10 @@ async function setDetail(r) {
         ${[['all', 'Todas'], ['owned', 'Poseídas'], ['missing', 'Faltantes']]
           .map(([k, label]) => `<span class="chip${filter === k ? ' on' : ''}"
              data-filter="${k}">${label}<b>${counts[k]}</b></span>`).join('')}
+        ${(s.excluded && s.excluded.length) ? `
+        <span class="chip${filter === 'excluded' ? ' on' : ''}" data-filter="excluded"
+              title="Cartas del set que la regla de este set deja afuera">
+          Fuera de la regla<b>${s.excluded.length}</b></span>` : ''}
       </div>
       <select id="f-sort">
         <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>

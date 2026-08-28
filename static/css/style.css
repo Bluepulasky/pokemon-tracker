@@ -494,3 +494,12 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .episode .e-meta { font-size: .75rem; color: var(--muted, #6b7280);
                    margin-bottom: .4rem; }
 .episode .e-added { font-size: .74rem; color: var(--ok, #16a34a); }
+
+/* ---- cards a rule left out --------------------------------------------- */
+/* Shown, not hidden. A rule that removes nineteen cards should say so; the
+   alternative is a card indistinguishable from one that does not exist. */
+.card-tile.excluded { opacity: .55; }
+.card-tile.excluded::after { content: 'fuera de la regla'; position: absolute;
+    left: 6px; bottom: 6px; font-size: .62rem; letter-spacing: .04em;
+    padding: 1px 6px; border-radius: 999px; text-transform: uppercase;
+    background: rgba(0, 0, 0, .65); color: var(--warn, #d97706); }
