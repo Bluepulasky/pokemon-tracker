@@ -24,21 +24,42 @@ SHADOWLESS_SETS = {"base1"}
 HOLO_RARITIES = {"Rare Holo", "Rare Secret", "Rare Holo EX", "Rare Shining"}
 
 
+# Reverse holos begin with Legendary Collection. Nothing printed before that
+# date exists as one, so offering it on a Base Set trainer is not a harmless
+# extra option — it is a variant that cannot be bought, priced, or owned.
+REVERSE_HOLO_FROM = "2002/05/24"
+
+
+def _predates_reverse_holo(release_date: str | None) -> bool | None:
+    """True/False when the date is known, None when it is not."""
+    if not release_date:
+        return None
+    return release_date.replace("-", "/") < REVERSE_HOLO_FROM
+
+
 def variants_for(official_set_id: str, rarity: str | None,
                  release_date: str | None = None) -> list[str]:
-    """Physical variants a card of this rarity, in this set, can be found as."""
+    """Physical variants a card of this rarity, in this set, can be found as.
+
+    Decided by the set's release date where we know it. It used to be decided
+    by membership of a hardcoded list of catalogue set ids, which answers
+    confidently and wrongly for any catalogue whose ids differ: "base1" is in
+    the list, "bs" is not, so Base Set was treated as a modern set and every
+    non-holo in it was offered as a reverse holo.
+    """
     rarity = rarity or ""
     variants: list[str] = ["holo"] if rarity in HOLO_RARITIES else ["normal"]
 
-    if official_set_id in WOTC_EARLY:
+    early = _predates_reverse_holo(release_date)
+    if early is None:                      # no date: fall back to the id list
+        early = official_set_id in WOTC_EARLY
+
+    if early:
         variants.append("first_edition")
-        if official_set_id in SHADOWLESS_SETS:
+        if official_set_id in SHADOWLESS_SETS or official_set_id == "bs":
             variants.append("shadowless")
-    else:
-        # Reverse holo became standard from the e-Card era onward and is the one
-        # within-printing variant the upstream ever prices separately.
-        if rarity and rarity not in HOLO_RARITIES:
-            variants.append("reverse")
+    elif rarity and rarity not in HOLO_RARITIES:
+        variants.append("reverse")
 
     variants.append("other")
     return list(dict.fromkeys(variants))

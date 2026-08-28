@@ -147,6 +147,13 @@ def card_versions():
     if not name:
         raise ApiError("hace falta un nombre o un card_id", "invalid_request")
 
+    # Imported sets answer locally and cost nothing. Only a set nobody has
+    # imported falls through to the API, which is the whole point of importing
+    # them: registering a card should not spend an allowance.
+    local = _versions_from_import(card_id, episode_id)
+    if local is not None:
+        return jsonify({"name": name, "versions": local, "source": "local"})
+
     source = svc("versions_source")
     if source is None or not source.configured:
         raise ApiError("no hay fuente de versiones configurada (TCGGO_API_KEY)",
@@ -196,3 +203,35 @@ def _episode_for_set(official_set_id: str) -> int | None:
     repo().set_set_episode(official_set_id, episode["id"],
                            episode.get("name"), episode.get("code"))
     return episode["id"]
+
+
+def _versions_from_import(card_id: str | None, episode_id: int | None):
+    """Versions for this card out of the imported set, or None if not imported.
+
+    None rather than an empty list on purpose: "this set was never imported"
+    and "this card has no versions" are different answers, and only the first
+    should reach for the network.
+    """
+    if not card_id or episode_id is None:
+        return None
+    if not repo().episode_is_imported(episode_id):
+        return None
+
+    card = repo().get_card(card_id)
+    if not card:
+        return None
+    oset = repo().get_official_set(card["official_set_id"]) or {}
+    code_prefix = oset.get("ptcgo_code")
+    if not code_prefix:
+        return None
+
+    rows = repo().market_products_for_code(episode_id,
+                                           f"{code_prefix} {card['number']}")
+    return [{
+        "market_product_id": r["product_id"],
+        "name": r["name"], "set": oset.get("name"), "code": r["code"],
+        "number": r["number"], "version": r["version"], "rarity": r["rarity"],
+        "image": r["image"], "market_url": r["market_url"],
+        "currency": r["currency"], "price": r["price"],
+        "lowest_near_mint": r["price_low"], "available": r["available"],
+    } for r in rows]

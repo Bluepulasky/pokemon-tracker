@@ -1296,6 +1296,74 @@ class PokemonRepo:
     def get_official_set(self, set_id: str) -> dict | None:
         return self._one("SELECT * FROM official_sets WHERE id=?", (set_id,))
 
+    # -------------------------------------------------------- market products
+    def upsert_market_products(self, rows: list[dict]) -> int:
+        """Store a set's products. Re-importing refreshes prices in place."""
+        if not rows:
+            return 0
+        with self.tx() as c:
+            c.executemany(
+                """INSERT INTO market_products(product_id, episode_id, card_id, code,
+                       number, name, version, rarity, currency, price, price_low,
+                       price_avg30, price_avg7, available, image, market_url,
+                       updated_at)
+                   VALUES(:product_id,:episode_id,:card_id,:code,:number,:name,
+                          :version,:rarity,:currency,:price,:price_low,
+                          :price_avg30,:price_avg7,:available,:image,
+                          :market_url,datetime('now'))
+                   ON CONFLICT(product_id) DO UPDATE SET
+                     episode_id=excluded.episode_id, card_id=excluded.card_id,
+                     code=excluded.code,
+                     number=excluded.number, name=excluded.name,
+                     version=excluded.version, rarity=excluded.rarity,
+                     currency=excluded.currency, price=excluded.price,
+                     price_low=excluded.price_low, price_avg30=excluded.price_avg30,
+                     price_avg7=excluded.price_avg7, available=excluded.available,
+                     image=excluded.image, market_url=excluded.market_url,
+                     updated_at=datetime('now')""",
+                rows)
+        return len(rows)
+
+    def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
+        """Give every product the id of the card it is a version of."""
+        with self.tx() as c:
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
+            if "card_id" not in cols:
+                c.execute("ALTER TABLE market_products ADD COLUMN card_id TEXT")
+            cur = c.execute(
+                """UPDATE market_products
+                      SET card_id = ? || '-' || LOWER(number)
+                    WHERE code LIKE ? || ' %'""",
+                (episode_code.lower(), episode_code))
+            return cur.rowcount
+
+    def market_products_for_card(self, card_id: str) -> list[dict]:
+        return self._all(
+            "SELECT * FROM market_products WHERE card_id=? ORDER BY version",
+            (card_id,))
+
+    def market_products_for_code(self, episode_id: int, code: str) -> list[dict]:
+        """Every version of one card, from what was imported."""
+        return self._all(
+            """SELECT * FROM market_products
+                WHERE episode_id=? AND code=? ORDER BY version""",
+            (episode_id, code))
+
+    def market_products_by_ids(self, ids: list[int]) -> dict:
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        rows = self._all(
+            f"SELECT * FROM market_products WHERE product_id IN ({marks})",
+            tuple(ids))
+        return {r["product_id"]: r for r in rows}
+
+    def episode_is_imported(self, episode_id: int) -> int:
+        row = self._one(
+            "SELECT COUNT(*) AS n FROM market_products WHERE episode_id=?",
+            (episode_id,))
+        return int(row["n"]) if row else 0
+
     # -------------------------------------------------------------- episodes
     def get_set_episode(self, official_set_id: str) -> dict | None:
         return self._one("SELECT * FROM set_episodes WHERE official_set_id=?",

@@ -419,6 +419,11 @@ async function mantenimiento() {
       <div id="targets-result"></div>
     </div>
 
+    <h2>Revisión de datos</h2>
+    <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
+      rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
+    <div id="health-state"><div class="note">Comprobando…</div></div>
+
     <h2>Estado</h2>
     <div id="job-state" class="missing-list"></div>
 
@@ -437,6 +442,7 @@ async function mantenimiento() {
       </div>`).join('')}</div>`;
 
   renderJob(job);
+  renderHealth();
   view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
   view().querySelector('#do-rebuild').onclick = () => {
     if (confirm('Vuelve a importar lo que falte del catálogo. Puede tardar varios minutos. ¿Seguir?')) {
@@ -492,6 +498,28 @@ function renderTargetImport(box, r) {
        <ul>${changes}</ul></details>` : ''}
     ${problems ? `<details class="import-detail" open><summary>Problemas (${r.errors})</summary>
        <ul class="bad">${problems}</ul></details>` : ''}`;
+}
+
+/* Silent fallbacks are the failure mode here, so the absence of an error is
+   not evidence of health — it is what every one of these bugs looked like. */
+async function renderHealth() {
+  const box = view().querySelector('#health-state');
+  if (!box) return;
+  let r;
+  try { r = await api.health(); } catch { box.innerHTML = ''; return; }
+
+  if (!r.findings.length) {
+    box.innerHTML = '<div class="empty">Sin desajustes. '
+      + 'Grados, rarezas, números y fechas de set son consistentes.</div>';
+    return;
+  }
+  box.innerHTML = `<ul class="health-list">${r.findings.map((f) => `
+      <li class="h-${esc(f.level)}">
+        <div class="h-msg">${esc(f.message)}</div>
+        ${f.detail.length ? `<div class="h-detail">${
+          f.detail.slice(0, 6).map(esc).join(' · ')}${
+          f.detail.length > 6 ? ` … +${f.detail.length - 6}` : ''}</div>` : ''}
+      </li>`).join('')}</ul>`;
 }
 
 function renderJob(job) {

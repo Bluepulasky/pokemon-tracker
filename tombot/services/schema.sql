@@ -231,6 +231,36 @@ CREATE TABLE IF NOT EXISTS price_cache (
 -- card numbers are stored inconsistently upstream ("BS 4" in Base Set, 19 in
 -- Jungle), so a number filter silently drops versions. Looking the episode up
 -- costs a request, so it is looked up once.
+-- Every Cardmarket product in a set we care about, imported in bulk.
+--
+-- Asking per card is what made the allowance the bottleneck: registering 150
+-- cards cost 150 requests, for products that all live in sets a handful of
+-- requests could have fetched whole. A set comes back 100 products at a time,
+-- so Base Set is four requests. After that the picker and the prices are
+-- local, and adding a card costs nothing.
+CREATE TABLE IF NOT EXISTS market_products (
+    product_id  INTEGER PRIMARY KEY,     -- Cardmarket's own id
+    episode_id  INTEGER NOT NULL,
+    card_id     TEXT,                    -- the card these are versions of
+    code        TEXT,                    -- "BS 4"
+    number      TEXT,
+    name        TEXT,
+    version     TEXT,                    -- "Unlimited", "Shadowless", ...
+    rarity      TEXT,
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,
+    price_low   REAL,
+    price_avg30 REAL,
+    price_avg7  REAL,
+    available   INTEGER,
+    image       TEXT,
+    market_url  TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_products_episode
+    ON market_products(episode_id, code);
+
 CREATE TABLE IF NOT EXISTS set_episodes (
     official_set_id TEXT PRIMARY KEY REFERENCES official_sets(id) ON DELETE CASCADE,
     episode_id      INTEGER NOT NULL,

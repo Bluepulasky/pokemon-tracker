@@ -68,13 +68,23 @@ def get_card(card_id):
     # era rules for a card that has no printing row of its own.
     for pr in printings:
         pr["variants"] = json.loads(pr.get("variants_json") or "[]")
+    # What print runs this card exists in is a fact we imported, not something
+    # to infer from a hardcoded list of set ids. Those ids were pokemontcg.io's
+    # ("base1"), so under any other catalogue they match nothing and the app
+    # concludes a set had no 1st Edition — while the products sitting in the
+    # database say otherwise.
+    products = repo().market_products_for_card(card_id)
+    card["editions"] = sorted({p["version"] for p in products if p["version"]})
+
     if not printings:
         from ..services.printing_variants import variants_for
         printings = [{
             "id": None, "card_id": card_id,
             "official_set_id": card["official_set_id"],
             "display_name": card.get("set_name"), "is_reprint": 0,
-            "variants": variants_for(card["official_set_id"], card.get("rarity")),
+            "variants": variants_for(
+                card["official_set_id"], card.get("rarity"),
+                (repo().get_official_set(card["official_set_id"]) or {}).get("release_date")),
             "source": "single",
         }]
     card["available_printings"] = printings
@@ -232,6 +242,21 @@ def import_targets():
         "changes": result["updated"][:200],
         "problems": problems[:200],
     })
+
+
+@bp.get("/maintenance/health")
+def maintenance_health():
+    """Look for vocabulary mismatches before they become wrong numbers.
+
+    Every silent-fallback bug this app has had answered plausibly instead of
+    failing: a missing multiplier is 1.00, an unknown set id is "modern". These
+    checks look for the mismatch itself, so the next rename shows up here
+    rather than in a price nobody questions.
+    """
+    from ..config import CONDITIONS
+    from ..services.health import run_checks
+
+    return jsonify(run_checks(repo(), CONDITIONS))
 
 
 @bp.get("/maintenance/status")

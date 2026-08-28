@@ -459,3 +459,15 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                   color: var(--muted, #6b7280); }
 .version-picked strong { color: inherit; }
 .version-picked code { font-size: .95em; }
+
+/* ---- data review ------------------------------------------------------- */
+.health-list { list-style: none; margin: .4rem 0 0; padding: 0; }
+.health-list li { padding: .45rem .6rem; margin-bottom: .35rem;
+                  border-radius: 0 6px 6px 0; font-size: .85rem;
+                  background: rgba(127, 127, 127, .08);
+                  border-left: 3px solid var(--muted, #6b7280); }
+.health-list li.h-error   { border-left-color: var(--bad, #dc2626); }
+.health-list li.h-warning { border-left-color: var(--warn, #d97706); }
+.health-list li.h-info    { border-left-color: var(--muted, #6b7280); }
+.health-list .h-detail { margin-top: .2rem; font-size: .8rem;
+                         color: var(--muted, #6b7280); }
