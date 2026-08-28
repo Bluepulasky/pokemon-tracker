@@ -238,6 +238,23 @@ CREATE TABLE IF NOT EXISTS price_cache (
 -- requests could have fetched whole. A set comes back 100 products at a time,
 -- so Base Set is four requests. After that the picker and the prices are
 -- local, and adding a card costs nothing.
+-- Sets the source knows about, remembered as we come across them.
+--
+-- Not fetched in bulk: the episode list pages twenty at a time and ignores a
+-- larger page size, so caching all of them costs about twenty requests to
+-- answer a question nobody asked. Searching costs one, and every set seen is
+-- kept, so the list fills in as it gets used.
+CREATE TABLE IF NOT EXISTS market_episodes (
+    episode_id   INTEGER PRIMARY KEY,
+    code         TEXT,
+    name         TEXT NOT NULL,
+    slug         TEXT,
+    released_at  TEXT,
+    logo         TEXT,
+    cards_total  INTEGER,
+    seen_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS market_products (
     product_id  INTEGER PRIMARY KEY,     -- Cardmarket's own id
     episode_id  INTEGER NOT NULL,

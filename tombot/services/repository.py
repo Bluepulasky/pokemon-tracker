@@ -151,6 +151,7 @@ class PokemonRepo:
                 conn.execute(ddl)
                 applied.append(f"{table}.{column}")
         applied += self._migrate_ratings_to_cards(conn)
+        applied += self._migrate_budget_to_rolling_window(conn)
         applied += self._migrate_retired_conditions(conn)
         applied += self._migrate_drop_unknown_condition_modifiers(conn)
         applied += self._migrate_add_market_product(conn)
@@ -249,6 +250,33 @@ class PokemonRepo:
             "DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
             [(k,) for k in stale])
         return [f"price_modifiers: dropped {', '.join(stale)}"]
+
+    @staticmethod
+    def _migrate_budget_to_rolling_window(conn) -> list[str]:
+        """Carry today's spent requests into the rolling-window table.
+
+        The count used to live in api_budget as one row per day. Switching to a
+        rolling window without carrying it over reports zero spent — handing
+        back an allowance that was already used, on the day of the upgrade, in
+        the one direction that costs money.
+        """
+        tables = {r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if "api_requests" not in tables or "api_budget" not in tables:
+            return []
+        already = conn.execute("SELECT COUNT(*) FROM api_requests").fetchone()[0]
+        if already:
+            return []                    # already migrated, or already counting
+
+        carried = []
+        for row in conn.execute(
+                "SELECT provider, count FROM api_budget "
+                " WHERE day = strftime('%Y-%m-%d','now') AND count > 0"):
+            conn.executemany(
+                "INSERT INTO api_requests(provider, sent_at) VALUES(?, datetime('now'))",
+                [(row["provider"],)] * int(row["count"]))
+            carried.append(f"{row['provider']}: {row['count']} request(s)")
+        return [f"api_budget -> api_requests ({', '.join(carried)})"] if carried else []
 
     @staticmethod
     def _migrate_ratings_to_cards(conn) -> list[str]:
@@ -1295,6 +1323,42 @@ class PokemonRepo:
 
     def get_official_set(self, set_id: str) -> dict | None:
         return self._one("SELECT * FROM official_sets WHERE id=?", (set_id,))
+
+    # ------------------------------------------------------- market episodes
+    def remember_episodes(self, episodes: list[dict]) -> int:
+        """Keep every set we are told about, so the list fills in as it is used."""
+        rows = [{
+            "episode_id": e.get("id"), "code": e.get("code"),
+            "name": e.get("name") or "", "slug": e.get("slug"),
+            "released_at": e.get("released_at"), "logo": e.get("logo"),
+            "cards_total": e.get("cards_total"),
+        } for e in episodes if e.get("id") and e.get("name")]
+        if not rows:
+            return 0
+        with self.tx() as c:
+            c.executemany(
+                """INSERT INTO market_episodes(episode_id, code, name, slug,
+                       released_at, logo, cards_total, seen_at)
+                   VALUES(:episode_id,:code,:name,:slug,:released_at,:logo,
+                          :cards_total,datetime('now'))
+                   ON CONFLICT(episode_id) DO UPDATE SET
+                     code=excluded.code, name=excluded.name, slug=excluded.slug,
+                     released_at=excluded.released_at, logo=excluded.logo,
+                     cards_total=excluded.cards_total""",
+                rows)
+        return len(rows)
+
+    def search_known_episodes(self, q: str | None) -> list[dict]:
+        """Sets we already know of, with whether they have been imported."""
+        sql = """SELECT e.*,
+                        (SELECT COUNT(*) FROM market_products m
+                          WHERE m.episode_id = e.episode_id) AS products
+                   FROM market_episodes e"""
+        params: tuple = ()
+        if q:
+            sql += " WHERE e.name LIKE ? OR e.code LIKE ?"
+            params = (f"%{q}%", f"%{q}%")
+        return self._all(sql + " ORDER BY e.released_at DESC", params)
 
     # -------------------------------------------------------- market products
     def upsert_market_products(self, rows: list[dict]) -> int:

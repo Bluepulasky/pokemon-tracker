@@ -19,7 +19,13 @@ from __future__ import annotations
 WOTC_EARLY = {"base1", "base2", "base3", "base5", "gym1", "gym2",
               "neo1", "neo2", "neo3", "neo4"}
 # Base Set specifically had a Shadowless print run; the others did not.
-SHADOWLESS_SETS = {"base1"}
+#
+# Still a list of ids, and still the weakest thing here: it answers wrongly for
+# any catalogue whose ids differ. It survives only as the fallback for a card
+# with no imported products and no release date. When products exist, the print
+# runs come from them and this is not consulted at all — see
+# api/catalog.py, which builds `editions` from what was actually imported.
+SHADOWLESS_SETS = {"base1", "bs"}
 
 HOLO_RARITIES = {"Rare Holo", "Rare Secret", "Rare Holo EX", "Rare Shining"}
 
@@ -56,7 +62,7 @@ def variants_for(official_set_id: str, rarity: str | None,
 
     if early:
         variants.append("first_edition")
-        if official_set_id in SHADOWLESS_SETS or official_set_id == "bs":
+        if official_set_id in SHADOWLESS_SETS:
             variants.append("shadowless")
     elif rarity and rarity not in HOLO_RARITIES:
         variants.append("reverse")

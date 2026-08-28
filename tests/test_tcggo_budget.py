@@ -341,3 +341,39 @@ def test_the_cap_holds_across_a_midnight(repo):
     assert after.remaining() == 0
     with pytest.raises(BudgetExhausted):
         after.reserve()
+
+
+def test_the_days_spend_survives_the_move_to_a_rolling_window(tmp_path):
+    """Switching counters must not hand back an allowance already used.
+
+    Reporting zero on upgrade day is wrong in the direction that gets billed.
+    """
+    from tombot.config import DEFAULT_MODIFIERS
+
+    repo = PokemonRepo(tmp_path / "m.db")
+    repo.init_db(DEFAULT_MODIFIERS)
+    with repo.tx() as c:                      # a database counting the old way
+        c.execute("DELETE FROM api_requests")
+        c.execute("""INSERT INTO api_budget(provider, day, count)
+                     VALUES('tcggo', strftime('%Y-%m-%d','now'), 36)""")
+
+    repo.init_db(DEFAULT_MODIFIERS)           # the upgrade
+
+    assert RequestBudget(repo, "tcggo", limit=80).used() == 36
+
+
+def test_the_carry_over_does_not_run_twice(tmp_path):
+    """A second start must not double what was already carried."""
+    from tombot.config import DEFAULT_MODIFIERS
+
+    repo = PokemonRepo(tmp_path / "m2.db")
+    repo.init_db(DEFAULT_MODIFIERS)
+    with repo.tx() as c:
+        c.execute("DELETE FROM api_requests")
+        c.execute("""INSERT INTO api_budget(provider, day, count)
+                     VALUES('tcggo', strftime('%Y-%m-%d','now'), 5)""")
+
+    repo.init_db(DEFAULT_MODIFIERS)
+    repo.init_db(DEFAULT_MODIFIERS)
+
+    assert RequestBudget(repo, "tcggo", limit=80).used() == 5
