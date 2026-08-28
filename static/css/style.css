@@ -288,6 +288,20 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
         background: var(--bg-3); cursor: pointer; font-size: 13px; }
 .chip.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
 
+/* Quick-select: bulk-applies the collecting star to the whole set. It is an
+   action row, not a filter — it changes what you collect, so it sits above the
+   filter toolbar and its buttons read as buttons, not toggles. */
+.quick-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+                margin: 16px 0 0; }
+.quick-select .qs-label { font-size: 12px; text-transform: uppercase;
+                          letter-spacing: .06em; color: var(--fg-faint);
+                          margin-right: 2px; }
+.qs-btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+          background: var(--bg-3); color: var(--fg); cursor: pointer; font-size: 13px;
+          transition: .12s; }
+.qs-btn:hover { border-color: var(--accent); background: var(--bg-2); }
+.qs-btn:disabled { opacity: .5; cursor: default; }
+
 /* View-mode switch at the top of the Cartas view. Deliberately larger and
    separate from the filter row: it changes what the list means, not just which
    rows survive. */

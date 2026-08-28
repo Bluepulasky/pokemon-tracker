@@ -446,8 +446,13 @@ class PokemonRepo:
         params = (set_id,) if set_id else ()
         # A slot counts once the copies held reach its target. With no target set
         # the target is 1, which is the same "do I have one" question as before.
+        # The set's series and release date come from the catalogue set the rule
+        # is built on (its first include_sets entry). They drive the Sets view:
+        # grouped by series (Base / Gym / Neo / …), ordered oldest-first. Both
+        # are catalogue facts, so a set files itself — no manual group to keep.
         return self._all(
             f"""SELECT s.id, s.name, s.group_name, s.position,
+                       os.series AS series, os.release_date AS release_date,
                        COUNT(DISTINCT sl.id) AS target,
                        COUNT(DISTINCT CASE WHEN sl.held > 0 THEN sl.id END) AS owned,
                        COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS complete,
@@ -456,6 +461,8 @@ class PokemonRepo:
                        COALESCE(SUM(MIN(sl.held, sl.want)), 0) AS copies_held,
                        COALESCE(SUM(sl.want), 0) AS copies_target
                 FROM collection_sets s
+                LEFT JOIN official_sets os
+                       ON os.id = json_extract(s.rules_json, '$.include_sets[0]')
                 LEFT JOIN (
                     SELECT sl.id, sl.set_id,
                            COALESCE(t.target, 1) AS want,
@@ -467,8 +474,8 @@ class PokemonRepo:
                       LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                 ) sl ON sl.set_id = s.id
                 {where}
-                GROUP BY s.id, s.name, s.group_name, s.position
-                ORDER BY s.position, s.name""",
+                GROUP BY s.id, s.name, s.group_name, s.position, os.series, os.release_date
+                ORDER BY os.release_date, s.name""",
             params,
         )
 

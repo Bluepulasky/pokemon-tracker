@@ -148,8 +148,12 @@ const setCardHtml = (s) => `
 /* ------------------------------------------------------------------ sets */
 async function sets() {
   const { data } = await api.sets();
+  // Grouped by TCG series (Base / Gym / Neo / …), which the API returns from
+  // each set's catalogue data. `data` is already ordered by release date, so the
+  // groups fall out oldest-first and each series' sets stay contiguous. A set
+  // with no series (rare — tcggo omits it on a few) stands as its own block.
   const groups = {};
-  for (const s of data) (groups[s.group_name || 'Otros'] ||= []).push(s);
+  for (const s of data) (groups[s.series || s.name || 'Otros'] ||= []).push(s);
 
   view().innerHTML = `
     <h1>Sets</h1>
@@ -172,6 +176,7 @@ async function setDetail(r) {
   const sort = r.params.get('sort') || 'number';
   const rar = r.params.get('rar') || 'all';       // all | holo | no-holo (view)
   const own = r.params.get('own') || 'all';       // all | owned | missing (view)
+  const col = r.params.get('col') || 'all';       // all | collecting | not (view)
 
   const isHolo = (c) => /holo/i.test(c.rarity || '');
   // Every card in the set, each tagged collecting/owned. The set is a checklist
@@ -190,6 +195,8 @@ async function setDetail(r) {
   if (rar === 'no-holo') shown = shown.filter((c) => !c.holo);
   if (own === 'owned') shown = shown.filter((c) => c.owned);
   if (own === 'missing') shown = shown.filter((c) => !c.owned);
+  if (col === 'collecting') shown = shown.filter((c) => c.collecting);
+  if (col === 'not') shown = shown.filter((c) => !c.collecting);
   shown = [...shown].sort(sorter(sort));
 
   const collecting = cards.filter((c) => c.collecting).length;
@@ -200,6 +207,13 @@ async function setDetail(r) {
       · falta ${Math.max(0, collecting - p.owned)}</p>
     ${progressBar(p.owned, collecting)}
 
+    <div class="quick-select" id="q-collect">
+      <span class="qs-label">Coleccionar ★</span>
+      ${[['all', 'Todo'], ['holo', 'Solo holo'], ['non-holo', 'Solo no holo'],
+         ['none', 'Ninguno'], ['invert', 'Invertir']]
+.map(([k, l]) => `<button class="qs-btn" data-collect="${k}">${l}</button>`).join('')}
+    </div>
+
     <div class="toolbar">
       <div class="chips seg" id="f-rar">
         ${[['all', 'Todas'], ['holo', 'Holo'], ['no-holo', 'No holo']]
@@ -208,6 +222,10 @@ async function setDetail(r) {
       <div class="chips seg" id="f-own">
         ${[['all', 'Todas'], ['owned', 'Poseídas'], ['missing', 'Faltantes']]
 .map(([k, l]) => `<span class="chip${own === k ? ' on' : ''}" data-own="${k}">${l}</span>`).join('')}
+      </div>
+      <div class="chips seg" id="f-col">
+        ${[['all', 'Todas'], ['collecting', 'Coleccionando'], ['not', 'No coleccionando']]
+.map(([k, l]) => `<span class="chip${col === k ? ' on' : ''}" data-col="${k}">${l}</span>`).join('')}
       </div>
       <select id="f-sort">
         <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
@@ -220,12 +238,30 @@ async function setDetail(r) {
     <div class="card-grid">${shown.map(cardCheckHtml).join('')}</div>`;
 
   const nav = (over) => {
-    const q = new URLSearchParams({ sort, rar, own, ...over });
+    const q = new URLSearchParams({ sort, rar, own, col, ...over });
     location.hash = `#/set/${r.id}?${q.toString()}`;
   };
   view().querySelector('#f-sort').onchange = (e) => nav({ sort: e.target.value });
   view().querySelectorAll('#f-rar .chip').forEach((c) => c.onclick = () => nav({ rar: c.dataset.rar }));
   view().querySelectorAll('#f-own .chip').forEach((c) => c.onclick = () => nav({ own: c.dataset.own }));
+  view().querySelectorAll('#f-col .chip').forEach((c) => c.onclick = () => nav({ col: c.dataset.col }));
+
+  // Quick-select bulk-applies the star to the whole set, so "how do I collect
+  // this set" is one click instead of a hundred. It re-renders in place, keeping
+  // the current filters and scroll intent.
+  view().querySelectorAll('#q-collect .qs-btn').forEach((btn) => {
+    btn.onclick = async () => {
+      view().querySelectorAll('.qs-btn').forEach((b) => { b.disabled = true; });
+      try {
+        const res = await api.bulkCollect(r.id, btn.dataset.collect);
+        toast(`Coleccionando ${res.collecting} de ${cards.length}`);
+        setDetail(r);
+      } catch (err) {
+        toast(err.message, true);
+        view().querySelectorAll('.qs-btn').forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
 
   // The collecting toggle is a per-card exception on top of any bulk rule.
   view().querySelectorAll('[data-toggle]').forEach((btn) => {
