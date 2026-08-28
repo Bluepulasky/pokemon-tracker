@@ -72,8 +72,19 @@ def _priced(rows):
         r["value"] = (pricing.estimate_item(r, mods) if r.get("owned", True)
                       else {"unit": None, "total": None, "currency": "EUR",
                             "basis": "not_owned", "updated_at": None})
-        # The row is a join over cards, so it already carries external_ids_json.
         r["market_url"] = market_url(r, locale=locale)
+
+    # A row that chose a version knows its exact Cardmarket product, so its link
+    # is that product's URL — not the card-level guess, which pointed a Normal
+    # Flareon at the Holo listing (issue #27). One lookup for the whole page.
+    product_ids = [r["market_product_id"] for r in rows if r.get("market_product_id")]
+    if product_ids:
+        products = repo().market_products_by_ids(product_ids)
+        for r in rows:
+            pid = r.get("market_product_id")
+            prod = products.get(pid) if pid else None
+            if prod and prod.get("market_url"):
+                r["market_url"] = prod["market_url"]
     return rows
 
 
