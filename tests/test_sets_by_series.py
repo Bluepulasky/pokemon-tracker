@@ -47,10 +47,13 @@ def _sets(app):
     return app.test_client().get("/api/sets").get_json()["data"]
 
 
-def test_sets_carry_series_and_release_date(app):
+def test_series_is_the_era_derived_from_release_date(app):
+    """The era comes from the date, not from tcggo's own (blank) series field."""
     by_name = {s["name"]: s for s in _sets(app)}
-    assert by_name["Fossil"]["series"] == "Base"
-    assert by_name["Neo Genesis"]["series"] == "Neo"
+    assert by_name["Fossil"]["series"] == "Base"          # 1999 -> Base era
+    assert by_name["Neo Genesis"]["series"] == "Neo"      # 2000/12 -> Neo era
+    assert by_name["HeartGold & SoulSilver"]["series"] == "HeartGold & SoulSilver"
+    assert by_name["Base Set"]["series"] == "Base"        # blank tcggo series, still Base
     assert by_name["Fossil"]["release_date"] == "1999/10/10"
 
 
@@ -65,8 +68,18 @@ def test_no_set_is_bucketed_as_added(app):
     assert "Añadidos" not in groups
 
 
-def test_a_blank_series_still_orders_by_date(app):
-    """HeartGold has no series but must still land last by its 2010 date."""
-    sets = _sets(app)
-    assert sets[-1]["name"] == "HeartGold & SoulSilver"
-    assert not sets[-1]["series"]   # blank — the client shows it as its own block
+def test_the_neos_and_gyms_are_not_stranded_as_singletons(app):
+    """The old bug: tcggo left most sets' series blank, so each became its own
+    one-set header. Now same-era sets share an era even with a blank field."""
+    # Add a second Neo-era set with NO tcggo series; it must still be "Neo".
+    r = app.extensions["repo"]
+    r.upsert_official_set({"id": "nr", "name": "Neo Revelation", "series": "",
+                           "printed_total": 1, "total": 1,
+                           "release_date": "2001/09/21", "ptcgo_code": "NR",
+                           "logo_url": None, "symbol_url": None})
+    import json as _json
+    r.upsert_collection_set({"id": "nr-goal", "name": "Neo Revelation",
+                             "rules_json": _json.dumps({"include_sets": ["nr"]})})
+    by_name = {s["name"]: s for s in _sets(app)}
+    assert by_name["Neo Genesis"]["series"] == "Neo"
+    assert by_name["Neo Revelation"]["series"] == "Neo"   # same era, not its own
