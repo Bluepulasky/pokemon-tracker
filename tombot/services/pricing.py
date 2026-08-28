@@ -292,6 +292,8 @@ class PricingService:
             log.warning("no multiplier for condition %r; using 1.00. The grade "
                         "is not in config.CONDITIONS.", condition)
             cond_m = 1.0
+        cond_m = mods.get("condition", {}).get(
+            item.get("condition") or DEFAULT_CONDITION, 1.0)
         lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
         # A 1st edition is never priced apart from its unstamped twin by the
         # feed, so the premium is applied here. Editable per variant, because a
