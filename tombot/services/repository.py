@@ -645,6 +645,40 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
 
+    def cards_excluded_from_set(self, set_id: str) -> list[dict]:
+        """Cards in this set's source sets that its rule leaves out.
+
+        Nothing showed these. "Jungle sin holos" removes sixteen cards and
+        "Neo Genesis sin holos" removes nineteen, and none of them appeared on
+        any screen — the set view filters by ownership, and all three of those
+        filters start from the slots the rule already pruned.
+
+        So a card a rule removed looked exactly like a card that does not
+        exist, and the only way to find out otherwise was to go looking for one
+        and fail. That is how a card that was never missing gets reported as
+        missing.
+        """
+        import json as _json
+
+        cset = self.get_collection_set(set_id)
+        if not cset:
+            return []
+        rules = _json.loads(cset.get("rules_json") or "{}")
+        sources = rules.get("include_sets") or []
+        if not sources:
+            return []
+
+        marks = ",".join("?" * len(sources))
+        return self._all(
+            f"""SELECT c.*, os.name AS set_name
+                  FROM cards c
+                  JOIN official_sets os ON os.id = c.official_set_id
+                 WHERE c.official_set_id IN ({marks})
+                   AND NOT EXISTS (SELECT 1 FROM set_slot_cards m
+                                    WHERE m.set_id = ? AND m.card_id = c.id)
+                 ORDER BY c.number_sort, c.number""",
+            (*sources, set_id))
+
     def replace_rule_slots(self, set_id: str, slots: list[dict]) -> int:
         """Re-materialise rule-built slots. Manual slots and manual member edits survive
         (PLAN.md §2.10) — a catalog refresh must not wipe hand curation."""
