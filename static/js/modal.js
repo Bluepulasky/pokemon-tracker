@@ -183,9 +183,11 @@ function addForm(card) {
     <div class="field" style="margin-bottom:12px">
       <label>Edición</label>
       <select name="edition">
-        <option value="">Unlimited</option>
-        <option value="first_edition">1st Edition</option>
-        <option value="shadowless">Shadowless</option>
+        ${(card.editions && card.editions.length)
+          ? card.editions.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join('')
+          : `<option value="">Unlimited</option>
+             <option value="first_edition">1st Edition</option>
+             <option value="shadowless">Shadowless</option>`}
       </select>
       <div class="note edition-note"></div>
     </div>
@@ -282,19 +284,27 @@ function wireForm(root, card) {
     variantSel.innerHTML = variantOpts(chosen && chosen.variants);
     variantSel.disabled = variantSel.options.length <= 1;
 
-    /* 1st Edition and Shadowless only exist for the early WOTC print runs. The
-       catalogue knows which, so the options are disabled rather than hidden —
-       the absence is itself information. */
-    const keys = (chosen && chosen.variants) || [];
-    for (const opt of editionSel.options) {
-      if (!opt.value) continue;
-      opt.disabled = !keys.includes(opt.value);
+    /* When the print runs are known from the imported products, they ARE the
+       options and there is nothing to disable — the list is already only what
+       exists. The rule below is for cards with no products imported, where the
+       runs have to be inferred from the set instead. That inference is keyed on
+       catalogue set ids, so it silently says "no 1st Edition" for any catalogue
+       whose ids differ, which is what it did here. */
+    const fromProducts = Array.isArray(card.editions) && card.editions.length > 0;
+    if (!fromProducts) {
+      const keys = (chosen && chosen.variants) || [];
+      for (const opt of editionSel.options) {
+        if (!opt.value) continue;
+        opt.disabled = !keys.includes(opt.value);
+      }
+      if (editionSel.selectedOptions[0]?.disabled) editionSel.value = '';
     }
-    if (editionSel.selectedOptions[0]?.disabled) editionSel.value = '';
     const available = [...editionSel.options].filter((o) => !o.disabled).length;
     editionSel.disabled = available <= 1;
     form.querySelector('.edition-note').textContent = editionSel.disabled
-      ? 'Este set no tuvo tiradas 1st Edition ni Shadowless.'
+      ? (fromProducts
+          ? 'Esta carta salió en una sola tirada.'
+          : 'Este set no tuvo tiradas 1st Edition ni Shadowless.')
       : '';
     updateMultiplierField();
   };
@@ -574,11 +584,20 @@ function applyVersion(form, v) {
 
   const edition = form.querySelector('[name=edition]');
   const label = v.version || '';
-  const match = EDITION_FROM_VERSION.find(([re]) => re.test(label));
-  if (edition && match) {
-    const wanted = match[1];
-    const opt = [...edition.options].find((o) => o.value === wanted && !o.disabled);
-    if (opt) edition.value = wanted;
+  if (edition) {
+    // The options are the real version strings now, so the picked one is
+    // selectable as itself — including "1st Edition Shadowless", which the old
+    // three fixed options could not express at all.
+    let opt = [...edition.options].find((o) => o.value === label);
+    if (!opt) {
+      const match = EDITION_FROM_VERSION.find(([re]) => re.test(label));
+      if (match) opt = [...edition.options].find((o) => o.value === match[1]);
+    }
+    if (opt) {
+      opt.disabled = false;
+      edition.disabled = false;
+      edition.value = opt.value;
+    }
   }
 
   // Holo or not is in the rarity, which is the one thing the label never says.

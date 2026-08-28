@@ -195,6 +195,12 @@ class TcggoSource:
                     name, code, [e.get("name") for e in seen][:8])
         return None
 
+    def search_episodes(self, query: str) -> list[dict]:
+        """Sets whose name or code matches. One request, then cached."""
+        payload = self._get(f"/{self.game}/episodes/search", {"search": query})
+        rows = payload.get("data") or []
+        return [rows] if isinstance(rows, dict) else rows
+
     # -------------------------------------------------------------- versions
     @staticmethod
     def as_version(card: dict) -> dict:

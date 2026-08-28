@@ -460,6 +460,17 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .version-picked strong { color: inherit; }
 .version-picked code { font-size: .95em; }
 
+/* ---- data review ------------------------------------------------------- */
+.health-list { list-style: none; margin: .4rem 0 0; padding: 0; }
+.health-list li { padding: .45rem .6rem; margin-bottom: .35rem;
+                  border-radius: 0 6px 6px 0; font-size: .85rem;
+                  background: rgba(127, 127, 127, .08);
+                  border-left: 3px solid var(--muted, #6b7280); }
+.health-list li.h-error   { border-left-color: var(--bad, #dc2626); }
+.health-list li.h-warning { border-left-color: var(--warn, #d97706); }
+.health-list li.h-info    { border-left-color: var(--muted, #6b7280); }
+.health-list .h-detail { margin-top: .2rem; font-size: .8rem;
+                         color: var(--muted, #6b7280); }
 /* ---- api allowance ----------------------------------------------------- */
 .budget .budget-num { font-size: 1.35rem; margin: .2rem 0 .35rem; }
 .budget .bar { height: 6px; border-radius: 3px; overflow: hidden;
@@ -467,3 +478,19 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .budget .bar span { display: block; height: 100%; background: var(--ok, #16a34a); }
 .budget.warn .bar span { background: var(--warn, #d97706); }
 .budget.bad  .bar span { background: var(--bad, #dc2626); }
+
+/* ---- add a set --------------------------------------------------------- */
+/* The logo leads because that is how a set is recognised — a code and a year
+   are for confirming, not for finding. */
+.episode-grid { display: grid; gap: 10px; margin-top: .6rem;
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.episode { padding: 10px; border-radius: 8px; text-align: center;
+           background: rgba(127, 127, 127, .08);
+           border: 1px solid transparent; }
+.episode.added { border-color: var(--ok, #16a34a); opacity: .75; }
+.episode img, .episode .noimg { width: 100%; height: 46px; object-fit: contain; }
+.episode .noimg { background: rgba(127, 127, 127, .15); border-radius: 4px; }
+.episode .e-name { font-weight: 600; font-size: .85rem; margin-top: .4rem; }
+.episode .e-meta { font-size: .75rem; color: var(--muted, #6b7280);
+                   margin-bottom: .4rem; }
+.episode .e-added { font-size: .74rem; color: var(--ok, #16a34a); }

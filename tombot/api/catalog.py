@@ -68,13 +68,23 @@ def get_card(card_id):
     # era rules for a card that has no printing row of its own.
     for pr in printings:
         pr["variants"] = json.loads(pr.get("variants_json") or "[]")
+    # What print runs this card exists in is a fact we imported, not something
+    # to infer from a hardcoded list of set ids. Those ids were pokemontcg.io's
+    # ("base1"), so under any other catalogue they match nothing and the app
+    # concludes a set had no 1st Edition — while the products sitting in the
+    # database say otherwise.
+    products = repo().market_products_for_card(card_id)
+    card["editions"] = sorted({p["version"] for p in products if p["version"]})
+
     if not printings:
         from ..services.printing_variants import variants_for
         printings = [{
             "id": None, "card_id": card_id,
             "official_set_id": card["official_set_id"],
             "display_name": card.get("set_name"), "is_reprint": 0,
-            "variants": variants_for(card["official_set_id"], card.get("rarity")),
+            "variants": variants_for(
+                card["official_set_id"], card.get("rarity"),
+                (repo().get_official_set(card["official_set_id"]) or {}).get("release_date")),
             "source": "single",
         }]
     card["available_printings"] = printings
@@ -232,6 +242,113 @@ def import_targets():
         "changes": result["updated"][:200],
         "problems": problems[:200],
     })
+
+
+@bp.get("/maintenance/episodes")
+def list_episodes():
+    """Sets available to add, with whether they are already imported.
+
+    Answers from what we already know first. Only an explicit search with no
+    local match reaches the network, because the set list pages twenty at a
+    time and pulling all of it costs about twenty requests to answer a question
+    nobody asked.
+    """
+    q = (request.args.get("q") or "").strip()
+    known = repo().search_known_episodes(q or None)
+
+    if q and not known:
+        source = svc("versions_source")
+        if source is not None and source.configured:
+            try:
+                found = source.search_episodes(q)
+                repo().remember_episodes(found)
+                known = repo().search_known_episodes(q)
+            except Exception as e:                           # noqa: BLE001
+                raise ApiError(str(e), "source_error", 502) from None
+
+    return jsonify({"query": q, "episodes": [{
+        "id": e["episode_id"], "code": e["code"], "name": e["name"],
+        "released_at": e["released_at"], "logo": e["logo"],
+        "cards_total": e["cards_total"],
+        "imported": bool(e["products"]), "products": e["products"],
+    } for e in known]})
+
+
+@bp.post("/maintenance/episodes/<int:episode_id>/import")
+def import_episode(episode_id):
+    """Bring one set in: its products, its cards, and the set itself."""
+    from ..services.market_import import MarketImporter
+    from ..services.tcggo_catalog import TcggoCatalog
+
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        raise ApiError("no hay fuente configurada (TCGGO_API_KEY)",
+                       "not_configured", 503)
+
+    episode = repo()._one(
+        "SELECT * FROM market_episodes WHERE episode_id=?", (episode_id,))
+    if not episode:
+        raise ApiError("set desconocido; buscalo primero", "not_found", 404)
+
+    budget = (current_app.extensions.get("budgets") or {}).get("tcggo")
+    if budget is not None and not budget.can_afford(6):
+        raise ApiError(
+            f"quedan {budget.remaining()} consultas y un set necesita unas 6. "
+            f"Probá de nuevo cuando se libere la cuota.", "budget", 429)
+
+    importer = MarketImporter(repo(), source, budget)
+    result = importer.import_episode(episode_id)
+    built = TcggoCatalog(repo()).build_set({
+        "id": episode_id, "code": episode["code"], "name": episode["name"],
+        "released_at": episode["released_at"], "logo": episode["logo"],
+        "cards_total": episode["cards_total"],
+    })
+
+    # Importing a set adds it to the catalogue; the Sets page lists what you
+    # are collecting. Adding one without the other means pressing "Añadir" and
+    # seeing nothing happen, so a goal to collect the whole set comes with it.
+    # It is a starting point — narrowing it later is what the rules are for.
+    goal = _ensure_collection_set(built.get("set_id"), episode["name"])
+    return jsonify({**result, **built, "name": episode["name"],
+                    "collection_set": goal})
+
+
+def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
+    """A goal to collect this set, unless one already covers it."""
+    if not set_id:
+        return None
+    import json as _json
+
+    for existing in repo().list_collection_sets():
+        rules = _json.loads(existing.get("rules_json") or "{}")
+        if set_id in (rules.get("include_sets") or []):
+            return {"id": existing["id"], "name": existing["name"],
+                    "created": False}
+
+    goal_id = f"{set_id}-completo"
+    repo().upsert_collection_set({
+        "id": goal_id, "name": name, "group_name": "Añadidos",
+        "position": 900, "description": f"{name} completo.",
+        "rules_json": _json.dumps({"include_sets": [set_id]}),
+    })
+    slots = svc("setbuilder").build(goal_id)
+    return {"id": goal_id, "name": name, "created": True,
+            "slots": slots.get("slots") if isinstance(slots, dict) else slots}
+
+
+@bp.get("/maintenance/health")
+def maintenance_health():
+    """Look for vocabulary mismatches before they become wrong numbers.
+
+    Every silent-fallback bug this app has had answered plausibly instead of
+    failing: a missing multiplier is 1.00, an unknown set id is "modern". These
+    checks look for the mismatch itself, so the next rename shows up here
+    rather than in a price nobody questions.
+    """
+    from ..config import CONDITIONS
+    from ..services.health import run_checks
+
+    return jsonify(run_checks(repo(), CONDITIONS))
 
 
 @bp.get("/maintenance/status")
