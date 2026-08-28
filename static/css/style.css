@@ -479,6 +479,21 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .budget.warn .bar span { background: var(--warn, #d97706); }
 .budget.bad  .bar span { background: var(--bad, #dc2626); }
 
+/* ---- which sets a card counts for -------------------------------------- */
+/* A card a rule excluded looks the same as one that does not exist, so the
+   membership is shown rather than inferred from its absence. */
+.card-sets .set-chips { display: flex; flex-wrap: wrap; gap: 6px;
+                        align-items: center; margin-top: .3rem; }
+.set-chip { display: inline-flex; align-items: center; gap: 5px;
+            padding: 2px 8px; border-radius: 999px; font-size: .78rem;
+            background: rgba(127, 127, 127, .14); }
+.set-chip small { color: var(--muted, #6b7280); font-size: .88em; }
+.set-chip.manual { background: rgba(245, 179, 1, .16); }
+.set-chip.none { color: var(--muted, #6b7280); background: none; padding-left: 0; }
+.set-chip .unpin { background: none; border: 0; color: inherit; cursor: pointer;
+                   font-size: 1rem; line-height: 1; padding: 0 2px; opacity: .6; }
+.set-chip .unpin:hover { opacity: 1; }
+.pin-picker { font-size: .78rem; padding: 2px 6px; border-radius: 6px; }
 /* ---- add a set --------------------------------------------------------- */
 /* The logo leads because that is how a set is recognised — a code and a year
    are for confirming, not for finding. */

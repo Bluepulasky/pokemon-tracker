@@ -83,3 +83,31 @@ def delete_set(set_id):
 def rebuild(set_id):
     """Re-materialise slots from rules_json. Manual slots survive (PLAN.md §2.10)."""
     return jsonify(svc("setbuilder").build(set_id))
+
+
+@bp.post("/<set_id>/cards/<card_id>")
+def pin_card(set_id, card_id):
+    """Add one card to a set by hand.
+
+    A rule cannot express "everything except the holos, but keep this one", and
+    bending the rule to fit a single card makes the rule mean less. The card is
+    pinned instead, and a rebuild leaves it alone.
+    """
+    if not repo().get_collection_set(set_id):
+        raise ApiError("set no encontrado", "not_found", 404)
+    if not repo().get_card(card_id):
+        raise ApiError("carta no encontrada", "not_found", 404)
+
+    added = repo().add_manual_slot(set_id, card_id)
+    if added is None:
+        raise ApiError("esa carta ya está en el set", "already_present", 409)
+    return jsonify(added), 201
+
+
+@bp.delete("/<set_id>/cards/<card_id>")
+def unpin_card(set_id, card_id):
+    """Remove a hand-added card. Rule-built slots are left alone."""
+    if not repo().remove_manual_slot(set_id, card_id):
+        raise ApiError("esa carta no fue añadida a mano a este set",
+                       "not_manual", 409)
+    return jsonify({"set_id": set_id, "card_id": card_id, "removed": True})
