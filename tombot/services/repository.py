@@ -834,7 +834,7 @@ class PokemonRepo:
 
     def get_collection_item(self, item_id: int) -> dict | None:
         row = self._one(
-            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
             "COALESCE(cr.rating, 0) AS rating "
             "FROM collection_items i JOIN cards c ON c.id=i.card_id "
@@ -859,7 +859,7 @@ class PokemonRepo:
 
     def items_by_card(self, card_id: str) -> list[dict]:
         rows = self._all(
-            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
             "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating "
             "FROM collection_items i JOIN cards c ON c.id = i.card_id "
@@ -945,7 +945,7 @@ class PokemonRepo:
             params,
         ) or 0
         rows = self._all(
-            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
+            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
                        c.image_small_url, c.image_local, c.external_ids_json,
                        os.name AS set_name, os.name AS printing_name,
                        COALESCE(cr.rating, 0) AS rating
