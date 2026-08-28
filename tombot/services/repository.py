@@ -1085,15 +1085,23 @@ class PokemonRepo:
         return len(rows)
 
     def search_known_episodes(self, q: str | None) -> list[dict]:
-        """Sets we already know of, with whether they have been imported."""
+        """Sets we already know of, with whether they have been imported.
+
+        The match is bidirectional on the name: an episode matches when its name
+        contains the query OR the query contains its name. That second half is
+        what makes "Base Set" find the set tcggo simply calls "Base" — the typed
+        name is longer than the stored one, so a plain contains-search misses
+        it. Code is matched the ordinary way.
+        """
         sql = """SELECT e.*,
                         (SELECT COUNT(*) FROM market_products m
                           WHERE m.episode_id = e.episode_id) AS products
                    FROM market_episodes e"""
         params: tuple = ()
         if q:
-            sql += " WHERE e.name LIKE ? OR e.code LIKE ?"
-            params = (f"%{q}%", f"%{q}%")
+            sql += (" WHERE e.name LIKE ? OR e.code LIKE ?"
+                    "    OR ? LIKE '%' || e.name || '%'")
+            params = (f"%{q}%", f"%{q}%", q)
         return self._all(sql + " ORDER BY e.released_at DESC", params)
 
     # -------------------------------------------------------- market products

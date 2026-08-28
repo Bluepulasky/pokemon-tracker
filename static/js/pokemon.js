@@ -479,10 +479,11 @@ async function mantenimiento() {
         <div class="btn-row"><button class="btn primary" id="do-prices">Actualizar precios ahora</button></div>
       </div>
       <div class="stat">
-        <div class="k">Actualizar base de datos</div>
-        <div class="note">Equivale a <code>flask bootstrap</code>: esquema, sets
-          incompletos, sets personales e impresiones. Se puede repetir sin riesgo.</div>
-        <div class="btn-row"><button class="btn" id="do-rebuild">Actualizar base de datos</button></div>
+        <div class="k">Sincronizar lista de sets</div>
+        <div class="note">Descarga el catálogo completo de sets para poder
+          buscarlos al instante y sin conexión. <strong class="warn-text">⚠ Gasta
+          ~12 consultas de la API</strong> — hacelo una sola vez.</div>
+        <div class="btn-row"><button class="btn" id="do-sync">Sincronizar lista de sets</button></div>
       </div>
     </div>
 
@@ -543,10 +544,31 @@ async function mantenimiento() {
   wireEpisodes();
   renderBudgets(job.budgets);
   view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
-  view().querySelector('#do-rebuild').onclick = () => {
-    if (confirm('Vuelve a importar lo que falte del catálogo. Puede tardar varios minutos. ¿Seguir?')) {
-      startJob(api.rebuildDb);
+  // Inline two-step confirm: the first click arms it (so the API-cost warning is
+  // acknowledged), the second runs. No blocking dialog.
+  const syncBtn = view().querySelector('#do-sync');
+  syncBtn.onclick = async () => {
+    if (syncBtn.dataset.armed !== '1') {
+      syncBtn.dataset.armed = '1';
+      syncBtn.classList.add('danger');
+      syncBtn.textContent = 'Confirmar — gasta ~12 consultas';
+      return;
     }
+    syncBtn.disabled = true;
+    syncBtn.textContent = 'Sincronizando…';
+    try {
+      const res = await api.syncCatalog();
+      toast(`Catálogo sincronizado: ${res.synced} sets. Ya podés buscarlos sin gastar consultas.`);
+      loadEpisodes(view().querySelector('#ep-search').value.trim());
+      const st = await api.jobStatus();
+      if (st && st.budgets) renderBudgets(st.budgets);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    syncBtn.disabled = false;
+    syncBtn.dataset.armed = '';
+    syncBtn.classList.remove('danger');
+    syncBtn.textContent = 'Sincronizar lista de sets';
   };
   const dl = view().querySelector('#dl-targets');
   if (dl) dl.href = api.exportTargetsUrl();

@@ -98,6 +98,3 @@ class SetBuilder:
         log.info("built %s: %d slots from %d candidates", set_id, written, len(candidates))
         return {"set": set_id, "slots": written, "candidates": len(candidates),
                 "excluded": len(candidates) - len(ordered)}
-
-    def build_all(self) -> list[dict]:
-        return [self.build(s["id"]) for s in self.repo.list_collection_sets()]
