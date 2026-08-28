@@ -76,13 +76,6 @@ def _text(value) -> str:
     return str(value)
 
 
-# tcggo leaves the series blank on the two earliest sets, though it tags their
-# siblings — Fossil and Team Rocket come back as "Base". Completing just these
-# two lets the Sets view file them into the Base block instead of stranding each
-# as its own. Only applied when tcggo sends nothing; keyed by the set's code.
-_SERIES_WHEN_BLANK = {"BS": "Base", "JU": "Base"}
-
-
 class TcggoCatalog:
     """Turns imported market products into sets and cards."""
 
@@ -104,9 +97,10 @@ class TcggoCatalog:
             "id": set_id,
             "name": episode.get("name") or code,
             # `series` arrives as an object on some episodes and a string on
-            # others, and sqlite will not bind a dict. When tcggo sends nothing,
-            # complete the handful of early sets whose series is unambiguous.
-            "series": _text(episode.get("series")) or _SERIES_WHEN_BLANK.get(code, ""),
+            # others, and sqlite will not bind a dict. It is stored as-is; the
+            # Sets view groups by an era derived from release_date instead (see
+            # services/tcg_series.py), because tcggo's series is too sparse.
+            "series": _text(episode.get("series")),
             "printed_total": episode.get("cards_printed_total"),
             "total": episode.get("cards_total"),
             "release_date": (episode.get("released_at") or "").replace("-", "/"),

@@ -17,10 +17,15 @@ def _with_progress(rows):
 
 @bp.get("")
 def list_sets():
+    from ..services.tcg_series import series_for_date
     sets_by_id = {s["id"]: s for s in repo().list_collection_sets()}
     rows = _with_progress(repo().set_progress())
     for r in rows:
         r["description"] = (sets_by_id.get(r["id"]) or {}).get("description")
+        # The era is derived from the release date, not from tcggo's own series
+        # field, which is too sparse to group by (it left most sets blank, which
+        # turned every one of them into its own header).
+        r["series"] = series_for_date(r.get("release_date"))
     return jsonify({"data": rows})
 
 
