@@ -137,7 +137,7 @@ def set_card_rating(card_id):
 
 @bp.get("/search")
 def search():
-    """Global search across catalog and collection (spec §19).
+    """Global search across catalog and collection.
 
     A rating filter narrows the collection half only — the catalog has no ranks,
     and silently dropping catalog hits when one is set would look like the search
@@ -162,14 +162,17 @@ def search():
 
 @bp.post("/maintenance/rebuild")
 def rebuild_database():
-    """The web equivalent of `flask bootstrap`.
+    """Re-materialise personal sets and re-price, from what is already imported.
 
-    Same code path as the CLI: schema, any incomplete sets, personal sets,
-    printings. Idempotent, so pressing it twice is harmless.
+    No network and no bootstrap: sets come in through the Sets picker, one at a
+    time. This just re-runs the rules over the current catalogue (in case a set
+    was imported after a personal set was created) and re-prices from the stored
+    products. Idempotent.
     """
     def work():
-        from ..cli import run_bootstrap
-        return run_bootstrap()
+        slots = svc("setbuilder").build_all()
+        priced = svc("pricing").refresh()
+        return {"sets_rebuilt": len(slots) if slots else 0, "pricing": priced}
 
     started, state = svc("jobs").start("rebuild", work)
     return jsonify({"started": started, **state}), (202 if started else 409)
@@ -377,18 +380,3 @@ def _budget_status() -> list[dict]:
         })
     return out
 
-
-@bp.post("/catalog/import")
-def import_catalog():
-    """Long-running: kept as an explicit POST, not something a page load triggers."""
-    body = request.get_json(silent=True) or {}
-    set_ids = body.get("sets")
-    if not set_ids:
-        from ..services.seed_sets import required_official_sets
-        set_ids = required_official_sets()
-    result = svc("importer").import_sets(set_ids)
-    if body.get("cache_images", True):
-        result["images"] = svc("importer").cache_images()
-    if body.get("resolve_links", True):
-        result["market_links"] = svc("importer").resolve_market_links()
-    return jsonify(result)

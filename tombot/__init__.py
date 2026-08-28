@@ -7,9 +7,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from .config import Config, DEFAULT_MODIFIERS
 from .services.repository import PokemonRepo
-from .services.sources import get_source
 from .services.pricing import PricingService
-from .services.importer import CatalogImporter
 from .services.budget import RequestBudget
 from .services.jobs import JobRunner
 from .services.setbuilder import SetBuilder
@@ -31,44 +29,34 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 
     repo = PokemonRepo(config.DB_PATH)
-    source = get_source(config.SOURCE, config)
 
     app.extensions["repo"] = repo
-    app.extensions["source"] = source
     app.extensions["config"] = config
-    # Prices come from their own source. The catalog keeps using pokemontcg.io
-    # until TCGdex is proven to cover images and set data as well.
-    # One budget per metered provider, counted in the database so a restart
-    # cannot hand back a fresh allowance.
+
+    # tcggo is the only source: catalog, images, versions and prices all come
+    # from importing a set. It is metered, so its request budget is counted in
+    # the database — a restart cannot hand back a fresh allowance.
     budgets = {"tcggo": RequestBudget(repo, "tcggo",
                                       getattr(config, "TCGGO_DAILY_LIMIT", 0))}
     app.extensions["budgets"] = budgets
 
-    # The version picker always talks to tcggo, whatever prices the app is
-    # configured to use: it is the only source that knows what a Cardmarket
-    # product is, and choosing one is what makes a card priceable at all.
     from .services.httpcache import HttpCache
     from .services.sources.tcggo import TcggoSource
-    app.extensions["versions_source"] = TcggoSource(
-        config, budget=budgets["tcggo"],
-        cache=HttpCache(getattr(config, "DATA_DIR", ".") / ".cache-tcggo"
-                        if hasattr(getattr(config, "DATA_DIR", None), "__truediv__")
-                        else ".cache/tcggo"))
+    data_dir = getattr(config, "DATA_DIR", None)
+    cache_dir = (data_dir / ".cache-tcggo"
+                 if hasattr(data_dir, "__truediv__") else ".cache/tcggo")
+    tcggo = TcggoSource(config, budget=budgets["tcggo"],
+                        cache=HttpCache(cache_dir))
+    app.extensions["versions_source"] = tcggo
+    app.extensions["source"] = tcggo
 
-    price_source_name = getattr(config, "PRICE_SOURCE", config.SOURCE)
-    price_source = get_source(price_source_name, config,
-                              budget=budgets.get(price_source_name))
-    app.extensions["price_source"] = price_source
-    # The catalog source doubles as the cross-check: it quotes the same
-    # Cardmarket market as the price source, so a large disagreement between
-    # them means one of the two is describing a different card.
-    app.extensions["pricing"] = PricingService(
-        repo, price_source, config, crosscheck=source)
-    app.extensions["importer"] = CatalogImporter(repo, source, config)
+    # Prices are read from the imported products, so pricing needs no live
+    # source — importing a set is what fetches them.
+    app.extensions["pricing"] = PricingService(repo, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
     app.extensions["jobs"] = JobRunner(app)
 
-    # --- optional shared secret (PLAN.md §2.7) -----------------------------
+    # --- optional shared secret -----------------------------
     @app.before_request
     def _guard():
         token = config.APP_TOKEN

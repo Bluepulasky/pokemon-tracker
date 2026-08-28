@@ -121,232 +121,24 @@ class PokemonRepo:
             return r[0] if r else None
 
     # ---------------------------------------------------------------- schema
-    # Columns added after the first release. schema.sql is all CREATE TABLE IF
-    # NOT EXISTS, so it does nothing to a database that already exists — new
-    # columns have to be applied explicitly or existing installs break on the
-    # first query that references them.
-    MIGRATIONS = (
-        ("collection_items", "rating",
-         "ALTER TABLE collection_items ADD COLUMN rating INTEGER NOT NULL DEFAULT 0"),
-        # No REFERENCES clause: SQLite cannot add a column with a foreign key to
-        # an existing table. The constraint is present on fresh databases via
-        # schema.sql; upgraded ones keep the column without it.
-        ("collection_items", "printing_id",
-         "ALTER TABLE collection_items ADD COLUMN printing_id INTEGER"),
-        ("card_printings", "variants_json",
-         "ALTER TABLE card_printings ADD COLUMN variants_json TEXT"),
-        ("price_cache", "variant_key",
-         "ALTER TABLE price_cache ADD COLUMN variant_key TEXT"),
-        ("price_cache", "market_product_id",
-         "ALTER TABLE price_cache ADD COLUMN market_product_id INTEGER"),
-    )
-
-    def _apply_migrations(self, conn) -> list[str]:
-        applied = []
-        for table, column, ddl in self.MIGRATIONS:
-            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
-            if not cols:
-                continue                      # table not created yet; schema.sql handles it
-            if column not in cols:
-                conn.execute(ddl)
-                applied.append(f"{table}.{column}")
-        applied += self._migrate_ratings_to_cards(conn)
-        applied += self._migrate_budget_to_rolling_window(conn)
-        applied += self._migrate_retired_conditions(conn)
-        applied += self._migrate_drop_unknown_condition_modifiers(conn)
-        applied += self._migrate_add_market_product(conn)
-        return applied
-
-    @staticmethod
-    def _migrate_add_market_product(conn) -> list[str]:
-        """Give existing rows somewhere to record their Cardmarket product.
-
-        Left NULL for rows added before the version picker existed: they keep
-        being priced the old way until someone picks a version for them.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if not cols:
-            # Migrations run before schema.sql on a fresh database, so there is
-            # nothing to alter yet — the CREATE TABLE already has the column.
-            return []
-        if "market_product_id" in cols:
-            return []
-        conn.execute("ALTER TABLE collection_items ADD COLUMN market_product_id INTEGER")
-        return ["collection_items.market_product_id"]
-
-    @staticmethod
-    def _migrate_retired_conditions(conn) -> list[str]:
-        """Carry rows written under the old grade names onto the new ones.
-
-        A grade with no multiplier row does not fail — it falls back to 1.00 —
-        so a card left on "NM" keeps being valued as if it were mint. Silent,
-        and wrong in the direction that flatters the collection.
-
-        Merging matters as much as renaming: (card, variant, condition,
-        language) is unique, so a card held as both "NM" and "M/NM" would
-        collide. The quantities are added rather than one row losing.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if not cols:
-            return []                    # fresh database; schema.sql handles it
-
-        applied = []
-        for old, new in RETIRED_CONDITIONS.items():
-            rows = conn.execute(
-                "SELECT COUNT(*) FROM collection_items WHERE condition = ?",
-                (old,)).fetchone()[0]
-            if not rows:
-                continue
-
-            # Fold any row that would collide into its counterpart first.
-            conn.execute(
-                """UPDATE collection_items AS keep
-                      SET quantity = keep.quantity + (
-                            SELECT SUM(dup.quantity) FROM collection_items dup
-                             WHERE dup.condition = ?
-                               AND dup.card_id = keep.card_id
-                               AND dup.variant = keep.variant
-                               AND dup.language = keep.language)
-                    WHERE keep.condition = ?
-                      AND EXISTS (SELECT 1 FROM collection_items dup
-                                   WHERE dup.condition = ?
-                                     AND dup.card_id = keep.card_id
-                                     AND dup.variant = keep.variant
-                                     AND dup.language = keep.language)""",
-                (old, new, old))
-            conn.execute(
-                """DELETE FROM collection_items
-                    WHERE condition = ?
-                      AND EXISTS (SELECT 1 FROM collection_items keep
-                                   WHERE keep.condition = ?
-                                     AND keep.card_id = collection_items.card_id
-                                     AND keep.variant = collection_items.variant
-                                     AND keep.language = collection_items.language)""",
-                (old, new))
-            conn.execute("UPDATE collection_items SET condition = ? WHERE condition = ?",
-                         (new, old))
-            applied.append(f"collection_items.condition {old}->{new} ({rows} row(s))")
-        return applied
-
-    @staticmethod
-    def _migrate_drop_unknown_condition_modifiers(conn) -> list[str]:
-        """Remove condition multipliers for grades that no longer exist.
-
-        Renaming the grades left the old multiplier rows in place beside the
-        new ones, so the Mantenimiento table listed both sets at once — eleven
-        rows for five grades, including a typo nobody could have edited on
-        purpose. They are dead weight: nothing reads a multiplier for a grade
-        no card can have.
-        """
-        try:
-            existing = {r["key"] for r in conn.execute(
-                "SELECT key FROM price_modifiers WHERE kind = 'condition'")}
-        except Exception:                                    # noqa: BLE001
-            return []                    # table not created yet
-        stale = sorted(existing - set(CONDITIONS))
-        if not stale:
-            return []
-        conn.executemany(
-            "DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
-            [(k,) for k in stale])
-        return [f"price_modifiers: dropped {', '.join(stale)}"]
-
-    @staticmethod
-    def _migrate_budget_to_rolling_window(conn) -> list[str]:
-        """Carry today's spent requests into the rolling-window table.
-
-        The count used to live in api_budget as one row per day. Switching to a
-        rolling window without carrying it over reports zero spent — handing
-        back an allowance that was already used, on the day of the upgrade, in
-        the one direction that costs money.
-        """
-        tables = {r["name"] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
-        if "api_requests" not in tables or "api_budget" not in tables:
-            return []
-        already = conn.execute("SELECT COUNT(*) FROM api_requests").fetchone()[0]
-        if already:
-            return []                    # already migrated, or already counting
-
-        carried = []
-        for row in conn.execute(
-                "SELECT provider, count FROM api_budget "
-                " WHERE day = strftime('%Y-%m-%d','now') AND count > 0"):
-            conn.executemany(
-                "INSERT INTO api_requests(provider, sent_at) VALUES(?, datetime('now'))",
-                [(row["provider"],)] * int(row["count"]))
-            carried.append(f"{row['provider']}: {row['count']} request(s)")
-        return [f"api_budget -> api_requests ({', '.join(carried)})"] if carried else []
-
-    @staticmethod
-    def _migrate_ratings_to_cards(conn) -> list[str]:
-        """Move Hall of Fame ranks from collection rows onto the card.
-
-        The rank shipped on collection_items, so a card owned as holo and
-        non-holo had to be ranked twice. Existing ranks are carried over by
-        taking the highest rank recorded for each card — the alternatives lose
-        data or pick arbitrarily.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if "rating" not in cols:
-            return []
-
-        conn.execute("""CREATE TABLE IF NOT EXISTS card_ratings (
-                            card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
-                            rating     INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 8),
-                            updated_at TEXT NOT NULL DEFAULT (datetime('now')))""")
-        expected = conn.execute(
-            "SELECT COUNT(DISTINCT card_id) FROM collection_items WHERE rating > 0"
-        ).fetchone()[0]
-
-        conn.execute(
-            """INSERT INTO card_ratings(card_id, rating)
-               SELECT card_id, MAX(rating) FROM collection_items
-               WHERE rating > 0 GROUP BY card_id
-               ON CONFLICT(card_id) DO UPDATE SET
-                 rating = MAX(card_ratings.rating, excluded.rating)"""
-        )
-
-        # Verify before declaring success. A card ranked on two rows (the bug
-        # this fixes) keeps the higher rank, so every ranked card must now have
-        # exactly one row here.
-        copied = conn.execute(
-            """SELECT COUNT(*) FROM card_ratings r
-               WHERE EXISTS (SELECT 1 FROM collection_items i
-                              WHERE i.card_id = r.card_id AND i.rating > 0)"""
-        ).fetchone()[0]
-        if copied < expected:
-            raise RuntimeError(
-                f"rating migration incomplete: {copied}/{expected} cards carried "
-                f"over; collection_items.rating left untouched")
-
-        # collection_items.rating is deliberately NOT dropped. The copy above is
-        # the only record of ranks the user has already entered, and DROP COLUMN
-        # cannot be undone. Nothing reads the column any more, so leaving it
-        # costs a few bytes and keeps a rollback possible. Fresh databases never
-        # get it — schema.sql no longer defines it.
-        return [f"card_ratings (carried over {copied} rank(s) from collection rows; "
-                f"collection_items.rating retained as a backup)"]
-
     def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
+        """Create the schema. schema.sql is the single source of truth.
+
+        Every statement is CREATE ... IF NOT EXISTS, so this is safe to run on
+        every start and does nothing to an existing database. There are no
+        migrations: a schema change is a change to schema.sql, and a database
+        from before it is recreated (the app is rebuilt from set imports, so
+        there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
-            # Migrations run FIRST. schema.sql builds indexes over the new columns,
-            # and on an existing database those statements fail with "no such
-            # column" before any migration would have had a chance to add it.
-            # On a fresh database this is a no-op — the tables do not exist yet.
-            for name in self._apply_migrations(c):
-                log.info("migrated: added %s", name)
             c.executescript(SCHEMA_PATH.read_text())
             for kind, key, mult in default_modifiers:
                 c.execute(
-                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?)",
-                    (kind, key, mult),
-                )
+                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) "
+                    "VALUES (?,?,?)", (kind, key, mult))
             c.execute(
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
-                (SCHEMA_VERSION,),
-            )
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+                "updated_at=datetime('now')", (SCHEMA_VERSION,))
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         v = self._scalar("SELECT value FROM app_meta WHERE key = ?", (key,))
@@ -379,7 +171,7 @@ class PokemonRepo:
 
     def upsert_cards(self, cards: Iterable[dict]) -> int:
         """Bulk upsert. Never clears image_local — a re-import must not throw away
-        the cached image files (spec §20: external data must not overwrite local state)."""
+        the cached image files (external data must not overwrite local state)."""
         rows = []
         for c in cards:
             rows.append({
@@ -455,13 +247,6 @@ class PokemonRepo:
             )
         return len(pairs)
 
-    def cards_missing_market_url(self, limit: int = 5000) -> list[dict]:
-        return self._all(
-            "SELECT id FROM cards "
-            "WHERE json_extract(external_ids_json, '$.cardmarket_direct') IS NULL "
-            "LIMIT ?", (limit,)
-        )
-
     def count_market_urls(self) -> int:
         return self._scalar(
             "SELECT COUNT(*) FROM cards "
@@ -510,94 +295,7 @@ class PokemonRepo:
     def count_cards(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM cards") or 0
 
-    def catalog_gaps(self, required_set_ids: Sequence[str]) -> list[dict]:
-        """Required official sets that are absent or short on cards.
-
-        Completeness has to be per set. A previous "do we have any cards at all"
-        check meant that when an import salvaged one set out of twelve — routine,
-        given how often the upstream 500s — every later start saw a non-empty
-        catalog and skipped the retry forever.
-        """
-        gaps = []
-        for sid in required_set_ids:
-            row = self._one(
-                """SELECT os.id, os.total,
-                          (SELECT COUNT(*) FROM cards c WHERE c.official_set_id = os.id) AS have
-                   FROM official_sets os WHERE os.id = ?""",
-                (sid,),
-            )
-            if not row:
-                gaps.append({"set": sid, "have": 0, "expected": None, "why": "never imported"})
-            elif row["total"] and (row["have"] or 0) < row["total"]:
-                gaps.append({"set": sid, "have": row["have"], "expected": row["total"],
-                             "why": "incomplete"})
-        return gaps
-
     # ------------------------------------------------------------- printings
-    def rebuild_printings(self) -> dict:
-        """Rebuild the printing groups.
-
-        Two sources, and the difference matters. Slot membership is the user
-        saying "these cards are the same card to me", so it wins. The name +
-        number + supertype match is only a hint — it is the best structural
-        signal the catalog offers, and it still produces false pairs like Jynx
-        #31 in Base Set and Neo Revelation.
-
-        Manual rows are never touched.
-        """
-        with self.tx() as c:
-            c.execute("DELETE FROM card_printings WHERE source IN ('auto', 'slot')")
-
-            groups: dict[str, set[str]] = {}
-
-            # 1. user-defined: any slot grouping more than one catalog card
-            for row in c.execute(
-                """SELECT slot_id, GROUP_CONCAT(card_id) AS ids
-                   FROM set_slot_cards GROUP BY slot_id HAVING COUNT(*) > 1"""
-            ).fetchall():
-                ids = sorted(set(row["ids"].split(",")))
-                groups.setdefault(ids[0], set()).update(ids)
-            user_defined = set(groups)
-
-            # 2. structural hint from the catalog
-            for row in c.execute(
-                """SELECT GROUP_CONCAT(id) AS ids FROM cards
-                   GROUP BY name, number, COALESCE(supertype, '')
-                   HAVING COUNT(DISTINCT official_set_id) > 1"""
-            ).fetchall():
-                ids = sorted(set(row["ids"].split(",")))
-                if any(i in g for g in groups.values() for i in ids):
-                    continue                      # already covered by a slot
-                groups.setdefault(ids[0], set()).update(ids)
-
-            written = 0
-            for key, ids in groups.items():
-                source = "slot" if key in user_defined else "auto"
-                ordered = c.execute(
-                    f"""SELECT c.id, c.official_set_id, c.name, c.rarity,
-                               os.name AS set_name, os.release_date
-                        FROM cards c JOIN official_sets os ON os.id = c.official_set_id
-                        WHERE c.id IN ({",".join("?" * len(ids))})
-                        ORDER BY os.release_date, c.id""",
-                    sorted(ids),
-                ).fetchall()
-                if len(ordered) < 2:
-                    continue
-                group_key = ordered[0]["id"]      # earliest printing names the group
-                for i, r in enumerate(ordered):
-                    variants = variants_for(r["official_set_id"], r["rarity"],
-                                            r["release_date"])
-                    c.execute(
-                        """INSERT OR IGNORE INTO card_printings
-                             (print_group, card_id, official_set_id, is_reprint,
-                              display_name, variants_json, source)
-                           VALUES (?,?,?,?,?,?,?)""",
-                        (group_key, r["id"], r["official_set_id"], 1 if i else 0,
-                         r["set_name"], json.dumps(variants), source),
-                    )
-                    written += 1
-            return {"groups": len(groups), "printings": written}
-
     def printings_for_card(self, card_id: str) -> list[dict]:
         """Every catalog printing of the logical card this card belongs to.
 
@@ -645,43 +343,40 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
 
-    def cards_excluded_from_set(self, set_id: str) -> list[dict]:
-        """Cards in this set's source sets that its rule leaves out.
+    def set_cards_with_state(self, set_id: str) -> list[dict]:
+        """Every card in this set's source sets, tagged for the set view.
 
-        Nothing showed these. "Jungle sin holos" removes sixteen cards and
-        "Neo Genesis sin holos" removes nineteen, and none of them appeared on
-        any screen — the set view filters by ownership, and all three of those
-        filters start from the slots the rule already pruned.
-
-        So a card a rule removed looked exactly like a card that does not
-        exist, and the only way to find out otherwise was to go looking for one
-        and fail. That is how a card that was never missing gets reported as
-        missing.
+        The whole set is shown, not just the rule's slots. Each card carries:
+          collecting — is it part of what you are trying to complete (a slot)?
+          owned      — do you have it, in any variant?
+        A rarity rule ("sin holos") flips `collecting` in bulk; the per-card
+        toggle overrides it. `owned` is independent of both.
         """
         import json as _json
 
         cset = self.get_collection_set(set_id)
         if not cset:
             return []
-        rules = _json.loads(cset.get("rules_json") or "{}")
-        sources = rules.get("include_sets") or []
+        sources = (_json.loads(cset.get("rules_json") or "{}").get("include_sets") or [])
         if not sources:
             return []
 
         marks = ",".join("?" * len(sources))
         return self._all(
-            f"""SELECT c.*, os.name AS set_name
+            f"""SELECT c.id, c.name, c.number, c.number_sort, c.rarity,
+                       c.image_small_url, c.image_local, c.official_set_id,
+                       EXISTS (SELECT 1 FROM set_slot_cards m
+                                WHERE m.set_id = ? AND m.card_id = c.id) AS collecting,
+                       COALESCE((SELECT SUM(i.quantity) FROM collection_items i
+                                  WHERE i.card_id = c.id), 0) AS owned_qty
                   FROM cards c
-                  JOIN official_sets os ON os.id = c.official_set_id
                  WHERE c.official_set_id IN ({marks})
-                   AND NOT EXISTS (SELECT 1 FROM set_slot_cards m
-                                    WHERE m.set_id = ? AND m.card_id = c.id)
                  ORDER BY c.number_sort, c.number""",
-            (*sources, set_id))
+            (set_id, *sources))
 
     def replace_rule_slots(self, set_id: str, slots: list[dict]) -> int:
         """Re-materialise rule-built slots. Manual slots and manual member edits survive
-        (PLAN.md §2.10) — a catalog refresh must not wipe hand curation."""
+        — a catalog refresh must not wipe hand curation."""
         with self.tx() as c:
             manual_cards = {
                 r["card_id"] for r in c.execute(
@@ -716,7 +411,7 @@ class PokemonRepo:
 
     def get_set_slots(self, set_id: str) -> list[dict]:
         """Slots with ownership state. A slot counts as owned if ANY member card is held —
-        this is what makes reprints/variants collapse to one logical card (spec §17)."""
+        this is what makes reprints/variants collapse to one logical card."""
         return self._all(
             """SELECT sl.id AS slot_id, sl.position, sl.source,
                       COALESCE(sl.label, c.name) AS label,
@@ -815,7 +510,7 @@ class PokemonRepo:
     def upsert_collection_item(self, item: dict, mode: str = "add") -> dict:
         """Insert or update. On the unique combination (card, variant, condition, language)
         `add` increments the quantity instead of creating a duplicate row — without this
-        the physical count silently doubles (PLAN.md §2.5)."""
+        the physical count silently doubles."""
         payload = {
             "card_id": item["card_id"],
             "variant": item.get("variant", "normal"),
@@ -1121,7 +816,7 @@ class PokemonRepo:
         ) or {"slots": 0, "owned_slots": 0}
 
     def collection_totals(self) -> dict:
-        """Unique logical cards vs physical copies (spec §4): 67 cartas / 94 físicas."""
+        """Unique logical cards vs physical copies: 67 cartas / 94 físicas."""
         return self._one(
             "SELECT COUNT(DISTINCT card_id) AS unique_cards, "
             "COALESCE(SUM(quantity), 0) AS physical_cards, "
@@ -1446,6 +1141,27 @@ class PokemonRepo:
             """SELECT * FROM market_products
                 WHERE episode_id=? AND code=? ORDER BY version""",
             (episode_id, code))
+
+    def market_products_for_name(self, name: str) -> list[dict]:
+        """Every product of a card by name, across every set already imported.
+
+        This is what makes reprints show up in the version picker: a Pikachu is
+        a Pikachu whether it is Base Set, Jungle or Neo Genesis, and someone
+        holding one wants to find their exact printing without caring which set
+        window they opened. market_products only ever holds imported sets, so
+        this costs no request — the reprint is already in the database. Each row
+        carries its own card_id and set, so a pick records the printing it is,
+        not the card the modal happened to be opened on.
+        """
+        return self._all(
+            """SELECT mp.*, os.name AS set_name, os.release_date AS set_release,
+                      c.official_set_id AS set_id
+                 FROM market_products mp
+                 JOIN cards c ON c.id = mp.card_id
+                 JOIN official_sets os ON os.id = c.official_set_id
+                WHERE c.name = ?
+                ORDER BY os.release_date, mp.code, mp.version""",
+            (name,))
 
     def market_products_by_ids(self, ids: list[int]) -> dict:
         if not ids:

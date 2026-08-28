@@ -1,4 +1,4 @@
-/* TomBot Pokémon Tracker — minimal dark UI, mobile-first (spec §26/§31). */
+/* TomBot Pokémon Tracker — minimal dark UI, mobile-first. */
 
 :root {
   --bg: #0e1013;
@@ -153,7 +153,7 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .card .art::after { transition: opacity .15s; }
 
 /* Missing cards are a CSS placeholder, not an image — zero network cost for the
-   part of a set you do not own yet (spec §5, PLAN.md §2.16). */
+   part of a set you do not own yet. */
 .placeholder {
   width: 100%; height: 100%; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 5px;
@@ -215,7 +215,7 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                      color: var(--fg-dim); font-size: 22px; cursor: pointer; line-height: 1; }
 .modal-body { padding: 20px; }
 
-/* Variants strip: horizontally swipeable on mobile (spec §6).
+/* Variants strip: horizontally swipeable on mobile.
    The photo is the point of this panel — you are comparing copies — so it gets
    the space and the controls shrink to fit under it. */
 .variants { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;
@@ -451,10 +451,19 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .version img, .version .noimg { width: 100%; aspect-ratio: 5 / 7;
                                 object-fit: contain; border-radius: 4px; }
 .version .noimg { background: rgba(127,127,127,.18); }
+.version .v-set { font-size: .68rem; font-weight: 600; color: var(--accent, #f5b301);
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .version .v-code { font-weight: 600; font-size: .78rem; }
 .version .v-name { font-size: .72rem; color: var(--muted, #6b7280); }
 .version .v-price { font-size: .82rem; font-variant-numeric: tabular-nums; }
 .version .v-stock { font-size: .7rem; color: var(--muted, #6b7280); }
+/* Reprints from other sets: same card, dimmed so the card's own set reads first. */
+.version.reprint { opacity: .82; }
+.version.reprint .v-set { color: var(--muted, #6b7280); }
+.version-sep { grid-column: 1 / -1; font-size: .7rem; text-transform: uppercase;
+               letter-spacing: .04em; color: var(--muted, #6b7280);
+               margin: .5rem 0 .1rem; padding-top: .4rem;
+               border-top: 1px solid rgba(127,127,127,.18); }
 .version-picked { margin-top: .45rem; font-size: .82rem;
                   color: var(--muted, #6b7280); }
 .version-picked strong { color: inherit; }
@@ -477,7 +486,7 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
                background: rgba(127,127,127,.22); }
 .budget .bar span { display: block; height: 100%; background: var(--ok, #16a34a); }
 .budget.warn .bar span { background: var(--warn, #d97706); }
-.budget.bad  .bar span { background: var(--bad, #dc2626); }
+.budget.bad.bar span { background: var(--bad, #dc2626); }
 
 /* ---- add a set --------------------------------------------------------- */
 /* The logo leads because that is how a set is recognised — a code and a year
@@ -503,3 +512,18 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
     left: 6px; bottom: 6px; font-size: .62rem; letter-spacing: .04em;
     padding: 1px 6px; border-radius: 999px; text-transform: uppercase;
     background: rgba(0, 0, 0, .65); color: var(--warn, #d97706); }
+
+
+/* ---- collecting toggle on a card --------------------------------------- */
+/* The whole set is shown; the star says whether a card counts toward
+   completion. A card not being collected is dimmed so the checklist reads at a
+   glance, but stays visible and one click from being added. */
+.card .collect-toggle { position: absolute; top: 4px; left: 4px; z-index: 2;
+    background: rgba(0,0,0,.55); border: 0; border-radius: 999px; cursor: pointer;
+    width: 26px; height: 26px; font-size: 15px; line-height: 1; color: #9aa0a6;
+    display: flex; align-items: center; justify-content: center; padding: 0; }
+.card .collect-toggle.on { color: var(--accent, #f5b301); }
+.card .collect-toggle:hover { background: rgba(0,0,0,.8); }
+.card.not-collecting { opacity: .42; }
+.card.not-collecting:hover { opacity: .7; }
+.card .art { position: relative; }

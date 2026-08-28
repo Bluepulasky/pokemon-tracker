@@ -7,7 +7,7 @@ bp = Blueprint("stats", __name__, url_prefix="/api")
 
 @bp.get("/dashboard")
 def dashboard():
-    """Everything spec §16 asks for, in one payload."""
+    """The full dashboard payload in one response."""
     r = repo()
     totals = r.collection_totals()
     progress = r.set_progress()
@@ -74,6 +74,6 @@ def _top_value(limit: int = 10):
 
 @bp.get("/stats/history")
 def history():
-    """Collection evolution (spec §29). Comes from snapshots, because current
-    state cannot answer 'how many did I own in March' (PLAN.md §2.6)."""
+    """Collection evolution. Comes from snapshots, because current
+    state cannot answer 'how many did I own in March'."""
     return jsonify({"data": list(reversed(repo().list_snapshots()))})

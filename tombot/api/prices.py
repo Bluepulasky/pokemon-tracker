@@ -34,7 +34,7 @@ def card_quotes(card_id):
 @bp.post("/refresh")
 def refresh():
     """Manual trigger for the same code path the scheduler runs — important
-    because the upstream API is flaky and reruns are routine (PLAN.md §2.2)."""
+    because the upstream API is flaky and reruns are routine."""
     body = request.get_json(silent=True) or {}
     return jsonify(svc("pricing").refresh(
         stale_days=body.get("stale_days"),
@@ -206,11 +206,17 @@ def _episode_for_set(official_set_id: str) -> int | None:
 
 
 def _versions_from_import(card_id: str | None, episode_id: int | None):
-    """Versions for this card out of the imported set, or None if not imported.
+    """Every printing of this card, across every set already imported.
 
-    None rather than an empty list on purpose: "this set was never imported"
-    and "this card has no versions" are different answers, and only the first
-    should reach for the network.
+    Not just the card's own set: a Pikachu opened from Base Set also lists the
+    Jungle and Neo Genesis Pikachu, because the person holding one wants to find
+    their exact printing. It costs nothing — reprints are in the database from
+    when their set was imported — and each row carries its own card_id and set,
+    so a pick records the printing it is, not the card the modal was opened on.
+
+    The card's own set must be imported first (episode_id gate): that is what
+    separates "this set was never imported, ask the API" (None) from "imported,
+    here is what exists" (a list, possibly with reprints from other sets).
     """
     if not card_id or episode_id is None:
         return None
@@ -220,18 +226,21 @@ def _versions_from_import(card_id: str | None, episode_id: int | None):
     card = repo().get_card(card_id)
     if not card:
         return None
-    oset = repo().get_official_set(card["official_set_id"]) or {}
-    code_prefix = oset.get("ptcgo_code")
-    if not code_prefix:
-        return None
 
-    rows = repo().market_products_for_code(episode_id,
-                                           f"{code_prefix} {card['number']}")
-    return [{
+    current_set = card["official_set_id"]
+    rows = repo().market_products_for_name(card["name"])
+    items = [{
         "market_product_id": r["product_id"],
-        "name": r["name"], "set": oset.get("name"), "code": r["code"],
-        "number": r["number"], "version": r["version"], "rarity": r["rarity"],
+        "card_id": r["card_id"],
+        "name": r["name"], "set": r["set_name"], "set_id": r["set_id"],
+        "code": r["code"], "number": r["number"],
+        "version": r["version"], "rarity": r["rarity"],
         "image": r["image"], "market_url": r["market_url"],
         "currency": r["currency"], "price": r["price"],
         "lowest_near_mint": r["price_low"], "available": r["available"],
+        "is_current": r["set_id"] == current_set,
     } for r in rows]
+    # The card's own set first (it is the one the modal was opened on), then the
+    # reprints in release order. A stable sort keeps that order within groups.
+    items.sort(key=lambda x: 0 if x["is_current"] else 1)
+    return items

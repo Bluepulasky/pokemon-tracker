@@ -64,11 +64,11 @@ class Config:
     THUMB_DIR = MEDIA_DIR / "thumbs"
 
     # --- http --------------------------------------------------------------
-    HOST = os.environ.get("HOST", "127.0.0.1")   # not 0.0.0.0: see PLAN.md §2.7
+    HOST = os.environ.get("HOST", "127.0.0.1")   # bind loopback, not 0.0.0.0
     PORT = int(os.environ.get("PORT", "8080"))
     DEBUG = _bool("DEBUG", False)
 
-    # Optional shared secret. Unset => no auth (spec §31). Set => X-App-Token required.
+    # Optional shared secret. Unset => no auth. Set => X-App-Token required.
     APP_TOKEN = os.environ.get("APP_TOKEN") or None
 
     # --- uploads -----------------------------------------------------------
@@ -79,18 +79,11 @@ class Config:
     JPEG_QUALITY = int(os.environ.get("JPEG_QUALITY", "85"))
 
     # --- catalog / price source -------------------------------------------
-    # Cardmarket's own API is application-gated; pokemontcg.io republishes
-    # Cardmarket EUR prices with no account needed. See PLAN.md §2.2.
-    # Catalog and images still come from pokemontcg.io; only prices move.
-    SOURCE = os.environ.get("SOURCE", "pokemontcgio")
-    # TCGdex is the only source found that prices print runs apart — pokemontcg.io
-    # reports one number per card id, so Unlimited and Shadowless read the same.
-    PRICE_SOURCE = os.environ.get("PRICE_SOURCE", "tcgdex")
-    TCGDEX_BASE_URL = os.environ.get("TCGDEX_BASE_URL", "https://api.tcgdex.net/v2")
-    TCGDEX_LANG = os.environ.get("TCGDEX_LANG", "en")
-    POKEMONTCG_API_KEY = os.environ.get("POKEMONTCG_API_KEY") or None
-
     # --- tcggo (CardMarket API TCG, via RapidAPI) --------------------------
+    # The one and only source: catalogue, images, versions and prices all come
+    # from importing a set. Cardmarket's own API is application-gated, and the
+    # old pokemontcg.io / TCGdex path is gone (each mapped a card to one price
+    # for all its printings, which mispriced every reprint).
     # Metered: the plan bills per request past a daily allowance, so the cap
     # below is enforced in code and deliberately sits under the real limit.
     # Raising it costs money, so it is an explicit decision, not a default.
@@ -101,20 +94,13 @@ class Config:
         "TCGGO_RAPIDAPI_HOST", "cardmarket-api-tcg.p.rapidapi.com")
     TCGGO_GAME = os.environ.get("TCGGO_GAME", "pokemon")
     TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "40"))
-    POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine
     HTTP_MAX_BACKOFF = int(os.environ.get("HTTP_MAX_BACKOFF", "30"))
 
-    # Link resolution is one request per card. Kept low deliberately: without an
-    # API key the whole daily allowance is 1,000 requests.
-    LINK_RESOLVE_WORKERS = int(os.environ.get("LINK_RESOLVE_WORKERS", "3"))
-
     # Cardmarket locale for outbound product links (en/es/fr/it/de).
     CARDMARKET_LOCALE = os.environ.get("CARDMARKET_LOCALE", "es")
 
-    # averageSellPrice is steadier than trendPrice, which can be 3x off on thin markets.
-    PRICE_BASIS = os.environ.get("PRICE_BASIS", "averageSellPrice")
     PRICE_STALE_DAYS = int(os.environ.get("PRICE_STALE_DAYS", "25"))
 
     # --- scheduler ---------------------------------------------------------

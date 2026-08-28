@@ -153,23 +153,6 @@ def test_rating_sent_to_the_collection_lands_on_the_card(client, app):
     assert app.repo.get_card_rating("base1-4") == 6
 
 
-def test_printing_must_match_the_card(client, app):
-    """A mismatch would have the collection claim a printing of another card."""
-    app.repo.rebuild_printings()
-    with app.repo.tx() as c:
-        c.execute("""INSERT INTO card_printings
-                       (print_group, card_id, official_set_id, is_reprint,
-                        display_name, source)
-                     VALUES ('base1-4','base1-4','base1',0,'Base','manual')""")
-        pid = c.execute("SELECT id FROM card_printings "
-                        "WHERE card_id='base1-4'").fetchone()["id"]
-
-    bad = client.post("/api/collection",
-                      json={"card_id": "base1-2", "printing_id": pid})
-    assert bad.get_json()["error"]["code"] == "invalid_printing"
-
-
-# ------------------------------------------------------------------ derived
 def test_dashboard_totals_are_derived_not_stored(client, app):
     app.repo.upsert_collection_item({"card_id": "base1-4", "quantity": 2})
     app.repo.upsert_collection_item({"card_id": "base1-2", "quantity": 1})

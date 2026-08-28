@@ -2,7 +2,7 @@
 
 The spec lists personal sets as prose ("Jungle (sin holos)") but stores only an
 explicit card list, which would mean hand-curating ~1,100 rows and re-curating
-them after every catalog refresh. Rules make it reproducible (PLAN.md §2.10).
+them after every catalog refresh. Rules make it reproducible.
 
 Rule shape:
     {
@@ -48,12 +48,26 @@ class SetBuilder:
         excl_rarities = set(rules.get("exclude_rarities", []))
         excl_supertypes = set(rules.get("exclude_supertypes", []))
         excl_cards = set(rules.get("exclude_cards", []))
+        # include_rarities, when present, keeps only those — how "solo holos" is
+        # expressed. Empty means no rarity filter.
+        incl_rarities = set(rules.get("include_rarities", []))
+        # Per-card overrides on TOP of the rarity rule. A card in include_cards is
+        # kept even if the rarity rule would drop it — Neo Genesis Metal Energy is
+        # a Rare Holo you want under "sin holos". exclude_cards drops a card the
+        # rule would otherwise keep. These are the manual exceptions the dropdown
+        # alone cannot express.
+        force_in = set(rules.get("include_cards", []))
+
+        def passes_rarity(c):
+            r = c.get("rarity") or ""
+            return (r not in excl_rarities
+                    and (c.get("supertype") or "") not in excl_supertypes
+                    and (not incl_rarities or r in incl_rarities))
 
         kept = [
             c for c in candidates
             if c["id"] not in excl_cards
-            and (c.get("rarity") or "") not in excl_rarities
-            and (c.get("supertype") or "") not in excl_supertypes
+            and (c["id"] in force_in or passes_rarity(c))
         ]
 
         # dedupe while preserving the release-date/number order search_cards returned

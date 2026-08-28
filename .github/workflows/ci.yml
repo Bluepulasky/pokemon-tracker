@@ -52,48 +52,6 @@ jobs:
           python -m pytest tests/ -q \
             --cov=tombot --cov-report=term-missing --cov-fail-under=35
 
-  tcgdex-live:
-    name: tcgdex live check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # api.tcgdex.net refuses connections from some networks — it is unreachable
-    # from where this adapter was written. GitHub's runners can reach it, so this
-    # job is the integration test the developer cannot run locally.
-    #
-    # Only on demand or when the adapter changes: it calls a third-party API once
-    # per card and there is no reason to do that on unrelated pushes.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.title, 'tcgdex') ||
-      contains(github.event.head_commit.message, 'tcgdex')
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        # The adapter lives inside the tombot package, and importing anything
-        # from it executes tombot/__init__.py — the Flask app factory. So the
-        # runtime dependencies are needed even though this script only parses.
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Check the adapter against the live API
-        run: python scripts/tcgdex_live_check.py
-
-      - name: Upload the fetched payloads
-        # These become fixtures. Downloading the artifact is how a developer who
-        # cannot reach the API gets real data to test against.
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tcgdex-live-payloads
-          path: tcgdex-live/
-          retention-days: 14
-
   image:
     name: docker image
     runs-on: ubuntu-latest
@@ -113,8 +71,7 @@ jobs:
         # register. All three have broken here before.
         run: |
           docker run --rm tombot-ci flask --help > /tmp/cli.txt
-          for cmd in bootstrap init-db import-catalog seed-sets resolve-links \
-                     rebuild-printings prices snapshot monthly scheduler; do
+          for cmd in init-db prices snapshot monthly scheduler; do
             grep -q "^  $cmd" /tmp/cli.txt || { echo "missing CLI command: $cmd"; exit 1; }
           done
           test -x scripts/entrypoint.sh || { echo "entrypoint is not executable"; exit 1; }
@@ -122,7 +79,7 @@ jobs:
       - name: Container boots and serves
         run: |
           docker run -d --name tombot-ci-run -p 8080:8080 \
-            -e AUTO_BOOTSTRAP=0 -e PUID=1000 -e PGID=1000 \
+            -e PUID=1000 -e PGID=1000 \
             -v "$PWD/.git:/srv/.git:ro" tombot-ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/healthz > /tmp/health.json; then break; fi

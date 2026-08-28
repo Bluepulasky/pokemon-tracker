@@ -1,6 +1,6 @@
-.PHONY: help venv install bootstrap run dev test links prices snapshot monthly \
+.PHONY: help venv install run dev test prices snapshot monthly \
         docker docker-app docker-logs docker-stop docker-shell \
-        docker-bootstrap docker-initdb docker-sets docker-prices docker-links \
+        docker-initdb docker-prices \
         docker-demo docker-demo-clear bundle clean
 
 help:
@@ -12,9 +12,6 @@ venv:            ## Create the virtualenv
 install: venv    ## Install dependencies
 	.venv/bin/pip install -r requirements.txt
 
-bootstrap:       ## init-db + import catalog + seed personal sets (first run)
-	FLASK_APP=app.py .venv/bin/flask bootstrap
-
 run:             ## Serve on :8080 (gunicorn — same server the container uses)
 	.venv/bin/gunicorn -w 2 --threads 4 -b 127.0.0.1:8080 --timeout 120 app:app
 
@@ -23,9 +20,6 @@ dev:             ## Flask dev server with auto-reload (single-process; use for d
 
 test:            ## Run the test suite
 	.venv/bin/python -m pytest tests/ -q
-
-links:           ## Resolve Cardmarket product URLs (resumable)
-	FLASK_APP=app.py .venv/bin/flask resolve-links
 
 prices:          ## Refresh prices for cards in the collection
 	FLASK_APP=app.py .venv/bin/flask prices
@@ -57,20 +51,11 @@ DOCKER_EXEC = docker compose exec --user $$(id -u):$$(id -g)
 docker-shell:    ## Shell inside the running container
 	$(DOCKER_EXEC) app bash
 
-docker-bootstrap: ## Re-run schema + catalog + sets + links in the container (idempotent)
-	$(DOCKER_EXEC) app flask bootstrap
-
 docker-initdb:   ## Create/upgrade the schema only
 	$(DOCKER_EXEC) app flask init-db
 
-docker-sets:     ## Rebuild the personal sets from seed_sets.py rules
-	$(DOCKER_EXEC) app flask seed-sets
-
 docker-prices:   ## Run a price refresh inside the container
 	$(DOCKER_EXEC) app flask prices
-
-docker-links:    ## Resolve Cardmarket links inside the container
-	$(DOCKER_EXEC) app flask resolve-links
 
 docker-demo:     ## Fill the collection with sample cards to try the UI
 	$(DOCKER_EXEC) app python scripts/demo_seed.py

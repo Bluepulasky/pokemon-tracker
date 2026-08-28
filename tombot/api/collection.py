@@ -145,7 +145,7 @@ def list_items():
     return jsonify({
         "data": _priced(rows), "page": page, "page_size": size, "total": total,
         "mode": "owned",
-        # Unique vs physical counts, shown side by side per spec §4.
+        # Unique vs physical counts, shown side by side.
         "totals": repo().collection_totals(),
     })
 
@@ -160,7 +160,7 @@ def get_item(item_id):
 
 @bp.get("/by-card/<card_id>")
 def by_card(card_id):
-    """All physical variants held for one logical card — powers the modal (spec §6)."""
+    """All physical variants held for one logical card — powers the modal."""
     return jsonify({"data": _priced(repo().items_by_card(card_id))})
 
 
