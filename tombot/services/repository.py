@@ -171,7 +171,7 @@ class PokemonRepo:
 
     def upsert_cards(self, cards: Iterable[dict]) -> int:
         """Bulk upsert. Never clears image_local — a re-import must not throw away
-        the cached image files (spec §20: external data must not overwrite local state)."""
+        the cached image files (external data must not overwrite local state)."""
         rows = []
         for c in cards:
             rows.append({
@@ -343,43 +343,40 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
 
-    def cards_excluded_from_set(self, set_id: str) -> list[dict]:
-        """Cards in this set's source sets that its rule leaves out.
+    def set_cards_with_state(self, set_id: str) -> list[dict]:
+        """Every card in this set's source sets, tagged for the set view.
 
-        Nothing showed these. "Jungle sin holos" removes sixteen cards and
-        "Neo Genesis sin holos" removes nineteen, and none of them appeared on
-        any screen — the set view filters by ownership, and all three of those
-        filters start from the slots the rule already pruned.
-
-        So a card a rule removed looked exactly like a card that does not
-        exist, and the only way to find out otherwise was to go looking for one
-        and fail. That is how a card that was never missing gets reported as
-        missing.
+        The whole set is shown, not just the rule's slots. Each card carries:
+          collecting — is it part of what you are trying to complete (a slot)?
+          owned      — do you have it, in any variant?
+        A rarity rule ("sin holos") flips `collecting` in bulk; the per-card
+        toggle overrides it. `owned` is independent of both.
         """
         import json as _json
 
         cset = self.get_collection_set(set_id)
         if not cset:
             return []
-        rules = _json.loads(cset.get("rules_json") or "{}")
-        sources = rules.get("include_sets") or []
+        sources = (_json.loads(cset.get("rules_json") or "{}").get("include_sets") or [])
         if not sources:
             return []
 
         marks = ",".join("?" * len(sources))
         return self._all(
-            f"""SELECT c.*, os.name AS set_name
+            f"""SELECT c.id, c.name, c.number, c.number_sort, c.rarity,
+                       c.image_small_url, c.image_local, c.official_set_id,
+                       EXISTS (SELECT 1 FROM set_slot_cards m
+                                WHERE m.set_id = ? AND m.card_id = c.id) AS collecting,
+                       COALESCE((SELECT SUM(i.quantity) FROM collection_items i
+                                  WHERE i.card_id = c.id), 0) AS owned_qty
                   FROM cards c
-                  JOIN official_sets os ON os.id = c.official_set_id
                  WHERE c.official_set_id IN ({marks})
-                   AND NOT EXISTS (SELECT 1 FROM set_slot_cards m
-                                    WHERE m.set_id = ? AND m.card_id = c.id)
                  ORDER BY c.number_sort, c.number""",
-            (*sources, set_id))
+            (set_id, *sources))
 
     def replace_rule_slots(self, set_id: str, slots: list[dict]) -> int:
         """Re-materialise rule-built slots. Manual slots and manual member edits survive
-        (PLAN.md §2.10) — a catalog refresh must not wipe hand curation."""
+        — a catalog refresh must not wipe hand curation."""
         with self.tx() as c:
             manual_cards = {
                 r["card_id"] for r in c.execute(
@@ -414,7 +411,7 @@ class PokemonRepo:
 
     def get_set_slots(self, set_id: str) -> list[dict]:
         """Slots with ownership state. A slot counts as owned if ANY member card is held —
-        this is what makes reprints/variants collapse to one logical card (spec §17)."""
+        this is what makes reprints/variants collapse to one logical card."""
         return self._all(
             """SELECT sl.id AS slot_id, sl.position, sl.source,
                       COALESCE(sl.label, c.name) AS label,
@@ -513,7 +510,7 @@ class PokemonRepo:
     def upsert_collection_item(self, item: dict, mode: str = "add") -> dict:
         """Insert or update. On the unique combination (card, variant, condition, language)
         `add` increments the quantity instead of creating a duplicate row — without this
-        the physical count silently doubles (PLAN.md §2.5)."""
+        the physical count silently doubles."""
         payload = {
             "card_id": item["card_id"],
             "variant": item.get("variant", "normal"),
@@ -819,7 +816,7 @@ class PokemonRepo:
         ) or {"slots": 0, "owned_slots": 0}
 
     def collection_totals(self) -> dict:
-        """Unique logical cards vs physical copies (spec §4): 67 cartas / 94 físicas."""
+        """Unique logical cards vs physical copies: 67 cartas / 94 físicas."""
         return self._one(
             "SELECT COUNT(DISTINCT card_id) AS unique_cards, "
             "COALESCE(SUM(quantity), 0) AS physical_cards, "
@@ -1144,6 +1141,27 @@ class PokemonRepo:
             """SELECT * FROM market_products
                 WHERE episode_id=? AND code=? ORDER BY version""",
             (episode_id, code))
+
+    def market_products_for_name(self, name: str) -> list[dict]:
+        """Every product of a card by name, across every set already imported.
+
+        This is what makes reprints show up in the version picker: a Pikachu is
+        a Pikachu whether it is Base Set, Jungle or Neo Genesis, and someone
+        holding one wants to find their exact printing without caring which set
+        window they opened. market_products only ever holds imported sets, so
+        this costs no request — the reprint is already in the database. Each row
+        carries its own card_id and set, so a pick records the printing it is,
+        not the card the modal happened to be opened on.
+        """
+        return self._all(
+            """SELECT mp.*, os.name AS set_name, os.release_date AS set_release,
+                      c.official_set_id AS set_id
+                 FROM market_products mp
+                 JOIN cards c ON c.id = mp.card_id
+                 JOIN official_sets os ON os.id = c.official_set_id
+                WHERE c.name = ?
+                ORDER BY os.release_date, mp.code, mp.version""",
+            (name,))
 
     def market_products_by_ids(self, ids: list[int]) -> dict:
         if not ids:

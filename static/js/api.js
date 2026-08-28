@@ -48,6 +48,8 @@ export const api = {
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
   getSetMode:   (setId)        => req('GET', `/api/sets/${setId}/mode`),
   setSetMode:   (setId, mode)  => req('PUT', `/api/sets/${setId}/mode`, { mode }),
+  setCardInSet:  (setId, cardId, action) =>
+                                 req('PUT', `/api/sets/${setId}/card/${cardId}`, { action }),
   health:       ()            => req('GET', '/api/maintenance/health'),
   episodes:     (q)           => req('GET', '/api/maintenance/episodes'
                                    + (q ? `?q=${encodeURIComponent(q)}` : '')),

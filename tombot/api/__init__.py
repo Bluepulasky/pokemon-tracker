@@ -1,4 +1,4 @@
-"""HTTP layer. No SQL here — everything goes through PokemonRepo (spec §22)."""
+"""HTTP layer. No SQL here — everything goes through PokemonRepo."""
 from __future__ import annotations
 
 from flask import current_app, jsonify, request

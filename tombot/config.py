@@ -64,11 +64,11 @@ class Config:
     THUMB_DIR = MEDIA_DIR / "thumbs"
 
     # --- http --------------------------------------------------------------
-    HOST = os.environ.get("HOST", "127.0.0.1")   # not 0.0.0.0: see PLAN.md §2.7
+    HOST = os.environ.get("HOST", "127.0.0.1")   # bind loopback, not 0.0.0.0
     PORT = int(os.environ.get("PORT", "8080"))
     DEBUG = _bool("DEBUG", False)
 
-    # Optional shared secret. Unset => no auth (spec §31). Set => X-App-Token required.
+    # Optional shared secret. Unset => no auth. Set => X-App-Token required.
     APP_TOKEN = os.environ.get("APP_TOKEN") or None
 
     # --- uploads -----------------------------------------------------------

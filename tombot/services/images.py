@@ -1,7 +1,7 @@
 """Photo upload pipeline.
 
 The spec makes mobile camera upload a priority but does not address what actually
-breaks there (PLAN.md §2.8):
+breaks there:
   - iOS Safari uploads HEIC; browsers cannot render it and Pillow cannot open it
     without pillow-heif. Photos would upload and then show as broken images.
   - Phone photos are 4-12MB; without a cap and a resize the grid is unusable on

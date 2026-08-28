@@ -16,3 +16,4 @@ dist/
 
 # cached API responses; never committed
 .cache/
+data/.cache-tcggo/

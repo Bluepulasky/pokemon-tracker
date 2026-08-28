@@ -1,4 +1,4 @@
-/* SPA shell: hash routing + the four views (spec §26). */
+/* SPA shell: hash routing + the four views. */
 
 import { api } from './api.js';
 import { closeModal, initModal, openCard } from './modal.js';
@@ -59,26 +59,6 @@ async function render(keepScroll = false) {
     view().innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
   }
   window.scrollTo(0, y);
-}
-
-/* The collection rule is a call on the set's state, separate from the set.
-   Switching it re-materialises which cards count as the set to complete. */
-async function loadSetMode(setId) {
-  const sel = view().querySelector('#f-mode');
-  if (!sel) return;
-  let r;
-  try { r = await api.getSetMode(setId); } catch { sel.parentElement.hidden = true; return; }
-  sel.innerHTML = r.options.map((o) =>
-    `<option value="${o.key}"${o.key === r.mode ? ' selected' : ''}>${esc(o.label)}</option>`)
-    .join('') + (r.mode === 'custom'
-      ? '<option value="custom" selected>Personalizado</option>' : '');
-  sel.onchange = async () => {
-    if (sel.value === 'custom') return;
-    try {
-      await api.setSetMode(setId, sel.value);
-      setDetail({ id: setId });
-    } catch (e) { toast(e.message, true); }
-  };
 }
 
 /* ------------------------------------------------------------- dashboard */
@@ -190,72 +170,96 @@ async function setDetail(r) {
   const s = await api.set(r.id);
   const p = s.progress || { owned: 0, target: 0, completion_pct: 0 };
   const sort = r.params.get('sort') || 'number';
-  const filter = r.params.get('filter') || 'all';
+  const rar = r.params.get('rar') || 'all';       // all | holo | no-holo (view)
+  const own = r.params.get('own') || 'all';       // all | owned | missing (view)
 
-  const counts = {
-    all: s.slots.length,
-    owned: s.slots.filter((x) => x.owned).length,
-    missing: s.slots.filter((x) => !x.owned).length,
-  };
+  const isHolo = (c) => /holo/i.test(c.rarity || '');
+  // Every card in the set, each tagged collecting/owned. The set is a checklist
+  // of the whole thing; the toggle on each card says whether it counts.
+  const cards = (s.cards || []).map((c) => ({
+    card_id: c.id, label: c.name, name: c.name, number: c.number,
+    number_sort: c.number_sort, rarity: c.rarity,
+    image_small_url: c.image_small_url, image_local: c.image_local,
+    official_set_id: c.official_set_id,
+    owned: (c.owned_qty || 0) > 0, quantity: c.owned_qty || 0,
+    collecting: !!c.collecting, holo: isHolo(c),
+  }));
 
-  let slots = [...s.slots];
-  if (filter === 'owned') slots = slots.filter((x) => x.owned);
-  if (filter === 'missing') slots = slots.filter((x) => !x.owned);
-  /* Cards the rule left out are not slots. They are shown so that nothing in a
-     set is invisible: a rule that removes nineteen cards should say so, rather
-     than leaving them indistinguishable from cards that do not exist. */
-  if (filter === 'excluded') {
-    slots = (s.excluded || []).map((c) => ({
-      card_id: c.id, label: c.name, name: c.name, number: c.number,
-      number_sort: c.number_sort, rarity: c.rarity,
-      image_small_url: c.image_small_url, image_local: c.image_local,
-      official_set_id: c.official_set_id,
-      owned: 0, quantity: 0, target: 1, complete: 0, excluded: true,
-    }));
-  }
-  slots.sort(sorter(sort));
+  let shown = cards;
+  if (rar === 'holo') shown = shown.filter((c) => c.holo);
+  if (rar === 'no-holo') shown = shown.filter((c) => !c.holo);
+  if (own === 'owned') shown = shown.filter((c) => c.owned);
+  if (own === 'missing') shown = shown.filter((c) => !c.owned);
+  shown = [...shown].sort(sorter(sort));
+
+  const collecting = cards.filter((c) => c.collecting).length;
 
   view().innerHTML = `
-    <div class="set-head">
-      <h1>${esc(s.name)}</h1>
-      <label class="set-mode">Coleccionar
-        <select id="f-mode"><option>…</option></select>
-      </label>
-    </div>
-    <p class="sub">${p.owned} / ${p.target} cartas · ${pct(p.completion_pct)} completado${
-      s.description ? ` · ${esc(s.description)}` : ''}</p>
-    ${progressBar(p.owned, p.target)}
+    <h1>${esc(s.name)}</h1>
+    <p class="sub">Coleccionando ${collecting} de ${cards.length} · tenés ${p.owned}
+      · falta ${Math.max(0, collecting - p.owned)}</p>
+    ${progressBar(p.owned, collecting)}
 
     <div class="toolbar">
-      <div class="chips seg" id="f-filter">
+      <div class="chips seg" id="f-rar">
+        ${[['all', 'Todas'], ['holo', 'Holo'], ['no-holo', 'No holo']]
+.map(([k, l]) => `<span class="chip${rar === k ? ' on' : ''}" data-rar="${k}">${l}</span>`).join('')}
+      </div>
+      <div class="chips seg" id="f-own">
         ${[['all', 'Todas'], ['owned', 'Poseídas'], ['missing', 'Faltantes']]
-          .map(([k, label]) => `<span class="chip${filter === k ? ' on' : ''}"
-             data-filter="${k}">${label}<b>${counts[k]}</b></span>`).join('')}
-        ${(s.excluded && s.excluded.length) ? `
-        <span class="chip${filter === 'excluded' ? ' on' : ''}" data-filter="excluded"
-              title="Cartas del set que la regla de este set deja afuera">
-          Fuera de la regla<b>${s.excluded.length}</b></span>` : ''}
+.map(([k, l]) => `<span class="chip${own === k ? ' on' : ''}" data-own="${k}">${l}</span>`).join('')}
       </div>
       <select id="f-sort">
         <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
         <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
         <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
-        <option value="owned"${sort === 'owned' ? ' selected' : ''}>Poseídas primero</option>
       </select>
-      <span class="spacer">${slots.length} cartas mostradas</span>
+      <span class="spacer">${shown.length} cartas</span>
     </div>
 
-    <div class="card-grid">${slots.map(slotHtml).join('')}</div>`;
+    <div class="card-grid">${shown.map(cardCheckHtml).join('')}</div>`;
 
-  const nav = (f) => {
-    location.hash = `#/set/${r.id}?sort=${view().querySelector('#f-sort').value}&filter=${f}`;
+  const nav = (over) => {
+    const q = new URLSearchParams({ sort, rar, own, ...over });
+    location.hash = `#/set/${r.id}?${q.toString()}`;
   };
-  view().querySelector('#f-sort').onchange = () => nav(filter);
-  loadSetMode(s.id);
-  view().querySelectorAll('#f-filter .chip').forEach((chip) => {
-    chip.onclick = () => nav(chip.dataset.filter);
+  view().querySelector('#f-sort').onchange = (e) => nav({ sort: e.target.value });
+  view().querySelectorAll('#f-rar .chip').forEach((c) => c.onclick = () => nav({ rar: c.dataset.rar }));
+  view().querySelectorAll('#f-own .chip').forEach((c) => c.onclick = () => nav({ own: c.dataset.own }));
+
+  // The collecting toggle is a per-card exception on top of any bulk rule.
+  view().querySelectorAll('[data-toggle]').forEach((btn) => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const wasCollecting = btn.dataset.collecting === '1';
+      btn.disabled = true;
+      try {
+        await api.setCardInSet(r.id, btn.dataset.toggle, wasCollecting ? 'drop' : 'keep');
+        setDetail(r);
+      } catch (err) { toast(err.message, true); btn.disabled = false; }
+    };
   });
   wireCardClicks();
+}
+
+function cardCheckHtml(c) {
+  const art = cardArt(c);
+  return `<div class="card${c.owned ? '' : ' missing'}${c.collecting ? '' : ' not-collecting'}"
+       data-card="${esc(c.card_id)}">
+    <div class="art">
+      ${art ? `<img src="${esc(art)}" alt="${esc(c.label)}" loading="lazy">`
+            : placeholder(c.number, c.official_set_id)}
+      ${c.owned ? `<span class="badge own">✓${c.quantity > 1 ? ' ×' + c.quantity : ''}</span>` : ''}
+      <button class="collect-toggle${c.collecting ? ' on' : ''}"
+              data-toggle="${esc(c.card_id)}" data-collecting="${c.collecting ? 1 : 0}"
+              title="${c.collecting ? 'Coleccionando — clic para sacar de la lista'
+                                    : 'No en la lista — clic para coleccionar'}">
+        ${c.collecting ? '★' : '☆'}
+      </button>
+    </div>
+    <div class="meta"><span class="name">${esc(c.label)}</span>
+      <span class="num">#${esc(c.number)}</span></div>
+  </div>`;
 }
 
 const sorter = (key) => ({
@@ -399,7 +403,7 @@ async function collection(r) {
 }
 
 function itemHtml(i) {
-  /* Prefer the user's own photo, then the catalog image (spec §4/§6).
+  /* Prefer the user's own photo, then the catalog image.
      In "All" mode an unowned slot has no physical copy, so it renders as the
      grey hatched placeholder rather than art the user does not have. */
   const owned = i.owned !== false;

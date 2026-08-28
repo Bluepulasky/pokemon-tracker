@@ -137,7 +137,7 @@ def set_card_rating(card_id):
 
 @bp.get("/search")
 def search():
-    """Global search across catalog and collection (spec §19).
+    """Global search across catalog and collection.
 
     A rating filter narrows the collection half only — the catalog has no ranks,
     and silently dropping catalog hits when one is set would look like the search

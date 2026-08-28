@@ -56,7 +56,7 @@ def create_app(config: type[Config] = Config) -> Flask:
     app.extensions["setbuilder"] = SetBuilder(repo)
     app.extensions["jobs"] = JobRunner(app)
 
-    # --- optional shared secret (PLAN.md §2.7) -----------------------------
+    # --- optional shared secret -----------------------------
     @app.before_request
     def _guard():
         token = config.APP_TOKEN

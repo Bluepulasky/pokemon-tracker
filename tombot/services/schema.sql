@@ -1,5 +1,5 @@
 -- TOMBOT POKEMON TRACKER — schema
--- See PLAN.md §3. Every connection must set foreign_keys=ON (SQLite defaults it OFF).
+-- Every connection must set foreign_keys=ON (SQLite defaults it OFF).
 
 PRAGMA foreign_keys = ON;
 
@@ -56,13 +56,13 @@ CREATE TABLE IF NOT EXISTS collection_sets (
     description  TEXT,
     group_name   TEXT,                        -- 'Gen1' / 'Gen 2' / 'Gen 3'
     position     INTEGER NOT NULL DEFAULT 0,
-    rules_json   TEXT,                        -- declarative rule; see PLAN.md §2.10
+    rules_json   TEXT,                        -- declarative rule
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- A slot is ONE completion target. Owning any member card completes it.
--- This is what lets reprints/variants collapse to a single logical card (PLAN.md §2.1).
+-- This is what lets reprints/variants collapse to a single logical card.
 CREATE TABLE IF NOT EXISTS set_slots (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     set_id          TEXT NOT NULL REFERENCES collection_sets(id) ON DELETE CASCADE,
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS collection_items (
 
 CREATE INDEX IF NOT EXISTS idx_items_card ON collection_items(card_id);
 
--- N photos per item (PLAN.md §2.4). The spec's single image column could not
+-- N photos per item. The spec's single image column could not
 -- satisfy "one photo per variant, swipe through them in the modal".
 CREATE TABLE IF NOT EXISTS collection_photos (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS price_history (
 CREATE INDEX IF NOT EXISTS idx_pricehist_card ON price_history(card_id, captured_on);
 
 -- Condition/language multipliers. No public source prices by condition or by
--- printing language, so these are local, editable estimates (PLAN.md §2.12).
+-- printing language, so these are local, editable estimates.
 CREATE TABLE IF NOT EXISTS price_modifiers (
     kind       TEXT NOT NULL,                 -- 'condition' | 'language' | 'variant'
     key        TEXT NOT NULL,

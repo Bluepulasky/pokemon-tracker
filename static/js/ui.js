@@ -25,7 +25,7 @@ export function toast(msg, isError = false) {
 }
 
 /* Catalog art: prefer the locally cached copy so the grid does not depend on a
-   third-party CDN on every page load (PLAN.md §2.14). */
+   third-party CDN on every page load. */
 export function cardArt(card) {
   if (card.image_local) return `/media/${card.image_local}`;
   return card.image_small_url || '';

@@ -32,8 +32,9 @@ def get_set(set_id):
     progress = _with_progress(repo().set_progress(set_id))
     cset["progress"] = progress[0] if progress else None
     cset["slots"] = repo().get_set_slots(set_id)
-    # What the rule left out, so nothing in a set is invisible.
-    cset["excluded"] = repo().cards_excluded_from_set(set_id)
+    # The whole set, each card flagged collecting/owned, for a single grid with
+    # per-card toggles rather than a rule-filtered subset.
+    cset["cards"] = repo().set_cards_with_state(set_id)
     return jsonify(cset)
 
 
@@ -83,7 +84,7 @@ def delete_set(set_id):
 
 @bp.post("/<set_id>/rebuild")
 def rebuild(set_id):
-    """Re-materialise slots from rules_json. Manual slots survive (PLAN.md §2.10)."""
+    """Re-materialise slots from rules_json. Manual slots survive."""
     return jsonify(svc("setbuilder").build(set_id))
 
 
@@ -97,6 +98,48 @@ COLLECTION_MODES = {
     "holos-only": {"label": "Solo holos", "include_rarities": ["Rare Holo"]},
     "no-commons": {"label": "Sin comunes", "exclude_rarities": ["Common"]},
 }
+
+
+@bp.put("/<set_id>/card/<card_id>")
+def set_card_override(set_id, card_id):
+    """A per-card exception on top of the collection rule.
+
+    The dropdown decides most of a set by rarity, but rarity is a blunt tool:
+    Neo Genesis Metal Energy is a Rare Holo you still want under "sin holos".
+    So a card can be forced in ("keep") or forced out ("drop") regardless of the
+    rule, or returned to whatever the rule says ("reset").
+
+    These overrides live in the rule (include_cards / exclude_cards) and survive
+    a mode change — switching sin holos ↔ todas does not lose them.
+    """
+    cset = repo().get_collection_set(set_id)
+    if not cset:
+        raise ApiError("set no encontrado", "not_found", 404)
+    if not repo().get_card(card_id):
+        raise ApiError("carta no encontrada", "not_found", 404)
+    action = (request.get_json(silent=True) or {}).get("action")
+    if action not in ("keep", "drop", "reset"):
+        raise ApiError("acción inválida (keep | drop | reset)", "invalid_action")
+
+    rules = json.loads(cset.get("rules_json") or "{}")
+    keep = [c for c in (rules.get("include_cards") or []) if c != card_id]
+    drop = [c for c in (rules.get("exclude_cards") or []) if c != card_id]
+    if action == "keep":
+        keep.append(card_id)
+    elif action == "drop":
+        drop.append(card_id)
+    # reset leaves both cleaned of this card
+
+    rules["include_cards"] = keep
+    rules["exclude_cards"] = drop
+    repo().upsert_collection_set({
+        "id": set_id, "name": cset["name"], "description": cset.get("description"),
+        "group_name": cset.get("group_name"), "position": cset.get("position", 0),
+        "rules_json": json.dumps(rules),
+    })
+    built = svc("setbuilder").build(set_id)
+    return jsonify({"set_id": set_id, "card_id": card_id, "action": action,
+                    "slots": built.get("slots") if isinstance(built, dict) else built})
 
 
 @bp.get("/<set_id>/mode")

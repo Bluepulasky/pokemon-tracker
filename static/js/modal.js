@@ -1,4 +1,4 @@
-/* The card modal — the central interaction point (spec §28).
+/* The card modal — the central interaction point.
    Shows catalog info, every physical variant held (swipeable on mobile, §6),
    the add/edit form, photos, and the price breakdown. */
 
@@ -341,15 +341,22 @@ function wireForm(root, card) {
     btn.disabled = true;
     try {
       const chosen = printingSel?.selectedOptions?.[0];
+      // A reprint pick (another set) overrides the card: it records the printing
+      // it actually is. The opened card's printing_id and edition dropdown belong
+      // to the wrong set then, so they are dropped in favour of the product.
+      const override = form.dataset.cardOverride;
+      const targetCard = override || (chosen ? chosen.dataset.card : card.id);
       await api.addItem({
         // Picking a different edition records that printing's catalog card, so
         // the slot is still satisfied and the physical edition is preserved.
-        card_id: chosen ? chosen.dataset.card : card.id,
-        printing_id: (printingSel && printingSel.value)
+        card_id: targetCard,
+        printing_id: (!override && printingSel && printingSel.value)
           ? Number(printingSel.value) : undefined,
         // A chosen edition IS the variant we store: 1st Edition and Shadowless
-        // are print runs, and the collection records one variant per row.
-        variant: editionSel.value || form.variant.value,
+        // are print runs, and the collection records one variant per row. For a
+        // reprint the edition lives in the product, so holo/normal is enough.
+        variant: override ? form.variant.value
+                          : (editionSel.value || form.variant.value),
         language: form.language.value,
         condition,
         quantity: Number(form.quantity.value) || 1,
@@ -360,7 +367,7 @@ function wireForm(root, card) {
       });
       toast(`${card.name} añadida`);
       onChange();
-      openCard(card.id);              // reopen so the new variant shows immediately
+      openCard(targetCard);           // reopen the card it was actually saved to
     } catch (err) {
       toast(err.message, true);
       btn.disabled = false;
@@ -519,8 +526,12 @@ async function renderQuotes(box, cardId, variant) {
 function versionTile(v) {
   const price = v.price != null ? `${Number(v.price).toFixed(2)} €` : '—';
   const stock = v.available != null ? `${v.available} en venta` : 'sin stock';
-  return `<button type="button" class="version" data-product="${v.market_product_id}">
+  // A reprint (another set) is dimmed a touch and labelled with its set, so the
+  // card's own printings read as the default and reprints as the alternative.
+  return `<button type="button" class="version${v.is_current ? '' : ' reprint'}"
+      data-product="${v.market_product_id}" data-card="${esc(v.card_id || '')}">
       ${v.image ? `<img src="${esc(v.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
+      ${v.set ? `<span class="v-set">${esc(v.set)}</span>` : ''}
       <span class="v-code">${esc(v.code || '')}</span>
       ${v.version ? `<span class="v-name">${esc(v.version)}</span>` : ''}
       <span class="v-price">${price}</span>
@@ -542,7 +553,15 @@ async function renderVersions(box, form, cardId) {
       Usá los campos de abajo.</div>`;
     return;                     // legacy fields stay visible
   }
-  box.innerHTML = versions.map(versionTile).join('');
+  // The card's own printings come first; reprints from other sets follow under
+  // a divider, so it is clear they are the same card in a different set.
+  const own = versions.filter((v) => v.is_current);
+  const reprints = versions.filter((v) => !v.is_current);
+  box.innerHTML = own.map(versionTile).join('')
+    + (reprints.length
+        ? `<div class="version-sep">Reimpresiones en otros sets</div>`
+          + reprints.map(versionTile).join('')
+        : '');
 
   /* The dropdowns stay. The picker fills them in, it does not replace them.
 
@@ -582,6 +601,15 @@ const EDITION_FROM_VERSION = [
 function applyVersion(form, v) {
   if (!v) return;
 
+  // A reprint from another set is saved as the card it actually is, not the one
+  // the modal was opened on. cardOverride carries that; the submit handler reads
+  // it before falling back to the opened card. The card's own set clears it.
+  if (v.card_id && v.is_current === false) {
+    form.dataset.cardOverride = v.card_id;
+  } else {
+    delete form.dataset.cardOverride;
+  }
+
   const edition = form.querySelector('[name=edition]');
   const label = v.version || '';
   if (edition) {
@@ -610,9 +638,12 @@ function applyVersion(form, v) {
 
   const summary = form.querySelector('.version-picked');
   if (summary) {
-    const bits = [v.code, v.version, v.rarity].filter(Boolean).map(esc);
+    const bits = [v.code, v.set, v.version, v.rarity].filter(Boolean).map(esc);
+    const note = v.is_current === false
+      ? `<div class="note">Reimpresión — se guarda en <strong>${esc(v.set)}</strong>,
+         no en el set que abriste.</div>` : '';
     summary.innerHTML = `Se guardará como <strong>${bits.join(' · ')}</strong>
-      — producto Cardmarket <code>${v.market_product_id}</code>`;
+      — producto Cardmarket <code>${v.market_product_id}</code>${note}`;
     summary.hidden = false;
   }
 }

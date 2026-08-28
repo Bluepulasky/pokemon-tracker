@@ -2,7 +2,7 @@
 
 Every scheduled job is also a CLI command. That matters: the upstream API throws
 500s often enough that "run it again by hand" is a normal operation, and a cron
-entry inside a container hides its failures (PLAN.md §2.13).
+entry inside a container hides its failures.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def init_db():
 @click.option("--stale-days", type=int, default=None)
 @with_appcontext
 def prices(all_cards, stale_days):
-    """Refresh prices for cards in the collection (spec §30)."""
+    """Refresh prices for cards in the collection."""
     # Prices are read from the imported products, so --all/--stale-days no
     # longer change anything: every owned card is re-priced from local data.
     click.echo(current_app.extensions["pricing"].refresh())
