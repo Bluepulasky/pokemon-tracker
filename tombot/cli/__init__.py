@@ -15,7 +15,6 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 from ..config import DEFAULT_MODIFIERS
-from ..services.seed_sets import PERSONAL_SETS, required_official_sets
 
 
 def _repo():
@@ -30,116 +29,15 @@ def init_db():
     click.echo(f"schema ready at {current_app.extensions['config'].DB_PATH}")
 
 
-@click.command("import-catalog")
-@click.option("--sets", "set_ids", default="", help="Comma-separated set ids; default = all needed")
-@click.option("--images/--no-images", default=True, help="Cache catalog images locally")
-@with_appcontext
-def import_catalog(set_ids, images):
-    """Import the official catalog from the configured source."""
-    ids = [s.strip() for s in set_ids.split(",") if s.strip()] or required_official_sets()
-    click.echo(f"importing {len(ids)} sets: {', '.join(ids)}")
-    result = current_app.extensions["importer"].import_sets(ids)
-    for sid, n in result["sets"].items():
-        click.echo(f"  {sid:<8} {n:>4} cards")
-    for f in result["failed"]:
-        click.secho(f"  {f['set']:<8} FAILED: {f['error']}", fg="red")
-    click.echo(f"total: {result['cards']} cards")
-
-    if result.get("rate_limited"):
-        _rate_limit_notice(result.get("not_attempted", []))
-        return
-
-    if images:
-        click.echo(f"images: {current_app.extensions['importer'].cache_images()}")
-
-    # Rebuilt here rather than inside import_sets: groups are derived by
-    # comparing cards across sets, so building them from a partial import would
-    # miss pairs and record the gaps as fact.
-    if not result["failed"]:
-        click.echo(f"printings: {_repo().rebuild_printings()}")
-
-    if result["failed"]:
-        click.secho("re-run to retry the failed sets (import is idempotent)", fg="yellow")
-
-
-def _rate_limit_notice(not_attempted=()):
-    """Rate limiting is an operator problem, not a bug — say what to do about it."""
-    cfg = current_app.extensions["config"]
-    click.secho("\nSTOPPED: upstream rate limit reached.", fg="red", bold=True)
-    if not_attempted:
-        click.echo(f"  not attempted: {', '.join(sorted(not_attempted))}")
-    if cfg.POKEMONTCG_API_KEY:
-        click.echo("  An API key is configured, so this is the 20,000/day ceiling")
-        click.echo("  or a short burst limit. Wait and re-run — progress is kept.")
-    else:
-        click.secho("  No POKEMONTCG_API_KEY is set, so the limit is 1,000 "
-                    "requests/day.", fg="yellow")
-        click.echo("  Get a free key at https://dev.pokemontcg.io/ (raises it to "
-                   "20,000/day),")
-        click.echo("  put it in .env, then: docker compose up -d && make "
-                   "docker-bootstrap")
-    click.echo("  Nothing is lost — re-running resumes from where it stopped.")
-
-
-@click.command("resolve-links")
-@click.option("--limit", type=int, default=5000)
-@with_appcontext
-def resolve_links(limit):
-    """Resolve each card's Cardmarket product URL. Resumable; safe to re-run."""
-    with click.progressbar(length=100, label="resolving") as bar:
-        state = {"pct": 0}
-
-        def progress(done, total):
-            pct = int(100 * done / total)
-            bar.update(pct - state["pct"])
-            state["pct"] = pct
-
-        r = current_app.extensions["importer"].resolve_market_links(
-            limit, progress=progress)
-    click.echo(f"resolved {r['resolved']}, failed {r['failed']}, "
-               f"{r['total_with_links']} cards now have a Cardmarket link")
-    if r.get("rate_limited"):
-        click.secho(f"stopped early: rate limited, {r['remaining']} cards left",
-                    fg="yellow")
-        _rate_limit_notice()
-    elif r["failed"]:
-        click.secho("re-run to retry the failures", fg="yellow")
-
-
-@click.command("rebuild-printings")
-@with_appcontext
-def rebuild_printings():
-    """Rebuild the multi-edition (printing) groups from slots and the catalog."""
-    click.echo(_repo().rebuild_printings())
-
-
-@click.command("seed-sets")
-@click.option("--rebuild/--no-rebuild", default=True, help="Materialise slots from rules")
-@with_appcontext
-def seed_sets(rebuild):
-    """Create the personal sets and build their slots. Never touches collection data."""
-    repo = _repo()
-    for s in PERSONAL_SETS:
-        repo.upsert_collection_set({
-            "id": s["id"], "name": s["name"], "description": s.get("description"),
-            "group_name": s.get("group_name"), "position": s.get("position", 0),
-            "rules_json": json.dumps(s["rules"]),
-        })
-    click.echo(f"{len(PERSONAL_SETS)} personal sets written")
-    if rebuild:
-        for r in current_app.extensions["setbuilder"].build_all():
-            click.echo(f"  {r['set']:<36} {r.get('slots', 0):>4} slots "
-                       f"({r.get('excluded', 0)} excluded by rules)")
-
-
 @click.command("prices")
 @click.option("--all", "all_cards", is_flag=True, help="Ignore cache age")
 @click.option("--stale-days", type=int, default=None)
 @with_appcontext
 def prices(all_cards, stale_days):
     """Refresh prices for cards in the collection (spec §30)."""
-    click.echo(current_app.extensions["pricing"].refresh(
-        stale_days=stale_days, all_cards=all_cards))
+    # Prices are read from the imported products, so --all/--stale-days no
+    # longer change anything: every owned card is re-priced from local data.
+    click.echo(current_app.extensions["pricing"].refresh())
 
 
 @click.command("snapshot")
@@ -225,88 +123,6 @@ def _bool_env(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def run_bootstrap(force_catalog: bool = False, echo=lambda _m: None) -> dict:
-    """Set up or repair the install. Shared by the CLI and the maintenance API so
-    the button and the command cannot drift apart."""
-    repo = _repo()
-    repo.init_db(DEFAULT_MODIFIERS)
-
-    required = required_official_sets()
-    gaps = repo.catalog_gaps(required)
-    imported = {}
-
-    importer = current_app.extensions["importer"]
-    if force_catalog or gaps:
-        targets = required if force_catalog else [g["set"] for g in gaps]
-        echo(f"importing {len(targets)} set(s)")
-        result = importer.import_sets(targets)
-        imported = result.get("sets", {})
-        if not result.get("rate_limited"):
-            importer.cache_images()
-
-    current_app.extensions["setbuilder"].build_all()
-    printings = repo.rebuild_printings()
-    remaining = repo.catalog_gaps(required)
-
-    return {
-        "cards": repo.count_cards(),
-        "imported_sets": imported,
-        "printings": printings,
-        "incomplete_sets": [g["set"] for g in remaining],
-        "unresolved_links": len(repo.cards_missing_market_url(100000)),
-    }
-
-
-@click.command("bootstrap")
-@click.option("--force-catalog", is_flag=True,
-              help="Re-import every set even if the catalog looks complete")
-@click.pass_context
-@with_appcontext
-def bootstrap(ctx, force_catalog):
-    """Set up or repair the install: schema, catalog, personal sets, links.
-
-    This is the repair command as much as the install command, so it must make
-    progress on every run. It checks the catalog per set rather than asking
-    "are there any cards", because a partial import is the normal outcome when
-    the upstream is throwing 500s, and treating that as done leaves the app
-    permanently half-built.
-
-    Set seeding and link resolution always run: both are idempotent, both are
-    cheap when there is nothing to do, and neither depends on the import having
-    succeeded.
-    """
-    ctx.invoke(init_db)
-    repo = _repo()
-
-    required = required_official_sets()
-    gaps = repo.catalog_gaps(required)
-
-    if force_catalog:
-        click.echo(f"--force-catalog: re-importing all {len(required)} sets")
-        ctx.invoke(import_catalog, set_ids=",".join(required), images=True)
-    elif gaps:
-        for g in gaps:
-            expected = g["expected"] if g["expected"] is not None else "?"
-            click.echo(f"  {g['set']:<8} {g['have']}/{expected}  {g['why']}")
-        click.echo(f"importing {len(gaps)} incomplete set(s)")
-        ctx.invoke(import_catalog, set_ids=",".join(g["set"] for g in gaps), images=True)
-    else:
-        click.echo(f"catalog complete ({repo.count_cards()} cards across "
-                   f"{len(required)} sets)")
-
-    ctx.invoke(seed_sets, rebuild=True)
-    ctx.invoke(resolve_links, limit=5000)
-
-    remaining = repo.catalog_gaps(required)
-    if remaining:
-        click.secho(f"{len(remaining)} set(s) still incomplete: "
-                    f"{', '.join(g['set'] for g in remaining)}", fg="yellow")
-        click.secho("re-run to retry — imports resume where they left off", fg="yellow")
-    else:
-        click.secho("bootstrap complete", fg="green")
-
-
 def register(app):
-    for cmd in (init_db, import_catalog, seed_sets, resolve_links,
-                rebuild_printings, prices, snapshot, monthly, scheduler, bootstrap):
+    for cmd in (init_db, prices, snapshot, monthly, scheduler):
         app.cli.add_command(cmd)

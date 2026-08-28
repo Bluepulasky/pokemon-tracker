@@ -28,43 +28,6 @@ def test_every_retired_grade_maps_to_a_live_one():
     assert set(RETIRED_CONDITIONS.values()) <= set(CONDITIONS)
 
 
-def test_cards_on_old_grades_are_carried_over(tmp_path):
-    repo = _repo(tmp_path)
-    with repo.tx() as c:
-        c.execute("""INSERT INTO collection_items(card_id, variant, condition, language,
-                                                  quantity) VALUES('base1-4','holo','LP','en',2)""")
-    repo.init_db(DEFAULT_MODIFIERS)          # a restart runs the migrations
-
-    rows = repo._all("SELECT condition, quantity FROM collection_items")
-    assert rows == [{"condition": "EX", "quantity": 2}]
-
-
-def test_a_card_held_under_both_names_merges_instead_of_colliding(tmp_path):
-    """(card, variant, condition, language) is unique; one row must not vanish."""
-    repo = _repo(tmp_path)
-    with repo.tx() as c:
-        c.execute("""INSERT INTO collection_items(card_id, variant, condition, language,
-                                                  quantity) VALUES('base1-4','holo','NM','en',2)""")
-        c.execute("""INSERT INTO collection_items(card_id, variant, condition, language,
-                                                  quantity) VALUES('base1-4','holo','M/NM','en',3)""")
-    repo.init_db(DEFAULT_MODIFIERS)
-
-    rows = repo._all("SELECT condition, quantity FROM collection_items")
-    assert rows == [{"condition": "M/NM", "quantity": 5}], "quantities add up"
-
-
-def test_multipliers_for_retired_grades_are_dropped(tmp_path):
-    """Tom's table listed eleven rows for five grades, old and new together."""
-    repo = _repo(tmp_path)
-    for stale in ("NM", "LP", "MP", "HP", "DMG", "N/NM"):
-        repo.set_modifier("condition", stale, 0.5)
-    repo.init_db(DEFAULT_MODIFIERS)
-
-    keys = {m["key"] for m in repo._all(
-        "SELECT key FROM price_modifiers WHERE kind='condition'")}
-    assert keys == set(CONDITIONS)
-
-
 def test_edited_multipliers_for_live_grades_survive(tmp_path):
     """The cleanup must not undo what someone deliberately changed."""
     repo = _repo(tmp_path)

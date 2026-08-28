@@ -46,7 +46,7 @@ def test_a_typed_price_takes_effect_and_is_marked_as_manual(client, app):
 
     item = app.repo.items_by_card("base1-4")[0]
     from tombot.services.pricing import PricingService
-    est = PricingService(app.repo, None, Config).estimate_item(item, app.repo.get_modifiers())
+    est = PricingService(app.repo, Config).estimate_item(item, app.repo.get_modifiers())
     assert est["unit"] == 12.5 and est["manual"] is True
 
 
@@ -89,7 +89,7 @@ def test_the_edited_multiplier_changes_the_estimate(client, app):
     app.repo.upsert_price("base1-4", "first_edition", "cardmarket", "EUR", 100.0,
                           None, None, None, None, variant_key="holo:shadowless:1st-edition")
     from tombot.services.pricing import PricingService
-    svc = PricingService(app.repo, None, Config)
+    svc = PricingService(app.repo, Config)
 
     item = next(i for i in app.repo.items_by_card("base1-4")
                 if i["variant"] == "first_edition")

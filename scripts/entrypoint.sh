@@ -38,29 +38,21 @@ run_as_app() {                      # same, but returns instead of exec'ing
 }
 
 # --- first run -------------------------------------------------------------
-# `flask bootstrap` is itself idempotent and decides whether the catalog needs
-# importing, so this just delegates rather than duplicating that check here.
-bootstrap() {
-    if [ "${AUTO_BOOTSTRAP:-1}" != "1" ]; then
-        log "AUTO_BOOTSTRAP=0 — skipping setup; run 'make docker-bootstrap' yourself"
-        run_as_app flask init-db
-        return
-    fi
-
-    log "setting up (first run imports ~1,100 cards; the upstream API is flaky,"
-    log "anything that fails is retried on the next start)"
-    if run_as_app flask bootstrap; then
-        log "setup complete"
+# There is no bootstrap. A fresh install is an empty schema; sets are imported
+# one at a time from the Mantenimiento tab. So startup only ensures the schema
+# exists, which init-db does idempotently.
+prepare_schema() {
+    if run_as_app flask init-db; then
+        log "schema ready — add sets from Mantenimiento → Sets"
     else
-        log "WARN: setup incomplete — retry with: docker compose restart app"
-        log "                            or: make docker-bootstrap"
+        log "WARN: could not initialise the schema; retry: docker compose restart app"
     fi
 }
 
 case "${1:-serve}" in
     serve)
         prepare_dirs
-        bootstrap
+        prepare_schema
         log "serving on 0.0.0.0:${PORT} (${WEB_THREADS} threads, one process)"
         # One process, threads for concurrency.
         #

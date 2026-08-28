@@ -121,232 +121,24 @@ class PokemonRepo:
             return r[0] if r else None
 
     # ---------------------------------------------------------------- schema
-    # Columns added after the first release. schema.sql is all CREATE TABLE IF
-    # NOT EXISTS, so it does nothing to a database that already exists — new
-    # columns have to be applied explicitly or existing installs break on the
-    # first query that references them.
-    MIGRATIONS = (
-        ("collection_items", "rating",
-         "ALTER TABLE collection_items ADD COLUMN rating INTEGER NOT NULL DEFAULT 0"),
-        # No REFERENCES clause: SQLite cannot add a column with a foreign key to
-        # an existing table. The constraint is present on fresh databases via
-        # schema.sql; upgraded ones keep the column without it.
-        ("collection_items", "printing_id",
-         "ALTER TABLE collection_items ADD COLUMN printing_id INTEGER"),
-        ("card_printings", "variants_json",
-         "ALTER TABLE card_printings ADD COLUMN variants_json TEXT"),
-        ("price_cache", "variant_key",
-         "ALTER TABLE price_cache ADD COLUMN variant_key TEXT"),
-        ("price_cache", "market_product_id",
-         "ALTER TABLE price_cache ADD COLUMN market_product_id INTEGER"),
-    )
-
-    def _apply_migrations(self, conn) -> list[str]:
-        applied = []
-        for table, column, ddl in self.MIGRATIONS:
-            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
-            if not cols:
-                continue                      # table not created yet; schema.sql handles it
-            if column not in cols:
-                conn.execute(ddl)
-                applied.append(f"{table}.{column}")
-        applied += self._migrate_ratings_to_cards(conn)
-        applied += self._migrate_budget_to_rolling_window(conn)
-        applied += self._migrate_retired_conditions(conn)
-        applied += self._migrate_drop_unknown_condition_modifiers(conn)
-        applied += self._migrate_add_market_product(conn)
-        return applied
-
-    @staticmethod
-    def _migrate_add_market_product(conn) -> list[str]:
-        """Give existing rows somewhere to record their Cardmarket product.
-
-        Left NULL for rows added before the version picker existed: they keep
-        being priced the old way until someone picks a version for them.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if not cols:
-            # Migrations run before schema.sql on a fresh database, so there is
-            # nothing to alter yet — the CREATE TABLE already has the column.
-            return []
-        if "market_product_id" in cols:
-            return []
-        conn.execute("ALTER TABLE collection_items ADD COLUMN market_product_id INTEGER")
-        return ["collection_items.market_product_id"]
-
-    @staticmethod
-    def _migrate_retired_conditions(conn) -> list[str]:
-        """Carry rows written under the old grade names onto the new ones.
-
-        A grade with no multiplier row does not fail — it falls back to 1.00 —
-        so a card left on "NM" keeps being valued as if it were mint. Silent,
-        and wrong in the direction that flatters the collection.
-
-        Merging matters as much as renaming: (card, variant, condition,
-        language) is unique, so a card held as both "NM" and "M/NM" would
-        collide. The quantities are added rather than one row losing.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if not cols:
-            return []                    # fresh database; schema.sql handles it
-
-        applied = []
-        for old, new in RETIRED_CONDITIONS.items():
-            rows = conn.execute(
-                "SELECT COUNT(*) FROM collection_items WHERE condition = ?",
-                (old,)).fetchone()[0]
-            if not rows:
-                continue
-
-            # Fold any row that would collide into its counterpart first.
-            conn.execute(
-                """UPDATE collection_items AS keep
-                      SET quantity = keep.quantity + (
-                            SELECT SUM(dup.quantity) FROM collection_items dup
-                             WHERE dup.condition = ?
-                               AND dup.card_id = keep.card_id
-                               AND dup.variant = keep.variant
-                               AND dup.language = keep.language)
-                    WHERE keep.condition = ?
-                      AND EXISTS (SELECT 1 FROM collection_items dup
-                                   WHERE dup.condition = ?
-                                     AND dup.card_id = keep.card_id
-                                     AND dup.variant = keep.variant
-                                     AND dup.language = keep.language)""",
-                (old, new, old))
-            conn.execute(
-                """DELETE FROM collection_items
-                    WHERE condition = ?
-                      AND EXISTS (SELECT 1 FROM collection_items keep
-                                   WHERE keep.condition = ?
-                                     AND keep.card_id = collection_items.card_id
-                                     AND keep.variant = collection_items.variant
-                                     AND keep.language = collection_items.language)""",
-                (old, new))
-            conn.execute("UPDATE collection_items SET condition = ? WHERE condition = ?",
-                         (new, old))
-            applied.append(f"collection_items.condition {old}->{new} ({rows} row(s))")
-        return applied
-
-    @staticmethod
-    def _migrate_drop_unknown_condition_modifiers(conn) -> list[str]:
-        """Remove condition multipliers for grades that no longer exist.
-
-        Renaming the grades left the old multiplier rows in place beside the
-        new ones, so the Mantenimiento table listed both sets at once — eleven
-        rows for five grades, including a typo nobody could have edited on
-        purpose. They are dead weight: nothing reads a multiplier for a grade
-        no card can have.
-        """
-        try:
-            existing = {r["key"] for r in conn.execute(
-                "SELECT key FROM price_modifiers WHERE kind = 'condition'")}
-        except Exception:                                    # noqa: BLE001
-            return []                    # table not created yet
-        stale = sorted(existing - set(CONDITIONS))
-        if not stale:
-            return []
-        conn.executemany(
-            "DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
-            [(k,) for k in stale])
-        return [f"price_modifiers: dropped {', '.join(stale)}"]
-
-    @staticmethod
-    def _migrate_budget_to_rolling_window(conn) -> list[str]:
-        """Carry today's spent requests into the rolling-window table.
-
-        The count used to live in api_budget as one row per day. Switching to a
-        rolling window without carrying it over reports zero spent — handing
-        back an allowance that was already used, on the day of the upgrade, in
-        the one direction that costs money.
-        """
-        tables = {r["name"] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
-        if "api_requests" not in tables or "api_budget" not in tables:
-            return []
-        already = conn.execute("SELECT COUNT(*) FROM api_requests").fetchone()[0]
-        if already:
-            return []                    # already migrated, or already counting
-
-        carried = []
-        for row in conn.execute(
-                "SELECT provider, count FROM api_budget "
-                " WHERE day = strftime('%Y-%m-%d','now') AND count > 0"):
-            conn.executemany(
-                "INSERT INTO api_requests(provider, sent_at) VALUES(?, datetime('now'))",
-                [(row["provider"],)] * int(row["count"]))
-            carried.append(f"{row['provider']}: {row['count']} request(s)")
-        return [f"api_budget -> api_requests ({', '.join(carried)})"] if carried else []
-
-    @staticmethod
-    def _migrate_ratings_to_cards(conn) -> list[str]:
-        """Move Hall of Fame ranks from collection rows onto the card.
-
-        The rank shipped on collection_items, so a card owned as holo and
-        non-holo had to be ranked twice. Existing ranks are carried over by
-        taking the highest rank recorded for each card — the alternatives lose
-        data or pick arbitrarily.
-        """
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
-        if "rating" not in cols:
-            return []
-
-        conn.execute("""CREATE TABLE IF NOT EXISTS card_ratings (
-                            card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
-                            rating     INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 8),
-                            updated_at TEXT NOT NULL DEFAULT (datetime('now')))""")
-        expected = conn.execute(
-            "SELECT COUNT(DISTINCT card_id) FROM collection_items WHERE rating > 0"
-        ).fetchone()[0]
-
-        conn.execute(
-            """INSERT INTO card_ratings(card_id, rating)
-               SELECT card_id, MAX(rating) FROM collection_items
-               WHERE rating > 0 GROUP BY card_id
-               ON CONFLICT(card_id) DO UPDATE SET
-                 rating = MAX(card_ratings.rating, excluded.rating)"""
-        )
-
-        # Verify before declaring success. A card ranked on two rows (the bug
-        # this fixes) keeps the higher rank, so every ranked card must now have
-        # exactly one row here.
-        copied = conn.execute(
-            """SELECT COUNT(*) FROM card_ratings r
-               WHERE EXISTS (SELECT 1 FROM collection_items i
-                              WHERE i.card_id = r.card_id AND i.rating > 0)"""
-        ).fetchone()[0]
-        if copied < expected:
-            raise RuntimeError(
-                f"rating migration incomplete: {copied}/{expected} cards carried "
-                f"over; collection_items.rating left untouched")
-
-        # collection_items.rating is deliberately NOT dropped. The copy above is
-        # the only record of ranks the user has already entered, and DROP COLUMN
-        # cannot be undone. Nothing reads the column any more, so leaving it
-        # costs a few bytes and keeps a rollback possible. Fresh databases never
-        # get it — schema.sql no longer defines it.
-        return [f"card_ratings (carried over {copied} rank(s) from collection rows; "
-                f"collection_items.rating retained as a backup)"]
-
     def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
+        """Create the schema. schema.sql is the single source of truth.
+
+        Every statement is CREATE ... IF NOT EXISTS, so this is safe to run on
+        every start and does nothing to an existing database. There are no
+        migrations: a schema change is a change to schema.sql, and a database
+        from before it is recreated (the app is rebuilt from set imports, so
+        there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
-            # Migrations run FIRST. schema.sql builds indexes over the new columns,
-            # and on an existing database those statements fail with "no such
-            # column" before any migration would have had a chance to add it.
-            # On a fresh database this is a no-op — the tables do not exist yet.
-            for name in self._apply_migrations(c):
-                log.info("migrated: added %s", name)
             c.executescript(SCHEMA_PATH.read_text())
             for kind, key, mult in default_modifiers:
                 c.execute(
-                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?)",
-                    (kind, key, mult),
-                )
+                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) "
+                    "VALUES (?,?,?)", (kind, key, mult))
             c.execute(
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
-                (SCHEMA_VERSION,),
-            )
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+                "updated_at=datetime('now')", (SCHEMA_VERSION,))
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         v = self._scalar("SELECT value FROM app_meta WHERE key = ?", (key,))
