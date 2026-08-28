@@ -148,8 +148,12 @@ const setCardHtml = (s) => `
 /* ------------------------------------------------------------------ sets */
 async function sets() {
   const { data } = await api.sets();
+  // Grouped by TCG series (Base / Gym / Neo / …), which the API returns from
+  // each set's catalogue data. `data` is already ordered by release date, so the
+  // groups fall out oldest-first and each series' sets stay contiguous. A set
+  // with no series (rare — tcggo omits it on a few) stands as its own block.
   const groups = {};
-  for (const s of data) (groups[s.group_name || 'Otros'] ||= []).push(s);
+  for (const s of data) (groups[s.series || s.name || 'Otros'] ||= []).push(s);
 
   view().innerHTML = `
     <h1>Sets</h1>

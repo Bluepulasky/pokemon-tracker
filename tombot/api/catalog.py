@@ -328,10 +328,12 @@ def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
             return {"id": existing["id"], "name": existing["name"],
                     "created": False}
 
+    # No group is assigned here: the Sets view groups by the catalogue set's
+    # series and orders by its release date, so an imported set files itself
+    # into its era. There is no "added vs seeded" distinction any more.
     goal_id = f"{set_id}-completo"
     repo().upsert_collection_set({
-        "id": goal_id, "name": name, "group_name": "Añadidos",
-        "position": 900, "description": f"{name} completo.",
+        "id": goal_id, "name": name, "description": f"{name} completo.",
         "rules_json": _json.dumps({"include_sets": [set_id]}),
     })
     slots = svc("setbuilder").build(goal_id)
