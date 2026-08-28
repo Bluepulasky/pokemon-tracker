@@ -503,3 +503,12 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
     left: 6px; bottom: 6px; font-size: .62rem; letter-spacing: .04em;
     padding: 1px 6px; border-radius: 999px; text-transform: uppercase;
     background: rgba(0, 0, 0, .65); color: var(--warn, #d97706); }
+
+/* ---- set collection mode ----------------------------------------------- */
+/* The rule is a call on the set, shown beside its name so it reads as "what
+   am I collecting" rather than a buried setting. */
+.set-head { display: flex; align-items: baseline; justify-content: space-between;
+            gap: 1rem; flex-wrap: wrap; }
+.set-mode { font-size: .8rem; color: var(--muted, #6b7280);
+            display: inline-flex; align-items: center; gap: .4rem; }
+.set-mode select { font-size: .82rem; padding: 2px 8px; border-radius: 6px; }

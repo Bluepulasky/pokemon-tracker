@@ -48,12 +48,16 @@ class SetBuilder:
         excl_rarities = set(rules.get("exclude_rarities", []))
         excl_supertypes = set(rules.get("exclude_supertypes", []))
         excl_cards = set(rules.get("exclude_cards", []))
+        # include_rarities, when present, keeps only those — the way "solo holos"
+        # is expressed. Empty means no rarity filter.
+        incl_rarities = set(rules.get("include_rarities", []))
 
         kept = [
             c for c in candidates
             if c["id"] not in excl_cards
             and (c.get("rarity") or "") not in excl_rarities
             and (c.get("supertype") or "") not in excl_supertypes
+            and (not incl_rarities or (c.get("rarity") or "") in incl_rarities)
         ]
 
         # dedupe while preserving the release-date/number order search_cards returned

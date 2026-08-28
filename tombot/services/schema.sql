@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS official_sets (
     ptcgo_code     TEXT,
     logo_url       TEXT,
     symbol_url     TEXT,
-    source         TEXT NOT NULL DEFAULT 'pokemontcgio',
+    source         TEXT NOT NULL DEFAULT 'tcggo',
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS cards (
     image_large_url  TEXT,
     image_local      TEXT,                    -- cached path under media/catalog
     external_ids_json TEXT,                   -- {"pokemontcgio": "...", "cardmarket_url": "..."}
-    source           TEXT NOT NULL DEFAULT 'pokemontcgio',
+    source           TEXT NOT NULL DEFAULT 'tcggo',
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );

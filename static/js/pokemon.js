@@ -61,6 +61,26 @@ async function render(keepScroll = false) {
   window.scrollTo(0, y);
 }
 
+/* The collection rule is a call on the set's state, separate from the set.
+   Switching it re-materialises which cards count as the set to complete. */
+async function loadSetMode(setId) {
+  const sel = view().querySelector('#f-mode');
+  if (!sel) return;
+  let r;
+  try { r = await api.getSetMode(setId); } catch { sel.parentElement.hidden = true; return; }
+  sel.innerHTML = r.options.map((o) =>
+    `<option value="${o.key}"${o.key === r.mode ? ' selected' : ''}>${esc(o.label)}</option>`)
+    .join('') + (r.mode === 'custom'
+      ? '<option value="custom" selected>Personalizado</option>' : '');
+  sel.onchange = async () => {
+    if (sel.value === 'custom') return;
+    try {
+      await api.setSetMode(setId, sel.value);
+      setDetail({ id: setId });
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
 /* ------------------------------------------------------------- dashboard */
 async function dashboard() {
   const [d, hist] = await Promise.all([api.dashboard(), api.history()]);
@@ -196,7 +216,12 @@ async function setDetail(r) {
   slots.sort(sorter(sort));
 
   view().innerHTML = `
-    <h1>${esc(s.name)}</h1>
+    <div class="set-head">
+      <h1>${esc(s.name)}</h1>
+      <label class="set-mode">Coleccionar
+        <select id="f-mode"><option>…</option></select>
+      </label>
+    </div>
     <p class="sub">${p.owned} / ${p.target} cartas · ${pct(p.completion_pct)} completado${
       s.description ? ` · ${esc(s.description)}` : ''}</p>
     ${progressBar(p.owned, p.target)}
@@ -226,6 +251,7 @@ async function setDetail(r) {
     location.hash = `#/set/${r.id}?sort=${view().querySelector('#f-sort').value}&filter=${f}`;
   };
   view().querySelector('#f-sort').onchange = () => nav(filter);
+  loadSetMode(s.id);
   view().querySelectorAll('#f-filter .chip').forEach((chip) => {
     chip.onclick = () => nav(chip.dataset.filter);
   });

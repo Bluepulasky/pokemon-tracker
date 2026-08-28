@@ -247,13 +247,6 @@ class PokemonRepo:
             )
         return len(pairs)
 
-    def cards_missing_market_url(self, limit: int = 5000) -> list[dict]:
-        return self._all(
-            "SELECT id FROM cards "
-            "WHERE json_extract(external_ids_json, '$.cardmarket_direct') IS NULL "
-            "LIMIT ?", (limit,)
-        )
-
     def count_market_urls(self) -> int:
         return self._scalar(
             "SELECT COUNT(*) FROM cards "
@@ -302,94 +295,7 @@ class PokemonRepo:
     def count_cards(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM cards") or 0
 
-    def catalog_gaps(self, required_set_ids: Sequence[str]) -> list[dict]:
-        """Required official sets that are absent or short on cards.
-
-        Completeness has to be per set. A previous "do we have any cards at all"
-        check meant that when an import salvaged one set out of twelve — routine,
-        given how often the upstream 500s — every later start saw a non-empty
-        catalog and skipped the retry forever.
-        """
-        gaps = []
-        for sid in required_set_ids:
-            row = self._one(
-                """SELECT os.id, os.total,
-                          (SELECT COUNT(*) FROM cards c WHERE c.official_set_id = os.id) AS have
-                   FROM official_sets os WHERE os.id = ?""",
-                (sid,),
-            )
-            if not row:
-                gaps.append({"set": sid, "have": 0, "expected": None, "why": "never imported"})
-            elif row["total"] and (row["have"] or 0) < row["total"]:
-                gaps.append({"set": sid, "have": row["have"], "expected": row["total"],
-                             "why": "incomplete"})
-        return gaps
-
     # ------------------------------------------------------------- printings
-    def rebuild_printings(self) -> dict:
-        """Rebuild the printing groups.
-
-        Two sources, and the difference matters. Slot membership is the user
-        saying "these cards are the same card to me", so it wins. The name +
-        number + supertype match is only a hint — it is the best structural
-        signal the catalog offers, and it still produces false pairs like Jynx
-        #31 in Base Set and Neo Revelation.
-
-        Manual rows are never touched.
-        """
-        with self.tx() as c:
-            c.execute("DELETE FROM card_printings WHERE source IN ('auto', 'slot')")
-
-            groups: dict[str, set[str]] = {}
-
-            # 1. user-defined: any slot grouping more than one catalog card
-            for row in c.execute(
-                """SELECT slot_id, GROUP_CONCAT(card_id) AS ids
-                   FROM set_slot_cards GROUP BY slot_id HAVING COUNT(*) > 1"""
-            ).fetchall():
-                ids = sorted(set(row["ids"].split(",")))
-                groups.setdefault(ids[0], set()).update(ids)
-            user_defined = set(groups)
-
-            # 2. structural hint from the catalog
-            for row in c.execute(
-                """SELECT GROUP_CONCAT(id) AS ids FROM cards
-                   GROUP BY name, number, COALESCE(supertype, '')
-                   HAVING COUNT(DISTINCT official_set_id) > 1"""
-            ).fetchall():
-                ids = sorted(set(row["ids"].split(",")))
-                if any(i in g for g in groups.values() for i in ids):
-                    continue                      # already covered by a slot
-                groups.setdefault(ids[0], set()).update(ids)
-
-            written = 0
-            for key, ids in groups.items():
-                source = "slot" if key in user_defined else "auto"
-                ordered = c.execute(
-                    f"""SELECT c.id, c.official_set_id, c.name, c.rarity,
-                               os.name AS set_name, os.release_date
-                        FROM cards c JOIN official_sets os ON os.id = c.official_set_id
-                        WHERE c.id IN ({",".join("?" * len(ids))})
-                        ORDER BY os.release_date, c.id""",
-                    sorted(ids),
-                ).fetchall()
-                if len(ordered) < 2:
-                    continue
-                group_key = ordered[0]["id"]      # earliest printing names the group
-                for i, r in enumerate(ordered):
-                    variants = variants_for(r["official_set_id"], r["rarity"],
-                                            r["release_date"])
-                    c.execute(
-                        """INSERT OR IGNORE INTO card_printings
-                             (print_group, card_id, official_set_id, is_reprint,
-                              display_name, variants_json, source)
-                           VALUES (?,?,?,?,?,?,?)""",
-                        (group_key, r["id"], r["official_set_id"], 1 if i else 0,
-                         r["set_name"], json.dumps(variants), source),
-                    )
-                    written += 1
-            return {"groups": len(groups), "printings": written}
-
     def printings_for_card(self, card_id: str) -> list[dict]:
         """Every catalog printing of the logical card this card belongs to.
 
