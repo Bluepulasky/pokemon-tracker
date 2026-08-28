@@ -47,8 +47,8 @@ def check_conditions(repo, conditions) -> list[dict]:
     if unknown:
         out.append(_finding(
             "error", "conditions",
-            f"{len(unknown)} grade(s) on your cards are not offered any more. "
-            f"They have no multiplier, so those cards are valued as if mint.",
+            f"{len(unknown)} condición(es) de tus cartas ya no existen. "
+            f"No tienen multiplicador, así que esas cartas se valúan como mint.",
             unknown))
 
     rows = repo._all("SELECT key FROM price_modifiers WHERE kind='condition'")
@@ -56,14 +56,14 @@ def check_conditions(repo, conditions) -> list[dict]:
     if stale:
         out.append(_finding(
             "warning", "conditions",
-            f"{len(stale)} multiplier(s) are for grades that no longer exist.",
+            f"{len(stale)} multiplicador(es) son de condiciones que ya no existen.",
             stale))
 
     missing = sorted(set(conditions) - {r["key"] for r in rows})
     if missing:
         out.append(_finding(
             "error", "conditions",
-            f"{len(missing)} grade(s) have no multiplier and fall back to 1.00.",
+            f"{len(missing)} condición(es) no tienen multiplicador y caen a 1,00.",
             missing))
     return out
 
@@ -88,8 +88,8 @@ def check_rarities(repo) -> list[dict]:
     if clashes:
         out.append(_finding(
             "error", "rarities",
-            "The same rarity is stored under more than one spelling. A set rule "
-            "that excludes one spelling silently keeps the others.",
+            "La misma rareza está guardada de más de una forma. Una regla que "
+            "excluye una escritura deja pasar las otras en silencio.",
             [" / ".join(sorted(set(v))) for v in clashes.values()]))
 
     blank = repo._one(
@@ -97,8 +97,8 @@ def check_rarities(repo) -> list[dict]:
     if blank and blank["n"]:
         out.append(_finding(
             "warning", "rarities",
-            f"{blank['n']} card(s) have no rarity, so any rule about rarity "
-            f"silently skips them.", []))
+            f"{blank['n']} carta(s) no tienen rareza, así que cualquier regla de "
+            f"rareza las saltea en silencio.", []))
     return out
 
 
@@ -111,9 +111,9 @@ def check_set_dates(repo) -> list[dict]:
         return []
     return [_finding(
         "warning", "set_dates",
-        f"{len(rows)} set(s) have no release date. Which print runs and "
-        f"variants exist is then inferred from the set id, which is what "
-        f"offered reverse holos on Base Set.",
+        f"{len(rows)} set(s) no tienen fecha de salida. Qué tiradas y variantes "
+        f"existen se infiere entonces del id del set, que es lo que ofrecía "
+        f"reverse holos en Base Set.",
         [f"{r['id']} {r['name']}" for r in rows])]
 
 
@@ -125,8 +125,8 @@ def check_card_numbers(repo) -> list[dict]:
         return []
     return [_finding(
         "error", "card_numbers",
-        f"{len(rows)} card number(s) look wrong — a number should not contain "
-        f"a space. This is how one card became two.",
+        f"{len(rows)} número(s) de carta se ven mal — un número no debería tener "
+        f"un espacio. Así es como una carta se partió en dos.",
         [f"{r['id']} -> {r['number']!r}" for r in rows[:10]])]
 
 
@@ -143,8 +143,10 @@ def check_products(repo) -> list[dict]:
         return []
     return [_finding(
         "info", "products",
-        f"{len(rows)} set(s) have no imported products. Cards in them cost a "
-        f"request each when you open them.",
+        f"{len(rows)} set(s) del catálogo viejo no tienen productos importados. "
+        f"Sus cartas cuestan una consulta cada vez que las abrís. Si ya "
+        f"importaste ese set desde Mantenimiento, quedó como un set nuevo "
+        f"aparte (ej. \"bs\" en vez de \"base1\").",
         [f"{r['id']} {r['name']}" for r in rows])]
 
 

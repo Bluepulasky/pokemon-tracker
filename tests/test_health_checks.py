@@ -62,7 +62,7 @@ def test_a_missing_multiplier_is_reported(repo):
     found = [f for f in _levels(result, "conditions") if f["level"] == "error"]
     assert found
     assert CONDITIONS[1] in found[0]["detail"]
-    assert "1.00" in found[0]["message"]
+    assert "1,00" in found[0]["message"]
 
 
 def test_two_spellings_of_one_rarity_are_reported(repo):
@@ -105,5 +105,5 @@ def test_cards_with_no_rarity_are_reported(repo):
                         "number": "99", "rarity": None}])
 
     found = [f for f in _levels(run_checks(repo, CONDITIONS), "rarities")
-             if "no rarity" in f["message"]]
+             if "rareza" in f["message"]]
     assert found
