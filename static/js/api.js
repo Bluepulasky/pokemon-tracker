@@ -46,6 +46,11 @@ export const api = {
   rebuildDb:    ()            => req('POST', '/api/maintenance/rebuild', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
+  pinCard:      (setId, cardId) =>
+                                 req('POST', `/api/sets/${setId}/cards/${cardId}`, {}),
+  unpinCard:    (setId, cardId) =>
+                                 req('DELETE', `/api/sets/${setId}/cards/${cardId}`),
+  sets:         ()            => req('GET', '/api/sets'),
   versions:     (cardId)      => req('GET', `/api/prices/versions?card_id=${encodeURIComponent(cardId)}`),
   quotes:       (cardId, variant) =>
                                  req('GET', `/api/prices/${cardId}/quotes` + (variant ? `?variant=${encodeURIComponent(variant)}` : '')),
