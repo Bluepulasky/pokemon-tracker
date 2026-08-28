@@ -45,7 +45,14 @@ class RequestBudget:
         self.limit = max(0, int(limit))
 
     def used(self, day: str | None = None) -> int:
-        return self.repo.budget_used(self.provider, day or _today())
+        """Requests spent in the last 24 hours, not since midnight.
+
+        The window rolls because the plan's own reset is not visible to us —
+        RapidAPI reports usage as "Aug 27 - Aug 28", anchored to the
+        subscription rather than to midnight. A calendar-day counter would
+        permit the full cap twice across that boundary.
+        """
+        return self.repo.budget_used_in_window(self.provider)
 
     def remaining(self) -> int:
         return max(0, self.limit - self.used())
@@ -58,7 +65,7 @@ class RequestBudget:
         """
         if n <= 0:
             return self.used()
-        used = self.repo.budget_reserve(self.provider, _today(), n, self.limit)
+        used = self.repo.budget_reserve_window(self.provider, n, self.limit)
         if used is None:
             raise BudgetExhausted(self.provider, self.used(), self.limit)
         if self.limit and used >= self.limit * 0.8:

@@ -471,3 +471,10 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .health-list li.h-info    { border-left-color: var(--muted, #6b7280); }
 .health-list .h-detail { margin-top: .2rem; font-size: .8rem;
                          color: var(--muted, #6b7280); }
+/* ---- api allowance ----------------------------------------------------- */
+.budget .budget-num { font-size: 1.35rem; margin: .2rem 0 .35rem; }
+.budget .bar { height: 6px; border-radius: 3px; overflow: hidden;
+               background: rgba(127,127,127,.22); }
+.budget .bar span { display: block; height: 100%; background: var(--ok, #16a34a); }
+.budget.warn .bar span { background: var(--warn, #d97706); }
+.budget.bad  .bar span { background: var(--bad, #dc2626); }

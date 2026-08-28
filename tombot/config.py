@@ -100,7 +100,7 @@ class Config:
     TCGGO_RAPIDAPI_HOST = os.environ.get(
         "TCGGO_RAPIDAPI_HOST", "cardmarket-api-tcg.p.rapidapi.com")
     TCGGO_GAME = os.environ.get("TCGGO_GAME", "pokemon")
-    TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "80"))
+    TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "40"))
     POKEMONTCG_BASE_URL = "https://api.pokemontcg.io/v2"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine

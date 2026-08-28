@@ -269,6 +269,22 @@ CREATE TABLE IF NOT EXISTS set_episodes (
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One row per request actually sent, so the allowance can be counted over a
+-- rolling window rather than a calendar day.
+--
+-- A per-day counter looks obedient and still overspends: the whole allowance
+-- at 23:00 and the whole allowance again at 01:00 is twice the cap inside two
+-- hours. RapidAPI reports usage as "Aug 27 - Aug 28", not per midnight, so a
+-- calendar day was measuring the wrong thing.
+CREATE TABLE IF NOT EXISTS api_requests (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    sent_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_requests_window
+    ON api_requests(provider, sent_at);
+
 CREATE TABLE IF NOT EXISTS api_budget (
     provider TEXT NOT NULL,
     day      TEXT NOT NULL,              -- YYYY-MM-DD, UTC

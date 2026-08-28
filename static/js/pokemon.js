@@ -423,6 +423,10 @@ async function mantenimiento() {
     <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
       rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
     <div id="health-state"><div class="note">Comprobando…</div></div>
+    <h2>Consultas a la API</h2>
+    <p class="sub">Las últimas 24 horas, moviéndose contigo — no se reinicia a
+      medianoche, porque no sabemos a qué hora se reinicia la del plan.</p>
+    <div id="budget-state"></div>
 
     <h2>Estado</h2>
     <div id="job-state" class="missing-list"></div>
@@ -443,6 +447,7 @@ async function mantenimiento() {
 
   renderJob(job);
   renderHealth();
+  renderBudgets(job.budgets);
   view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
   view().querySelector('#do-rebuild').onclick = () => {
     if (confirm('Vuelve a importar lo que falte del catálogo. Puede tardar varios minutos. ¿Seguir?')) {
@@ -520,9 +525,33 @@ async function renderHealth() {
           f.detail.slice(0, 6).map(esc).join(' · ')}${
           f.detail.length > 6 ? ` … +${f.detail.length - 6}` : ''}</div>` : ''}
       </li>`).join('')}</ul>`;
+/* What is left of a metered allowance.
+
+   Worth a permanent place rather than an error message: the number only
+   matters before you press the button, and by the time a run stops halfway it
+   is too late to have wanted it. */
+function renderBudgets(budgets) {
+  const box = view().querySelector('#budget-state');
+  if (!box) return;
+  if (!budgets || !budgets.length) {
+    box.innerHTML = `<div class="empty">Sin fuentes con límite configuradas.</div>`;
+    return;
+  }
+  box.innerHTML = budgets.map((b) => {
+    const pct = b.limit ? Math.min(100, Math.round(100 * b.used / b.limit)) : 0;
+    const level = pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'ok';
+    return `<div class="stat budget ${level}">
+        <div class="k">${esc(b.provider)}</div>
+        <div class="budget-num"><strong>${b.remaining}</strong> disponibles</div>
+        <div class="bar"><span style="width:${pct}%"></span></div>
+        <div class="note">${b.used} de ${b.limit} usadas en las últimas
+          ${b.window_hours} h. Las más viejas van saliendo solas.</div>
+      </div>`;
+  }).join('');
 }
 
 function renderJob(job) {
+  if (job && job.budgets) renderBudgets(job.budgets);
   const box = view().querySelector('#job-state');
   if (!box) return;
   if (!job || job.status === 'idle') {
