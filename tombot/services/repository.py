@@ -645,69 +645,6 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
 
-    def add_manual_slot(self, set_id: str, card_id: str,
-                        label: str | None = None) -> dict | None:
-        """Pin one card into a set by hand.
-
-        Rules decide most of a set, and a rule is a blunt instrument: excluding
-        "Rare Holo" from Neo Genesis also drops Metal Energy, which is a holo
-        by rarity and an energy card by any other reading. Rather than bend the
-        rule for one card, the card is pinned.
-
-        Marked `manual`, so a rebuild leaves it alone (PLAN.md §2.10).
-        """
-        with self.tx() as c:
-            existing = c.execute(
-                """SELECT s.id FROM set_slots s
-                     JOIN set_slot_cards m ON m.slot_id = s.id
-                    WHERE s.set_id = ? AND m.card_id = ?""",
-                (set_id, card_id)).fetchone()
-            if existing:
-                return None              # already in the set, rule or manual
-
-            name = label or (c.execute("SELECT name FROM cards WHERE id=?",
-                                       (card_id,)).fetchone() or ["?"])[0]
-            position = c.execute(
-                "SELECT COALESCE(MAX(position), -1) + 1 FROM set_slots WHERE set_id=?",
-                (set_id,)).fetchone()[0]
-            cur = c.execute(
-                """INSERT INTO set_slots(set_id, position, label, display_card_id,
-                                         source)
-                   VALUES(?,?,?,?,'manual')""",
-                (set_id, position, name, card_id))
-            slot_id = cur.lastrowid
-            # set_id is denormalised onto the membership row, and NOT NULL —
-            # it is what makes "is this card in this set" a single lookup.
-            c.execute(
-                "INSERT INTO set_slot_cards(slot_id, set_id, card_id) VALUES(?,?,?)",
-                (slot_id, set_id, card_id))
-            return {"slot_id": slot_id, "set_id": set_id, "card_id": card_id,
-                    "label": name}
-
-    def remove_manual_slot(self, set_id: str, card_id: str) -> bool:
-        """Unpin a card. Only ever removes a slot someone added by hand."""
-        with self.tx() as c:
-            row = c.execute(
-                """SELECT s.id FROM set_slots s
-                     JOIN set_slot_cards m ON m.slot_id = s.id
-                    WHERE s.set_id = ? AND m.card_id = ? AND s.source = 'manual'""",
-                (set_id, card_id)).fetchone()
-            if not row:
-                return False
-            c.execute("DELETE FROM set_slots WHERE id=?", (row["id"],))
-            return True
-
-    def sets_containing_card(self, card_id: str) -> list[dict]:
-        """Which personal sets this card is part of, and how it got there."""
-        return self._all(
-            """SELECT cs.id, cs.name, s.source
-                 FROM collection_sets cs
-                 JOIN set_slots s ON s.set_id = cs.id
-                 JOIN set_slot_cards m ON m.slot_id = s.id
-                WHERE m.card_id = ?
-                ORDER BY cs.position, cs.name""",
-            (card_id,))
-
     def replace_rule_slots(self, set_id: str, slots: list[dict]) -> int:
         """Re-materialise rule-built slots. Manual slots and manual member edits survive
         (PLAN.md §2.10) — a catalog refresh must not wipe hand curation."""

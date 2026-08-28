@@ -81,12 +81,6 @@ export async function openCard(cardId) {
                    value="${Number(card.target) || 1}">
             <div class="note">La carta cuenta como conseguida al llegar a este número.</div>
           </div>
-          <div class="field card-sets">
-            <label>Cuenta para</label>
-            <div class="set-chips">${setChips(card)}</div>
-            <div class="note">Una regla puede dejar una carta afuera —
-              «sin holos» también saca a Metal Energy. Podés añadirla a mano.</div>
-          </div>
         </div>
         <button class="close" aria-label="Cerrar">&times;</button>
       </div>
@@ -263,8 +257,6 @@ function wireCardTarget(root, card) {
 }
 
 function wireForm(root, card) {
-  wireSetPinning(root, card, onChange);
-
   const form = root.querySelector('.add-form');
   const versionBox = root.querySelector('.version-list');
   if (versionBox) renderVersions(versionBox, form, versionBox.dataset.versionsFor);
@@ -623,62 +615,4 @@ function applyVersion(form, v) {
       — producto Cardmarket <code>${v.market_product_id}</code>`;
     summary.hidden = false;
   }
-}
-
-
-/* ------------------------------------------------------------- set pinning */
-
-/* A card excluded by a rule looks exactly like a card that does not exist,
-   until you can see which sets it counts towards and why. "regla" means the
-   set's own rule put it there; "a mano" means someone did, and a rebuild will
-   leave it alone. */
-
-function setChips(card) {
-  const inSets = card.in_sets || [];
-  if (!inSets.length) {
-    return '<span class="set-chip none">No cuenta para ningún set</span>';
-  }
-  return inSets.map((s) => `<span class="set-chip ${s.source === 'manual' ? 'manual' : ''}">
-      ${esc(s.name)}<small>${s.source === 'manual' ? 'a mano' : 'regla'}</small>
-      ${s.source === 'manual'
-        ? `<button class="unpin" data-set="${esc(s.id)}" title="Quitar">&times;</button>`
-        : ''}
-    </span>`).join('');
-}
-
-async function wireSetPinning(root, card, onChange) {
-  const box = root.querySelector('.card-sets');
-  if (!box) return;
-
-  box.querySelectorAll('.unpin').forEach((btn) => {
-    btn.onclick = async () => {
-      try {
-        await api.unpinCard(btn.dataset.set, card.id);
-        toast('Quitada del set');
-        onChange();
-        openCard(card.id);
-      } catch (e) { toast(e.message, true); }
-    };
-  });
-
-  // Offer only the sets it is not already in.
-  let all = [];
-  try { ({ data: all } = await api.sets()); } catch { return; }
-  const already = new Set((card.in_sets || []).map((s) => s.id));
-  const missing = all.filter((s) => !already.has(s.id));
-  if (!missing.length) return;
-
-  const pick = el('select', 'pin-picker');
-  pick.innerHTML = '<option value="">Añadir a un set…</option>'
-    + missing.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  pick.onchange = async () => {
-    if (!pick.value) return;
-    try {
-      await api.pinCard(pick.value, card.id);
-      toast('Añadida al set');
-      onChange();
-      openCard(card.id);
-    } catch (e) { toast(e.message, true); pick.value = ''; }
-  };
-  box.querySelector('.set-chips').appendChild(pick);
 }
