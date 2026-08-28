@@ -51,6 +51,10 @@ export const api = {
   unpinCard:    (setId, cardId) =>
                                  req('DELETE', `/api/sets/${setId}/cards/${cardId}`),
   sets:         ()            => req('GET', '/api/sets'),
+  health:       ()            => req('GET', '/api/maintenance/health'),
+  episodes:     (q)           => req('GET', '/api/maintenance/episodes'
+                                   + (q ? `?q=${encodeURIComponent(q)}` : '')),
+  importEpisode:(id)          => req('POST', `/api/maintenance/episodes/${id}/import`, {}),
   versions:     (cardId)      => req('GET', `/api/prices/versions?card_id=${encodeURIComponent(cardId)}`),
   quotes:       (cardId, variant) =>
                                  req('GET', `/api/prices/${cardId}/quotes` + (variant ? `?variant=${encodeURIComponent(variant)}` : '')),

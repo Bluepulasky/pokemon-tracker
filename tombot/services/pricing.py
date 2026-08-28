@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from ..config import DEFAULT_CONDITION
 from . import trust
 from .variant_map import resolve
 
@@ -283,7 +284,16 @@ class PricingService:
         else:
             basis = "exact"
 
-        cond_m = mods.get("condition", {}).get(item.get("condition", "NM"), 1.0)
+        # A missing multiplier used to become 1.00 in silence, which values a
+        # played card as mint and looks like a price rather than a gap.
+        condition = item.get("condition") or DEFAULT_CONDITION
+        cond_m = mods.get("condition", {}).get(condition)
+        if cond_m is None:
+            log.warning("no multiplier for condition %r; using 1.00. The grade "
+                        "is not in config.CONDITIONS.", condition)
+            cond_m = 1.0
+        cond_m = mods.get("condition", {}).get(
+            item.get("condition") or DEFAULT_CONDITION, 1.0)
         lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
         # A 1st edition is never priced apart from its unstamped twin by the
         # feed, so the premium is applied here. Editable per variant, because a

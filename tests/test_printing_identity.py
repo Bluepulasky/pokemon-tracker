@@ -206,3 +206,45 @@ def test_a_manual_price_wins_and_survives_a_refresh(tmp_path):
     repo.set_manual_price("base1-7", "holo", None)
     estimate = svc.estimate_item(repo.items_by_card("base1-7")[0], repo.get_modifiers())
     assert estimate["unit"] == 14.29 and estimate["manual"] is False
+
+
+# ------------------------------------------------- which era a set belongs to
+
+def test_a_1999_set_never_offers_reverse_holo():
+    """Reverse holos start with Legendary Collection in 2002.
+
+    Offering one on a Base Set trainer is not a harmless extra option: it is a
+    variant that cannot be bought, priced or owned.
+    """
+    from tombot.services.printing_variants import variants_for
+
+    assert "reverse" not in variants_for("bs", "Uncommon", "1999/01/09")
+    assert "reverse" not in variants_for("ju", "Common", "1999/06/16")
+    assert "reverse" not in variants_for("nr", "Common", "2001/09/21")
+
+
+def test_a_modern_set_does_offer_it():
+    from tombot.services.printing_variants import variants_for
+
+    assert "reverse" in variants_for("obf", "Common", "2023/08/11")
+
+
+def test_the_era_comes_from_the_date_not_the_set_id():
+    """The id list was pokemontcg.io's, so it answered wrongly for any other.
+
+    "base1" was in it and "bs" was not, so the same set was treated as ancient
+    under one catalogue and modern under the other.
+    """
+    from tombot.services.printing_variants import variants_for
+
+    unknown_id_old_date = variants_for("zz-unknown", "Common", "1999/01/09")
+    assert "reverse" not in unknown_id_old_date
+    assert "first_edition" in unknown_id_old_date
+
+
+def test_without_a_date_it_falls_back_to_the_id_list():
+    """Cards imported before release dates were stored must keep working."""
+    from tombot.services.printing_variants import variants_for
+
+    assert "first_edition" in variants_for("base1", "Common")
+    assert "reverse" in variants_for("sv3", "Common")

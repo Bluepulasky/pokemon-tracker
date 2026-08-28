@@ -17,6 +17,7 @@ from typing import Any, Iterable, Sequence
 
 log = logging.getLogger(__name__)
 
+from ..config import CONDITIONS, DEFAULT_CONDITION, RETIRED_CONDITIONS
 from .printing_variants import variants_for
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -150,6 +151,9 @@ class PokemonRepo:
                 conn.execute(ddl)
                 applied.append(f"{table}.{column}")
         applied += self._migrate_ratings_to_cards(conn)
+        applied += self._migrate_budget_to_rolling_window(conn)
+        applied += self._migrate_retired_conditions(conn)
+        applied += self._migrate_drop_unknown_condition_modifiers(conn)
         applied += self._migrate_add_market_product(conn)
         return applied
 
@@ -169,6 +173,110 @@ class PokemonRepo:
             return []
         conn.execute("ALTER TABLE collection_items ADD COLUMN market_product_id INTEGER")
         return ["collection_items.market_product_id"]
+
+    @staticmethod
+    def _migrate_retired_conditions(conn) -> list[str]:
+        """Carry rows written under the old grade names onto the new ones.
+
+        A grade with no multiplier row does not fail — it falls back to 1.00 —
+        so a card left on "NM" keeps being valued as if it were mint. Silent,
+        and wrong in the direction that flatters the collection.
+
+        Merging matters as much as renaming: (card, variant, condition,
+        language) is unique, so a card held as both "NM" and "M/NM" would
+        collide. The quantities are added rather than one row losing.
+        """
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_items)")}
+        if not cols:
+            return []                    # fresh database; schema.sql handles it
+
+        applied = []
+        for old, new in RETIRED_CONDITIONS.items():
+            rows = conn.execute(
+                "SELECT COUNT(*) FROM collection_items WHERE condition = ?",
+                (old,)).fetchone()[0]
+            if not rows:
+                continue
+
+            # Fold any row that would collide into its counterpart first.
+            conn.execute(
+                """UPDATE collection_items AS keep
+                      SET quantity = keep.quantity + (
+                            SELECT SUM(dup.quantity) FROM collection_items dup
+                             WHERE dup.condition = ?
+                               AND dup.card_id = keep.card_id
+                               AND dup.variant = keep.variant
+                               AND dup.language = keep.language)
+                    WHERE keep.condition = ?
+                      AND EXISTS (SELECT 1 FROM collection_items dup
+                                   WHERE dup.condition = ?
+                                     AND dup.card_id = keep.card_id
+                                     AND dup.variant = keep.variant
+                                     AND dup.language = keep.language)""",
+                (old, new, old))
+            conn.execute(
+                """DELETE FROM collection_items
+                    WHERE condition = ?
+                      AND EXISTS (SELECT 1 FROM collection_items keep
+                                   WHERE keep.condition = ?
+                                     AND keep.card_id = collection_items.card_id
+                                     AND keep.variant = collection_items.variant
+                                     AND keep.language = collection_items.language)""",
+                (old, new))
+            conn.execute("UPDATE collection_items SET condition = ? WHERE condition = ?",
+                         (new, old))
+            applied.append(f"collection_items.condition {old}->{new} ({rows} row(s))")
+        return applied
+
+    @staticmethod
+    def _migrate_drop_unknown_condition_modifiers(conn) -> list[str]:
+        """Remove condition multipliers for grades that no longer exist.
+
+        Renaming the grades left the old multiplier rows in place beside the
+        new ones, so the Mantenimiento table listed both sets at once — eleven
+        rows for five grades, including a typo nobody could have edited on
+        purpose. They are dead weight: nothing reads a multiplier for a grade
+        no card can have.
+        """
+        try:
+            existing = {r["key"] for r in conn.execute(
+                "SELECT key FROM price_modifiers WHERE kind = 'condition'")}
+        except Exception:                                    # noqa: BLE001
+            return []                    # table not created yet
+        stale = sorted(existing - set(CONDITIONS))
+        if not stale:
+            return []
+        conn.executemany(
+            "DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
+            [(k,) for k in stale])
+        return [f"price_modifiers: dropped {', '.join(stale)}"]
+
+    @staticmethod
+    def _migrate_budget_to_rolling_window(conn) -> list[str]:
+        """Carry today's spent requests into the rolling-window table.
+
+        The count used to live in api_budget as one row per day. Switching to a
+        rolling window without carrying it over reports zero spent — handing
+        back an allowance that was already used, on the day of the upgrade, in
+        the one direction that costs money.
+        """
+        tables = {r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if "api_requests" not in tables or "api_budget" not in tables:
+            return []
+        already = conn.execute("SELECT COUNT(*) FROM api_requests").fetchone()[0]
+        if already:
+            return []                    # already migrated, or already counting
+
+        carried = []
+        for row in conn.execute(
+                "SELECT provider, count FROM api_budget "
+                " WHERE day = strftime('%Y-%m-%d','now') AND count > 0"):
+            conn.executemany(
+                "INSERT INTO api_requests(provider, sent_at) VALUES(?, datetime('now'))",
+                [(row["provider"],)] * int(row["count"]))
+            carried.append(f"{row['provider']}: {row['count']} request(s)")
+        return [f"api_budget -> api_requests ({', '.join(carried)})"] if carried else []
 
     @staticmethod
     def _migrate_ratings_to_cards(conn) -> list[str]:
@@ -740,7 +848,7 @@ class PokemonRepo:
         payload = {
             "card_id": item["card_id"],
             "variant": item.get("variant", "normal"),
-            "condition": item.get("condition", "NM"),
+            "condition": item.get("condition") or DEFAULT_CONDITION,
             "language": item.get("language", "es"),
             "market_product_id": item.get("market_product_id"),
             "quantity": int(item.get("quantity", 1)),
@@ -1278,6 +1386,110 @@ class PokemonRepo:
 
     def get_official_set(self, set_id: str) -> dict | None:
         return self._one("SELECT * FROM official_sets WHERE id=?", (set_id,))
+
+    # ------------------------------------------------------- market episodes
+    def remember_episodes(self, episodes: list[dict]) -> int:
+        """Keep every set we are told about, so the list fills in as it is used."""
+        rows = [{
+            "episode_id": e.get("id"), "code": e.get("code"),
+            "name": e.get("name") or "", "slug": e.get("slug"),
+            "released_at": e.get("released_at"), "logo": e.get("logo"),
+            "cards_total": e.get("cards_total"),
+        } for e in episodes if e.get("id") and e.get("name")]
+        if not rows:
+            return 0
+        with self.tx() as c:
+            c.executemany(
+                """INSERT INTO market_episodes(episode_id, code, name, slug,
+                       released_at, logo, cards_total, seen_at)
+                   VALUES(:episode_id,:code,:name,:slug,:released_at,:logo,
+                          :cards_total,datetime('now'))
+                   ON CONFLICT(episode_id) DO UPDATE SET
+                     code=excluded.code, name=excluded.name, slug=excluded.slug,
+                     released_at=excluded.released_at, logo=excluded.logo,
+                     cards_total=excluded.cards_total""",
+                rows)
+        return len(rows)
+
+    def search_known_episodes(self, q: str | None) -> list[dict]:
+        """Sets we already know of, with whether they have been imported."""
+        sql = """SELECT e.*,
+                        (SELECT COUNT(*) FROM market_products m
+                          WHERE m.episode_id = e.episode_id) AS products
+                   FROM market_episodes e"""
+        params: tuple = ()
+        if q:
+            sql += " WHERE e.name LIKE ? OR e.code LIKE ?"
+            params = (f"%{q}%", f"%{q}%")
+        return self._all(sql + " ORDER BY e.released_at DESC", params)
+
+    # -------------------------------------------------------- market products
+    def upsert_market_products(self, rows: list[dict]) -> int:
+        """Store a set's products. Re-importing refreshes prices in place."""
+        if not rows:
+            return 0
+        with self.tx() as c:
+            c.executemany(
+                """INSERT INTO market_products(product_id, episode_id, card_id, code,
+                       number, name, version, rarity, currency, price, price_low,
+                       price_avg30, price_avg7, available, image, market_url,
+                       updated_at)
+                   VALUES(:product_id,:episode_id,:card_id,:code,:number,:name,
+                          :version,:rarity,:currency,:price,:price_low,
+                          :price_avg30,:price_avg7,:available,:image,
+                          :market_url,datetime('now'))
+                   ON CONFLICT(product_id) DO UPDATE SET
+                     episode_id=excluded.episode_id, card_id=excluded.card_id,
+                     code=excluded.code,
+                     number=excluded.number, name=excluded.name,
+                     version=excluded.version, rarity=excluded.rarity,
+                     currency=excluded.currency, price=excluded.price,
+                     price_low=excluded.price_low, price_avg30=excluded.price_avg30,
+                     price_avg7=excluded.price_avg7, available=excluded.available,
+                     image=excluded.image, market_url=excluded.market_url,
+                     updated_at=datetime('now')""",
+                rows)
+        return len(rows)
+
+    def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
+        """Give every product the id of the card it is a version of."""
+        with self.tx() as c:
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
+            if "card_id" not in cols:
+                c.execute("ALTER TABLE market_products ADD COLUMN card_id TEXT")
+            cur = c.execute(
+                """UPDATE market_products
+                      SET card_id = ? || '-' || LOWER(number)
+                    WHERE code LIKE ? || ' %'""",
+                (episode_code.lower(), episode_code))
+            return cur.rowcount
+
+    def market_products_for_card(self, card_id: str) -> list[dict]:
+        return self._all(
+            "SELECT * FROM market_products WHERE card_id=? ORDER BY version",
+            (card_id,))
+
+    def market_products_for_code(self, episode_id: int, code: str) -> list[dict]:
+        """Every version of one card, from what was imported."""
+        return self._all(
+            """SELECT * FROM market_products
+                WHERE episode_id=? AND code=? ORDER BY version""",
+            (episode_id, code))
+
+    def market_products_by_ids(self, ids: list[int]) -> dict:
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        rows = self._all(
+            f"SELECT * FROM market_products WHERE product_id IN ({marks})",
+            tuple(ids))
+        return {r["product_id"]: r for r in rows}
+
+    def episode_is_imported(self, episode_id: int) -> int:
+        row = self._one(
+            "SELECT COUNT(*) AS n FROM market_products WHERE episode_id=?",
+            (episode_id,))
+        return int(row["n"]) if row else 0
 
     # -------------------------------------------------------------- episodes
     def get_set_episode(self, official_set_id: str) -> dict | None:

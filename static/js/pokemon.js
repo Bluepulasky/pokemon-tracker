@@ -419,6 +419,21 @@ async function mantenimiento() {
       <div id="targets-result"></div>
     </div>
 
+    <h2>Sets</h2>
+    <p class="sub">Buscá un set y añadilo. Trae sus cartas, sus versiones y sus
+      precios de una vez; después no cuesta consultas abrirlas.</p>
+    <div class="field" style="max-width:420px">
+      <input id="ep-search" type="search" placeholder="Neo Genesis, Fossil, BS…"
+             autocomplete="off">
+      <div class="note" id="ep-note">Los que ya conocés salen al instante.
+        Buscar uno nuevo cuesta una consulta.</div>
+    </div>
+    <div id="ep-list" class="episode-grid"></div>
+
+    <h2>Revisión de datos</h2>
+    <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
+      rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
+    <div id="health-state"><div class="note">Comprobando…</div></div>
     <h2>Consultas a la API</h2>
     <p class="sub">Las últimas 24 horas, moviéndose contigo — no se reinicia a
       medianoche, porque no sabemos a qué hora se reinicia la del plan.</p>
@@ -442,6 +457,8 @@ async function mantenimiento() {
       </div>`).join('')}</div>`;
 
   renderJob(job);
+  renderHealth();
+  wireEpisodes();
   renderBudgets(job.budgets);
   view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
   view().querySelector('#do-rebuild').onclick = () => {
@@ -500,6 +517,28 @@ function renderTargetImport(box, r) {
        <ul class="bad">${problems}</ul></details>` : ''}`;
 }
 
+/* Silent fallbacks are the failure mode here, so the absence of an error is
+   not evidence of health — it is what every one of these bugs looked like. */
+async function renderHealth() {
+  const box = view().querySelector('#health-state');
+  if (!box) return;
+  let r;
+  try { r = await api.health(); } catch { box.innerHTML = ''; return; }
+
+  if (!r.findings.length) {
+    box.innerHTML = '<div class="empty">Sin desajustes. '
+      + 'Grados, rarezas, números y fechas de set son consistentes.</div>';
+    return;
+  }
+  box.innerHTML = `<ul class="health-list">${r.findings.map((f) => `
+      <li class="h-${esc(f.level)}">
+        <div class="h-msg">${esc(f.message)}</div>
+        ${f.detail.length ? `<div class="h-detail">${
+          f.detail.slice(0, 6).map(esc).join(' · ')}${
+          f.detail.length > 6 ? ` … +${f.detail.length - 6}` : ''}</div>` : ''}
+      </li>`).join('')}</ul>`;
+}
+
 /* What is left of a metered allowance.
 
    Worth a permanent place rather than an error message: the number only
@@ -523,6 +562,69 @@ function renderBudgets(budgets) {
           ${b.window_hours} h. Las más viejas van saliendo solas.</div>
       </div>`;
   }).join('');
+}
+
+/* Adding a set is the cheap moment to spend requests: one set answers every
+   future question about its cards for nothing. The list leads with the logo
+   because that is how anyone actually recognises a set. */
+function episodeCard(e) {
+  const added = e.imported;
+  return `<div class="episode ${added ? 'added' : ''}">
+      ${e.logo ? `<img src="${esc(e.logo)}" alt="" loading="lazy">`
+                : '<div class="noimg"></div>'}
+      <div class="e-name">${esc(e.name)}</div>
+      <div class="e-meta">${esc(e.code || '')} · ${esc((e.released_at || '').slice(0, 4))}
+        ${e.cards_total ? ` · ${e.cards_total} cartas` : ''}</div>
+      ${added
+        ? `<div class="e-added">${e.products} productos importados</div>`
+        : `<button class="btn xs" data-add="${e.id}">Añadir</button>`}
+    </div>`;
+}
+
+async function loadEpisodes(q) {
+  const list = view().querySelector('#ep-list');
+  const note = view().querySelector('#ep-note');
+  if (!list) return;
+  list.innerHTML = '<div class="note">Buscando…</div>';
+  let r;
+  try { r = await api.episodes(q); }
+  catch (e) { list.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`; return; }
+
+  if (!r.episodes.length) {
+    list.innerHTML = '<div class="empty">Ningún set con ese nombre.</div>';
+    return;
+  }
+  list.innerHTML = r.episodes.map(episodeCard).join('');
+  list.querySelectorAll('[data-add]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = 'Importando…';
+      try {
+        const res = await api.importEpisode(Number(btn.dataset.add));
+        toast(`${res.name}: ${res.cards} cartas, ${res.requests} consultas`);
+        loadEpisodes(view().querySelector('#ep-search').value.trim());
+        renderHealth();
+      } catch (e) {
+        toast(e.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Añadir';
+      }
+    };
+  });
+  if (note) note.textContent = q
+    ? `${r.episodes.length} resultado(s) para «${q}».`
+    : 'Los que ya conocés salen al instante. Buscar uno nuevo cuesta una consulta.';
+}
+
+function wireEpisodes() {
+  const input = view().querySelector('#ep-search');
+  if (!input) return;
+  loadEpisodes('');
+  let t;
+  input.oninput = () => {
+    clearTimeout(t);
+    t = setTimeout(() => loadEpisodes(input.value.trim()), 350);
+  };
 }
 
 function renderJob(job) {
