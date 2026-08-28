@@ -142,6 +142,69 @@ def set_card_override(set_id, card_id):
                     "slots": built.get("slots") if isinstance(built, dict) else built})
 
 
+BULK_SELECTORS = ("all", "holo", "non-holo", "none", "invert")
+
+
+def _is_holo(card) -> bool:
+    """The same holo test the card grid uses (rarity contains 'holo'), so a
+    quick-select lands on exactly the cards the stars show as holo — not on an
+    exact rarity string, which tcggo spells three different ways."""
+    return "holo" in (card.get("rarity") or "").lower()
+
+
+@bp.put("/<set_id>/collect")
+def bulk_collect(set_id):
+    """Set the whole set's collecting selection in one move.
+
+    The per-card star is precise but slow across a hundred cards; this is the
+    "how do I want to collect this set" shortcut behind it — only holos, only
+    non-holos, everything, nothing, or flip what is selected now.
+
+    It materialises to the same place a per-card toggle writes (exclude_cards),
+    with the rarity rule cleared, so the result is exactly the chosen set and
+    survives a rebuild. Because it computes holo the way the grid displays it,
+    "Solo holo" selects precisely the cards showing a filled star as holo.
+    """
+    cset = repo().get_collection_set(set_id)
+    if not cset:
+        raise ApiError("set no encontrado", "not_found", 404)
+    selector = (request.get_json(silent=True) or {}).get("selector")
+    if selector not in BULK_SELECTORS:
+        raise ApiError(f"selección inválida ({' | '.join(BULK_SELECTORS)})",
+                       "invalid_selector")
+
+    cards = repo().set_cards_with_state(set_id)
+    all_ids = {c["id"] for c in cards}
+    if selector == "all":
+        target = set(all_ids)
+    elif selector == "holo":
+        target = {c["id"] for c in cards if _is_holo(c)}
+    elif selector == "non-holo":
+        target = {c["id"] for c in cards if not _is_holo(c)}
+    elif selector == "none":
+        target = set()
+    else:  # invert: whatever is not collecting now becomes collecting
+        target = {c["id"] for c in cards if not c["collecting"]}
+
+    # The selection is carried entirely by exclude_cards over the untouched
+    # source sets: kept = candidates - exclude_cards when no rarity rule applies.
+    rules = json.loads(cset.get("rules_json") or "{}")
+    new_rules = {"include_sets": rules.get("include_sets") or []}
+    if rules.get("merge"):
+        new_rules["merge"] = rules["merge"]
+    new_rules["exclude_cards"] = sorted(all_ids - target)
+
+    repo().upsert_collection_set({
+        "id": set_id, "name": cset["name"], "description": cset.get("description"),
+        "group_name": cset.get("group_name"), "position": cset.get("position", 0),
+        "rules_json": json.dumps(new_rules),
+    })
+    built = svc("setbuilder").build(set_id)
+    return jsonify({"set_id": set_id, "selector": selector,
+                    "collecting": len(target),
+                    "slots": built.get("slots") if isinstance(built, dict) else built})
+
+
 @bp.get("/<set_id>/mode")
 def get_mode(set_id):
     """Which named mode the set's current rule matches, if any."""

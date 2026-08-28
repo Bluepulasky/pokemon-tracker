@@ -50,6 +50,8 @@ export const api = {
   setSetMode:   (setId, mode)  => req('PUT', `/api/sets/${setId}/mode`, { mode }),
   setCardInSet:  (setId, cardId, action) =>
                                  req('PUT', `/api/sets/${setId}/card/${cardId}`, { action }),
+  bulkCollect:  (setId, selector) =>
+                                 req('PUT', `/api/sets/${setId}/collect`, { selector }),
   health:       ()            => req('GET', '/api/maintenance/health'),
   episodes:     (q)           => req('GET', '/api/maintenance/episodes'
                                    + (q ? `?q=${encodeURIComponent(q)}` : '')),
