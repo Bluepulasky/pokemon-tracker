@@ -201,7 +201,9 @@ def export_targets():
             raise ApiError("set no encontrado", "not_found", 404)
         slots = repo().get_set_slots(set_id)
     else:
+        hidden = {s["id"] for s in repo().list_hidden_sets()}
         slots = [s for cs in repo().list_collection_sets()
+                 if cs["id"] not in hidden
                  for s in repo().get_set_slots(cs["id"])]
 
     buf = io.StringIO()

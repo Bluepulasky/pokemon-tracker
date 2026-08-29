@@ -191,7 +191,7 @@ async function setDetail(r) {
   const sort = r.params.get('sort') || 'number';
   const rar = r.params.get('rar') || 'all';       // all | holo | no-holo (view)
   const own = r.params.get('own') || 'all';       // all | owned | missing (view)
-  const col = r.params.get('col') || 'all';       // all | collecting | not (view)
+  const col = r.params.get('col') || 'collecting'; // all | collecting | not (view)
 
   const isHolo = (c) => /holo/i.test(c.rarity || '');
   // Every card in the set, each tagged collecting/owned. The set is a checklist
@@ -513,7 +513,7 @@ async function mantenimiento() {
       </div>
       <div class="note">Columnas: <code>card_id</code>, <code>card_name</code>
         (referencia), <code>target_quantity</code>. El objetivo es de la carta, así
-        que vale en todos los sets donde aparezca.</div>
+        que vale en todos los sets donde aparezca. No exporta los sets hidden.</div>
       <div id="targets-result"></div>
     </div>
 
