@@ -453,6 +453,10 @@ class PokemonRepo:
         return self._all(
             f"""SELECT s.id, s.name, s.group_name, s.position,
                        os.series AS series, os.release_date AS release_date,
+                       -- The set logo: the one stored at import, or the cached
+                       -- episode logo when import stored none (tcggo omits it on
+                       -- a few, but the catalogue sync has them all).
+                       COALESCE(NULLIF(os.logo_url, ''), me.logo) AS logo_url,
                        COUNT(DISTINCT sl.id) AS target,
                        COUNT(DISTINCT CASE WHEN sl.held > 0 THEN sl.id END) AS owned,
                        COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS complete,
@@ -463,6 +467,8 @@ class PokemonRepo:
                 FROM collection_sets s
                 LEFT JOIN official_sets os
                        ON os.id = json_extract(s.rules_json, '$.include_sets[0]')
+                LEFT JOIN set_episodes se ON se.official_set_id = os.id
+                LEFT JOIN market_episodes me ON me.episode_id = se.episode_id
                 LEFT JOIN (
                     SELECT sl.id, sl.set_id,
                            COALESCE(t.target, 1) AS want,
@@ -474,7 +480,8 @@ class PokemonRepo:
                       LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                 ) sl ON sl.set_id = s.id
                 {where}
-                GROUP BY s.id, s.name, s.group_name, s.position, os.series, os.release_date
+                GROUP BY s.id, s.name, s.group_name, s.position, os.series,
+                         os.release_date, os.logo_url, me.logo
                 ORDER BY os.release_date, s.name""",
             params,
         )

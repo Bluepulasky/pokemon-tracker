@@ -139,6 +139,7 @@ async function dashboard() {
 const setCardHtml = (s) => `
   <div class="set-card" data-set="${esc(s.id)}">
     <span class="pct">${pct(s.completion_pct)}</span>
+    ${s.logo_url ? `<img class="set-logo" src="${esc(s.logo_url)}" alt="" loading="lazy">` : ''}
     <div class="name">${esc(s.name)}</div>
     <div class="count">${s.owned} / ${s.target} cartas${
       s.missing ? ` · faltan ${s.missing}` : ''}</div>

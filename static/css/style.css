@@ -107,6 +107,10 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
   padding: 16px; cursor: pointer; transition: .15s;
 }
 .set-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+/* The set's own logo, top-left, with the % floated to its right. Set logos are
+   wide transparent banners, so contain + left align keeps them tidy. */
+.set-card .set-logo { height: 34px; max-width: 60%; object-fit: contain;
+                      object-position: left center; display: block; margin-bottom: 8px; }
 .set-card .name { font-weight: 600; margin-bottom: 2px; }
 .set-card .count { color: var(--fg-dim); font-size: 13px; }
 .set-card .pct { float: right; font-weight: 650; font-variant-numeric: tabular-nums; }

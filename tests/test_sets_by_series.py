@@ -83,3 +83,15 @@ def test_the_neos_and_gyms_are_not_stranded_as_singletons(app):
     by_name = {s["name"]: s for s in _sets(app)}
     assert by_name["Neo Genesis"]["series"] == "Neo"
     assert by_name["Neo Revelation"]["series"] == "Neo"   # same era, not its own
+
+
+def test_set_logo_falls_back_to_the_cached_episode(app):
+    """Base Set imported with no stored logo still shows one — the catalogue
+    sync cached the episode logo, and the Sets card uses it as a fallback."""
+    r = app.extensions["repo"]
+    r.remember_episodes([{"id": 900, "code": "BS", "name": "Base",
+                          "released_at": "1999-01-09",
+                          "logo": "https://img.example/base-logo.png"}])
+    r.set_set_episode("bs", 900, "Base", "BS")
+    by_name = {s["name"]: s for s in _sets(app)}
+    assert by_name["Base Set"]["logo_url"] == "https://img.example/base-logo.png"
