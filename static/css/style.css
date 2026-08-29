@@ -80,9 +80,9 @@ button, input, select { font: inherit; color: inherit; }
 .loading, .empty { padding: 60px 20px; text-align: center; color: var(--fg-faint); }
 
 h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 4px; }
-h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--fg-dim);
+h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-dim);
      text-transform: uppercase; font-weight: 600; font-size: 12px; letter-spacing: .08em; }
-.sub { color: var(--fg-dim); font-size: 14px; margin: 0 0 20px; }
+.sub { color: var(--fg-dim); font-size: 14px;}
 
 /* ------------------------------------------------------------------ stats */
 .stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
@@ -506,10 +506,15 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 /* Reprints from other sets: same card, dimmed so the card's own set reads first. */
 .version.reprint { opacity: .82; }
 .version.reprint .v-set { color: var(--muted, #6b7280); }
-.version-sep { grid-column: 1 / -1; font-size: .7rem; text-transform: uppercase;
-               letter-spacing: .04em; color: var(--muted, #6b7280);
-               margin: .5rem 0 .1rem; padding-top: .4rem;
-               border-top: 1px solid rgba(127,127,127,.18); }
+.version-sep {
+  width: 100%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 4px 0 2px;
+}
 .version-picked { margin-top: .45rem; font-size: .82rem;
                   color: var(--muted, #6b7280); }
 .version-picked strong { color: inherit; }
@@ -573,3 +578,37 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 .card.not-collecting { opacity: .42; }
 .card.not-collecting:hover { opacity: .7; }
 .card .art { position: relative; }
+
+.set-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.set-nav-center {
+  flex: 1;
+  text-align: center;
+}
+.set-nav-center h1,
+.set-nav-center .sub { margin: 0; }
+
+.set-nav-side {
+  flex: 0 0 180px;
+}
+.set-nav-side.right {
+  text-align: right;
+}
+
+.set-nav {
+  font-size: 16px;
+  color: var(--fg-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.set-nav:hover { color: var(--text); }

@@ -90,17 +90,17 @@ async function dashboard() {
         <div class="note">${d.copies_held} / ${d.copies_target} copias objetivo</div></div>
     </div>
 
-    <h2>Evolución del valor</h2>
+    <h2 style="margin-top: 16px;">Evolución del valor</h2>
     ${lineChart(points)}
     ${points.length < 2 ? '<div class="note">El histórico se acumula con cada snapshot mensual.</div>' : ''}
 
-    <h2>Sets más completos</h2>
+    <h2 style="margin-top: 16px;">Sets más completos</h2>
     <div class="set-grid">${d.most_complete.map(setCardHtml).join('')}</div>
 
-    <h2>Sets con más cartas faltantes</h2>
+    <h2 style="margin-top: 16px;">Sets con más cartas faltantes</h2>
     <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
 
-    <h2>Cartas de mayor valor</h2>
+    <h2 style="margin-top: 16px;">Cartas de mayor valor</h2>
     <div class="missing-list">${
       d.top_value.length ? d.top_value.map((t) => `
         <div class="missing-row" data-card="${esc(t.card_id)}">
@@ -186,7 +186,10 @@ async function sets() {
 
 /* ------------------------------------------------------- set detail grid */
 async function setDetail(r) {
-  const s = await api.set(r.id);
+  const [s, { data: allSets }] = await Promise.all([api.set(r.id), api.sets()]);
+  const idx = allSets.findIndex((x) => String(x.id) === String(r.id));
+  const prev = allSets[idx - 1] ?? null;
+  const next = allSets[idx + 1] ?? null;
   const p = s.progress || { owned: 0, target: 0, completion_pct: 0 };
   const sort = r.params.get('sort') || 'number';
   const rar = r.params.get('rar') || 'all';       // all | holo | no-holo (view)
@@ -217,9 +220,19 @@ async function setDetail(r) {
   const collecting = cards.filter((c) => c.collecting).length;
 
   view().innerHTML = `
-    <h1>${esc(s.name)}</h1>
-    <p class="sub">Coleccionando ${collecting} de ${cards.length} · tenés ${p.owned}
-      · falta ${Math.max(0, collecting - p.owned)}</p>
+    <div class="set-nav-row">
+      <div class="set-nav-side left">
+        ${prev ? `<button class="set-nav" data-set="${prev.id}">‹‹ ${esc(prev.name)}</button>` : ''}
+      </div>
+      <div class="set-nav-center">
+        <h1>${esc(s.name)}</h1>
+        <p class="sub">Coleccionando ${collecting} de ${cards.length} · tenés ${p.owned}
+          · falta ${Math.max(0, collecting - p.owned)}</p>
+      </div>
+      <div class="set-nav-side right">
+        ${next ? `<button class="set-nav" data-set="${next.id}">${esc(next.name)} ››</button>` : ''}
+      </div>
+    </div>
     ${progressBar(p.owned, collecting)}
 
     <label class="loose-toggle" title="Una carta de este set cuenta como poseída si tenés cualquier reimpresión suya de otro set.">
@@ -256,7 +269,9 @@ async function setDetail(r) {
     </div>
 
     <div class="card-grid">${shown.map(cardCheckHtml).join('')}</div>`;
-
+  view().querySelectorAll('.set-nav').forEach((btn) => {
+      btn.onclick = () => { location.hash = `#/set/${btn.dataset.set}`; };
+    });
   const nav = (over) => {
     const q = new URLSearchParams({ sort, rar, own, col, ...over });
     location.hash = `#/set/${r.id}?${q.toString()}`;
@@ -514,7 +529,7 @@ async function mantenimiento() {
       </div>
     </div>
 
-    <h2>Objetivos por lote</h2>
+    <h2 style="margin-top: 16px;">Objetivos por lote</h2>
     <p class="sub">Cuántas copias querés de cada carta, desde un CSV.
       Descargá el actual, editá la columna y volvé a subirlo.</p>
     <div class="stat">
@@ -529,7 +544,7 @@ async function mantenimiento() {
       <div id="targets-result"></div>
     </div>
 
-    <h2>Sets</h2>
+    <h2 style="margin-top: 16px;">Sets</h2>
     <p class="sub">Buscá un set y añadilo. Trae sus cartas, sus versiones y sus
       precios de una vez; después no cuesta consultas abrirlas.</p>
     <div class="field" style="max-width:420px">
@@ -540,24 +555,24 @@ async function mantenimiento() {
     </div>
     <div id="ep-list" class="episode-grid"></div>
 
-    <h2>Sets ocultos</h2>
+    <h2 style="margin-top: 16px;">Sets ocultos</h2>
     <p class="sub">Sets que ocultaste de la colección con la ✕. Siguen importados
       y no cuentan para el progreso; mostralos de nuevo acá.</p>
     <div id="hidden-sets"></div>
 
-    <h2>Revisión de datos</h2>
+    <h2 style="margin-top: 16px;">Revisión de datos</h2>
     <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
       rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
     <div id="health-state"><div class="note">Comprobando…</div></div>
-    <h2>Consultas a la API</h2>
+    <h2 "margin-top: 16px;">Consultas a la API</h2>
     <p class="sub">Las últimas 24 horas, moviéndose contigo — no se reinicia a
       medianoche, porque no sabemos a qué hora se reinicia la del plan.</p>
     <div id="budget-state"></div>
 
-    <h2>Estado</h2>
+    <h2 style="margin-top: 16px;">Estado</h2>
     <div id="job-state" class="missing-list"></div>
 
-    <h2>Multiplicadores de precio</h2>
+    <h2 style="margin-top: 16px;">Multiplicadores de precio</h2>
     <p class="sub">El precio de una impresión se ajusta por estos factores.</p>
     <div class="modifier-grid">${Object.entries(mods).map(([kind, rows]) => `
       <div class="stat">

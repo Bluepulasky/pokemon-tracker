@@ -168,7 +168,6 @@ function addForm(card) {
       <div class="note">Cada opción es un producto real con su propio precio.
         La imagen y el stock son para reconocer cuál tenés.</div>
       <div class="version-picked" hidden></div>
-    </div>
     ${printings.length > 1 ? `
     <div class="field" style="margin-bottom:12px">
       <label>Edición / Set actual</label>
@@ -525,7 +524,6 @@ async function renderQuotes(box, cardId, variant) {
 
 function versionTile(v) {
   const price = v.price != null ? `${Number(v.price).toFixed(2)} €` : '—';
-  const stock = v.available != null ? `${v.available} en venta` : 'sin stock';
   // A reprint (another set) is dimmed a touch and labelled with its set, so the
   // card's own printings read as the default and reprints as the alternative.
   return `<button type="button" class="version${v.is_current ? '' : ' reprint'}"
@@ -535,7 +533,6 @@ function versionTile(v) {
       <span class="v-code">${esc(v.code || '')}</span>
       ${v.version ? `<span class="v-name">${esc(v.version)}</span>` : ''}
       <span class="v-price">${price}</span>
-      <span class="v-stock">${esc(stock)}</span>
     </button>`;
 }
 
@@ -557,11 +554,9 @@ async function renderVersions(box, form, cardId) {
   // a divider, so it is clear they are the same card in a different set.
   const own = versions.filter((v) => v.is_current);
   const reprints = versions.filter((v) => !v.is_current);
-  box.innerHTML = own.map(versionTile).join('')
-    + (reprints.length
-        ? `<div class="version-sep">Reimpresiones en otros sets</div>`
-          + reprints.map(versionTile).join('')
-        : '');
+  box.innerHTML =
+    (own.length ? own.map(versionTile).join('') : '')
+    + reprints.map(versionTile).join('');
 
   /* The dropdowns stay. The picker fills them in, it does not replace them.
 
