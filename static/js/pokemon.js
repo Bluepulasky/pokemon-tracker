@@ -410,9 +410,16 @@ async function collection(r) {
       : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${
           res.total} registros`}</p>
 
-    <div class="mode-toggle">
-      <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
-      <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
+    <div class="mode-toggles">
+      <div class="mode-toggle">
+        <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
+        <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
+      </div>
+      <div class="mode-toggle">
+        ${[['', 'Todas'], ['1', 'En Hall of Fame']]
+          .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
+            data-qmin="${v}">${label}</span>`).join('')}
+      </div>
     </div>
 
     <div class="toolbar">
@@ -436,12 +443,6 @@ async function collection(r) {
         { key: 'recent', label: 'Más recientes' },
       ], f.sort)}
       <span class="spacer">${res.data.length} de ${res.total}</span>
-    </div>
-
-    <div class="mode-toggle" style="margin:-4px 0 16px">
-      ${[['', 'Todas'], ['1', 'En Hall of Fame']]
-        .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
-           data-qmin="${v}">${label}</span>`).join('')}
     </div>
 
     ${res.data.length
