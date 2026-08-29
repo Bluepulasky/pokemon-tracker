@@ -36,6 +36,7 @@ def get_set(set_id):
         raise ApiError("set no encontrado", "not_found", 404)
     progress = _with_progress(repo().set_progress(set_id))
     cset["progress"] = progress[0] if progress else None
+    cset["loose_completion"] = repo().is_loose_completion(set_id)
     cset["slots"] = repo().get_set_slots(set_id)
     # The whole set, each card flagged collecting/owned, for a single grid with
     # per-card toggles rather than a rule-filtered subset.
@@ -57,6 +58,17 @@ def create_set():
         raise ApiError("id y name son obligatorios")
     _save(body)
     return jsonify(repo().get_collection_set(body["id"])), 201
+
+
+@bp.put("/<set_id>/loose")
+def set_loose(set_id):
+    """Toggle loose completion (experimental): any owned printing of a card
+    counts toward this set's copy of it. Off is the strict default."""
+    if not repo().get_collection_set(set_id):
+        raise ApiError("set no encontrado", "not_found", 404)
+    on = bool((request.get_json(silent=True) or {}).get("enabled", True))
+    repo().set_loose_completion(set_id, on)
+    return jsonify({"set_id": set_id, "loose_completion": on})
 
 
 @bp.put("/<set_id>/hidden")

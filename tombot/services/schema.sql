@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS set_hidden (
     hidden_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Loose completion (experimental): a row here means "any owned printing of a
+-- card counts toward this set's copy of it" — a Jungle Pikachu you hold fills
+-- the Base Set Pikachu slot. Off (no row) is the strict default, where only the
+-- set's own printing counts. Its own table for the same reason as set_hidden:
+-- ships as CREATE ... IF NOT EXISTS, no migration.
+CREATE TABLE IF NOT EXISTS set_loose_completion (
+    set_id     TEXT PRIMARY KEY REFERENCES collection_sets(id) ON DELETE CASCADE,
+    set_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- A slot is ONE completion target. Owning any member card completes it.
 -- This is what lets reprints/variants collapse to a single logical card.
 CREATE TABLE IF NOT EXISTS set_slots (

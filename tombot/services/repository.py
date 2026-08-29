@@ -354,6 +354,21 @@ class PokemonRepo:
             else:
                 c.execute("DELETE FROM set_hidden WHERE set_id=?", (set_id,))
 
+    # ------------------------------------------------- loose completion (exp.)
+    def set_loose_completion(self, set_id: str, on: bool) -> None:
+        """Turn 'any owned printing counts' on or off for one set."""
+        with self.tx() as c:
+            if on:
+                c.execute("INSERT OR IGNORE INTO set_loose_completion(set_id) "
+                          "VALUES (?)", (set_id,))
+            else:
+                c.execute("DELETE FROM set_loose_completion WHERE set_id=?",
+                          (set_id,))
+
+    def is_loose_completion(self, set_id: str) -> bool:
+        return self._one("SELECT 1 AS x FROM set_loose_completion WHERE set_id=?",
+                         (set_id,)) is not None
+
     def list_hidden_sets(self) -> list[dict]:
         """Hidden sets, with the logo, so Mantenimiento can list and un-hide them."""
         return self._all(
@@ -385,14 +400,25 @@ class PokemonRepo:
         if not sources:
             return []
 
+        # Loose completion: a card counts as owned when any same-name printing is
+        # held (a Jungle Pikachu marks the Base Set Pikachu owned). Strict: only
+        # this exact card_id. Same rule the completion count uses, so the grid and
+        # the progress bar agree.
+        if self.is_loose_completion(set_id):
+            owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
+                          "JOIN cards ci ON ci.id = i.card_id "
+                          "WHERE ci.name = c.name), 0)")
+        else:
+            owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
+                          "WHERE i.card_id = c.id), 0)")
+
         marks = ",".join("?" * len(sources))
         return self._all(
             f"""SELECT c.id, c.name, c.number, c.number_sort, c.rarity,
                        c.image_small_url, c.image_local, c.official_set_id,
                        EXISTS (SELECT 1 FROM set_slot_cards m
                                 WHERE m.set_id = ? AND m.card_id = c.id) AS collecting,
-                       COALESCE((SELECT SUM(i.quantity) FROM collection_items i
-                                  WHERE i.card_id = c.id), 0) AS owned_qty
+                       {owned_expr} AS owned_qty
                   FROM cards c
                  WHERE c.official_set_id IN ({marks})
                  ORDER BY c.number_sort, c.number""",
@@ -507,12 +533,27 @@ class PokemonRepo:
                 LEFT JOIN (
                     SELECT sl.id, sl.set_id,
                            COALESCE(t.target, 1) AS want,
-                           (SELECT COALESCE(SUM(i.quantity), 0)
-                              FROM set_slot_cards m
-                              JOIN collection_items i ON i.card_id = m.card_id
-                             WHERE m.slot_id = sl.id) AS held
+                           -- Strict: only the set's own printing counts. Loose
+                           -- (a set_loose_completion row): any owned card of the
+                           -- same name as a slot member counts — a Jungle Pikachu
+                           -- fills the Base Set Pikachu slot.
+                           CASE WHEN lc.set_id IS NOT NULL THEN
+                             (SELECT COALESCE(SUM(i.quantity), 0)
+                                FROM collection_items i
+                                JOIN cards ci ON ci.id = i.card_id
+                               WHERE ci.name IN (
+                                   SELECT c2.name FROM set_slot_cards m2
+                                   JOIN cards c2 ON c2.id = m2.card_id
+                                  WHERE m2.slot_id = sl.id))
+                           ELSE
+                             (SELECT COALESCE(SUM(i.quantity), 0)
+                                FROM set_slot_cards m
+                                JOIN collection_items i ON i.card_id = m.card_id
+                               WHERE m.slot_id = sl.id)
+                           END AS held
                       FROM set_slots sl
                       LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
+                      LEFT JOIN set_loose_completion lc ON lc.set_id = sl.set_id
                 ) sl ON sl.set_id = s.id
                 {where}
                 GROUP BY s.id, s.name, s.group_name, s.position, os.series,
