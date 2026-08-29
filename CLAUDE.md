@@ -31,6 +31,19 @@ bootstrap: a fresh install is an empty schema, and importing a set is what fills
 it. Importing stores the set's cards and its Cardmarket products (with prices) in
 `market_products`, and creates a collecting goal for it.
 
+**tcggo quirks worth knowing:**
+- Its names disagree with common ones — it calls Base Set **"Base"**. So the
+  add-set search caches the whole catalogue once (`list_all_episodes`) and then
+  matches **locally and bidirectionally** (a set matches when its name contains
+  the query *or the query contains its name*), which is how "Base Set" finds
+  "Base". `search_episodes` (its raw search) alone misses it.
+- Its `series` field is sparse/inconsistent (blank on most sets) — don't group by
+  it; use the release-date era (`tcg_series.py`).
+- It omits the set `logo` on a few sets at import; the Sets card falls back to the
+  cached episode logo (`COALESCE(NULLIF(os.logo_url,''), me.logo)`).
+- The version picker lists **reprints across all imported sets** by card name;
+  picking one records the item against that reprint's own card/set.
+
 ## Data model
 
 - **`official_sets` + `cards`** — the catalogue, from a tcggo import. Card ids are
@@ -41,15 +54,36 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
 - **`collection_sets` + `set_slots` + `set_slot_cards`** — a *collecting goal*: a
   **rule** over one or more catalogue sets. A slot is one completion target,
   satisfied by owning any member card. Rules live in `collection_sets.rules_json`
-  and are materialised into slots by `SetBuilder`. The rule is editable per set
-  (mode: all / sin holos / solo holos / sin comunes — see `api/sets.py`), which is
-  how the catalogue stays whole while what you *collect* from it changes. A slot's
-  `source` is `rule` or `manual`; a rebuild leaves manual ones alone.
+  and are materialised into slots by `SetBuilder`. The catalogue stays whole while
+  what you *collect* changes: rarity rules (`exclude_rarities` etc.) plus per-card
+  overrides (`include_cards` / `exclude_cards`) — the ★ toggle and the quick-select
+  bar on the set detail page both write these. A slot's `source` is `rule` or
+  `manual`; a rebuild leaves manual ones alone.
 - **`collection_items`** — what you physically own: `(card_id, variant, condition,
   language)` unique, plus `market_product_id` (the exact Cardmarket product chosen
   in the add-card modal).
 - **`price_cache`** — the resolved price per owned printing.
 - **`price_modifiers`** — condition/language/variant multipliers, editable.
+- **`market_episodes`** — the tcggo set catalogue (all ~180 sets), filled by the
+  Mantenimiento "Sincronizar lista de sets" button so the add-set search is local.
+  **`set_episodes`** maps a catalogue set → its tcggo episode (for the logo, etc.).
+- **`set_hidden`** — sets hidden from the Sets page and completion totals (kept,
+  not deleted; un-hide from Mantenimiento). **`set_loose_completion`** — the
+  experimental per-set "any owned printing counts" flag. Both are presence tables.
+
+## Sets view & completion
+
+- The set detail page shows the **whole set** (every card, via
+  `set_cards_with_state`), each tagged `collecting` (is it a slot?) and `owned`.
+  Filters (holo / owned / collecting) are client-side; the ★ per-card toggle and
+  the quick-select bar (`PUT /sets/<id>/collect`) mutate the rule.
+- **`set_progress()` is the single source of completion** — the Sets page,
+  the dashboard totals, and the monthly snapshot all sum it. So changing what
+  counts (hidden, loose) in that one query changes all three at once. Listing all
+  sets (`set_id=None`) skips hidden sets; a single-set query returns one anyway.
+- The Sets page groups by **TCG era**, derived from each set's `release_date`
+  against a small era timeline in `services/tcg_series.py` — **not** tcggo's own
+  `series` field, which is too sparse to group by (it left most sets blank).
 
 ## Pricing
 
@@ -61,9 +95,16 @@ Re-importing a set is what refreshes its prices. See `services/pricing.py`.
 ## Conventions
 
 - **`schema.sql` is the single source of truth. There are no migrations.** A
-  schema change is an edit to `schema.sql`; a database from before it is recreated
-  (the app is rebuilt from set imports, so there is nothing to preserve). `init_db`
-  just runs the schema; it is idempotent.
+  schema change is an edit to `schema.sql`; `init_db` just runs it and is
+  idempotent. **Gotcha:** every statement is `CREATE ... IF NOT EXISTS`, so a new
+  **table** appears on an already-populated database on next `init-db`, but a new
+  **column** on an existing table does **not**. To add per-set state that must
+  survive without recreating the DB (e.g. `set_hidden`, `set_loose_completion`),
+  use a small **new table**, not a column. A column is fine only when losing the
+  old DB is acceptable (it is rebuilt from imports).
+- **After a schema.sql change, restart runs `init_db` only via the Docker
+  entrypoint.** Running `waitress`/`flask run` directly does not — run
+  `flask init-db` once yourself, or the new table is missing ("no such table").
 - **Silent fallbacks are the enemy.** Most bugs here came from a lookup that missed
   and returned something plausible (a missing multiplier → 1.00, an unknown set id
   → "modern set"). Prefer failing or warning over guessing. `services/health.py`
