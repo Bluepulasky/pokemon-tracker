@@ -59,6 +59,22 @@ def create_set():
     return jsonify(repo().get_collection_set(body["id"])), 201
 
 
+@bp.put("/<set_id>/hidden")
+def set_hidden(set_id):
+    """Hide a set from the Sets page and the completion totals, or show it again.
+
+    The set keeps everything — cards, products, the goal — so this is not a
+    delete: it is for sets added by accident or while testing that should not
+    count. Hidden sets are un-hidden from Mantenimiento, so hiding one from the
+    grid is one click and costs nothing to reverse.
+    """
+    if not repo().get_collection_set(set_id):
+        raise ApiError("set no encontrado", "not_found", 404)
+    hidden = bool((request.get_json(silent=True) or {}).get("hidden", True))
+    repo().set_hidden(set_id, hidden)
+    return jsonify({"set_id": set_id, "hidden": hidden})
+
+
 @bp.put("/<set_id>")
 def update_set(set_id):
     if not repo().get_collection_set(set_id):

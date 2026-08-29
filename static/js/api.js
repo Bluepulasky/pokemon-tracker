@@ -43,7 +43,7 @@ export const api = {
   setPrimary:  (id)           => req('PUT', `/api/collection/photos/${id}`, { is_primary: true }),
   refreshPrices: ()           => req('POST', '/api/prices/refresh', {}),
   refreshAsync: ()            => req('POST', '/api/prices/refresh-async', {}),
-  rebuildDb:    ()            => req('POST', '/api/maintenance/rebuild', {}),
+  syncCatalog:  ()            => req('POST', '/api/maintenance/sync-catalog', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
   modifiers:    ()            => req('GET', '/api/prices/modifiers'),
   getSetMode:   (setId)        => req('GET', `/api/sets/${setId}/mode`),
@@ -52,6 +52,8 @@ export const api = {
                                  req('PUT', `/api/sets/${setId}/card/${cardId}`, { action }),
   bulkCollect:  (setId, selector) =>
                                  req('PUT', `/api/sets/${setId}/collect`, { selector }),
+  setHidden:    (setId, hidden) => req('PUT', `/api/sets/${setId}/hidden`, { hidden }),
+  hiddenSets:   ()            => req('GET', '/api/maintenance/hidden-sets'),
   health:       ()            => req('GET', '/api/maintenance/health'),
   episodes:     (q)           => req('GET', '/api/maintenance/episodes'
                                    + (q ? `?q=${encodeURIComponent(q)}` : '')),

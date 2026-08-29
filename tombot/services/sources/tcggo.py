@@ -201,6 +201,32 @@ class TcggoSource:
         rows = payload.get("data") or []
         return [rows] if isinstance(rows, dict) else rows
 
+    def list_all_episodes(self, page_size: int = 100, max_pages: int = 40) -> list[dict]:
+        """The whole set catalogue, paged in so it can be searched offline.
+
+        Set names disagree with the search box — tcggo calls Base Set "Base" —
+        and its search only matches its own names, so common queries miss real
+        sets. Pulling the full list once and searching it locally sidesteps that
+        and costs nothing per search afterwards. The plan caps the page well
+        below any per_page we ask for, so this walks pages until one repeats
+        (page param ignored) or comes back empty. Each page is one request; the
+        catalogue is a handful. max_pages is a runaway guard, not a real limit.
+        """
+        out: list[dict] = []
+        seen: set = set()
+        for page in range(1, max_pages + 1):
+            payload = self._get(f"/{self.game}/episodes",
+                                {"per_page": page_size, "page": page})
+            rows = payload.get("data") if isinstance(payload, dict) else payload
+            if not rows:
+                break
+            fresh = [e for e in rows if e.get("id") not in seen]
+            if not fresh:                       # a page with nothing new = done
+                break
+            seen.update(e.get("id") for e in fresh)
+            out.extend(fresh)
+        return out
+
     # -------------------------------------------------------------- versions
     @staticmethod
     def as_version(card: dict) -> dict:

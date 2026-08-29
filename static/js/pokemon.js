@@ -138,7 +138,10 @@ async function dashboard() {
 
 const setCardHtml = (s) => `
   <div class="set-card" data-set="${esc(s.id)}">
+    <button class="set-hide" data-hide="${esc(s.id)}"
+            title="Ocultar de la colección (se puede mostrar desde Mantenimiento)">×</button>
     <span class="pct">${pct(s.completion_pct)}</span>
+    ${s.logo_url ? `<img class="set-logo" src="${esc(s.logo_url)}" alt="" loading="lazy">` : ''}
     <div class="name">${esc(s.name)}</div>
     <div class="count">${s.owned} / ${s.target} cartas${
       s.missing ? ` · faltan ${s.missing}` : ''}</div>
@@ -166,6 +169,18 @@ async function sets() {
 
   view().querySelectorAll('[data-set]').forEach((n) => {
     n.onclick = () => { location.hash = `#/set/${n.dataset.set}`; };
+  });
+  // The X hides the set from the collection. It keeps the data, so it is not a
+  // delete and needs no confirm — un-hiding lives in Mantenimiento.
+  view().querySelectorAll('[data-hide]').forEach((btn) => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await api.setHidden(btn.dataset.hide, true);
+        toast('Set oculto. Se muestra de nuevo desde Mantenimiento.');
+        sets();
+      } catch (err) { toast(err.message, true); }
+    };
   });
 }
 
@@ -479,10 +494,11 @@ async function mantenimiento() {
         <div class="btn-row"><button class="btn primary" id="do-prices">Actualizar precios ahora</button></div>
       </div>
       <div class="stat">
-        <div class="k">Actualizar base de datos</div>
-        <div class="note">Equivale a <code>flask bootstrap</code>: esquema, sets
-          incompletos, sets personales e impresiones. Se puede repetir sin riesgo.</div>
-        <div class="btn-row"><button class="btn" id="do-rebuild">Actualizar base de datos</button></div>
+        <div class="k">Sincronizar lista de sets</div>
+        <div class="note">Descarga el catálogo completo de sets para poder
+          buscarlos al instante y sin conexión. <strong class="warn-text">⚠ Gasta
+          ~12 consultas de la API</strong> — hacelo una sola vez.</div>
+        <div class="btn-row"><button class="btn" id="do-sync">Sincronizar lista de sets</button></div>
       </div>
     </div>
 
@@ -512,6 +528,11 @@ async function mantenimiento() {
     </div>
     <div id="ep-list" class="episode-grid"></div>
 
+    <h2>Sets ocultos</h2>
+    <p class="sub">Sets que ocultaste de la colección con la ✕. Siguen importados
+      y no cuentan para el progreso; mostralos de nuevo acá.</p>
+    <div id="hidden-sets"></div>
+
     <h2>Revisión de datos</h2>
     <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
       rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
@@ -540,13 +561,35 @@ async function mantenimiento() {
 
   renderJob(job);
   renderHealth();
+  renderHiddenSets();
   wireEpisodes();
   renderBudgets(job.budgets);
   view().querySelector('#do-prices').onclick = () => startJob(api.refreshAsync);
-  view().querySelector('#do-rebuild').onclick = () => {
-    if (confirm('Vuelve a importar lo que falte del catálogo. Puede tardar varios minutos. ¿Seguir?')) {
-      startJob(api.rebuildDb);
+  // Inline two-step confirm: the first click arms it (so the API-cost warning is
+  // acknowledged), the second runs. No blocking dialog.
+  const syncBtn = view().querySelector('#do-sync');
+  syncBtn.onclick = async () => {
+    if (syncBtn.dataset.armed !== '1') {
+      syncBtn.dataset.armed = '1';
+      syncBtn.classList.add('danger');
+      syncBtn.textContent = 'Confirmar — gasta ~12 consultas';
+      return;
     }
+    syncBtn.disabled = true;
+    syncBtn.textContent = 'Sincronizando…';
+    try {
+      const res = await api.syncCatalog();
+      toast(`Catálogo sincronizado: ${res.synced} sets. Ya podés buscarlos sin gastar consultas.`);
+      loadEpisodes(view().querySelector('#ep-search').value.trim());
+      const st = await api.jobStatus();
+      if (st && st.budgets) renderBudgets(st.budgets);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    syncBtn.disabled = false;
+    syncBtn.dataset.armed = '';
+    syncBtn.classList.remove('danger');
+    syncBtn.textContent = 'Sincronizar lista de sets';
   };
   const dl = view().querySelector('#dl-targets');
   if (dl) dl.href = api.exportTargetsUrl();
@@ -619,6 +662,35 @@ async function renderHealth() {
           f.detail.slice(0, 6).map(esc).join(' · ')}${
           f.detail.length > 6 ? ` … +${f.detail.length - 6}` : ''}</div>` : ''}
       </li>`).join('')}</ul>`;
+}
+
+async function renderHiddenSets() {
+  const box = view().querySelector('#hidden-sets');
+  if (!box) return;
+  let r;
+  try { r = await api.hiddenSets(); } catch { box.innerHTML = ''; return; }
+
+  if (!r.data.length) {
+    box.innerHTML = '<div class="empty">Ningún set oculto.</div>';
+    return;
+  }
+  box.innerHTML = `<div class="hidden-list">${r.data.map((s) => `
+      <div class="hidden-row">
+        ${s.logo_url ? `<img src="${esc(s.logo_url)}" alt="" loading="lazy">`
+                     : '<div class="noimg"></div>'}
+        <span class="h-name">${esc(s.name)}</span>
+        <button class="btn xs" data-show="${esc(s.id)}">Mostrar</button>
+      </div>`).join('')}</div>`;
+  box.querySelectorAll('[data-show]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await api.setHidden(btn.dataset.show, false);
+        toast('Set visible de nuevo en la colección.');
+        renderHiddenSets();
+      } catch (e) { toast(e.message, true); btn.disabled = false; }
+    };
+  });
 }
 
 /* What is left of a metered allowance.

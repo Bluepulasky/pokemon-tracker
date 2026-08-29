@@ -160,22 +160,29 @@ def search():
                     "collection": items})
 
 
-@bp.post("/maintenance/rebuild")
-def rebuild_database():
-    """Re-materialise personal sets and re-price, from what is already imported.
+@bp.post("/maintenance/sync-catalog")
+def sync_catalog():
+    """Pull tcggo's whole set list into the local cache, once.
 
-    No network and no bootstrap: sets come in through the Sets picker, one at a
-    time. This just re-runs the rules over the current catalogue (in case a set
-    was imported after a personal set was created) and re-prices from the stored
-    products. Idempotent.
+    The set search matches tcggo's own names, which disagree with what people
+    type (it calls Base Set "Base"), and it only looks past the local cache when
+    nothing local matches — so uncached sets stay invisible. Caching every set
+    up front makes the search fully local: instant, complete, and free per
+    query. It spends about a dozen requests (one per page); importing a set
+    still costs its own. Not idempotent in cost — each run re-fetches — so the
+    button warns before it runs.
     """
-    def work():
-        slots = svc("setbuilder").build_all()
-        priced = svc("pricing").refresh()
-        return {"sets_rebuilt": len(slots) if slots else 0, "pricing": priced}
-
-    started, state = svc("jobs").start("rebuild", work)
-    return jsonify({"started": started, **state}), (202 if started else 409)
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        raise ApiError("no hay fuente configurada (TCGGO_API_KEY)",
+                       "not_configured", 503)
+    try:
+        episodes = source.list_all_episodes()
+    except Exception as e:                                   # noqa: BLE001
+        # Includes the budget running out mid-sync: report it, keep what cached.
+        raise ApiError(str(e), "source_error", 502) from None
+    stored = repo().remember_episodes(episodes)
+    return jsonify({"synced": stored})
 
 
 @bp.get("/maintenance/targets/export")
@@ -339,6 +346,16 @@ def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
     slots = svc("setbuilder").build(goal_id)
     return {"id": goal_id, "name": name, "created": True,
             "slots": slots.get("slots") if isinstance(slots, dict) else slots}
+
+
+@bp.get("/maintenance/hidden-sets")
+def maintenance_hidden_sets():
+    """Sets hidden from the collection, so they can be shown again from here.
+
+    Hiding lives on the Sets page (its X); showing again lives here, so a hidden
+    set never clutters the grid it was hidden from.
+    """
+    return jsonify({"data": repo().list_hidden_sets()})
 
 
 @bp.get("/maintenance/health")
