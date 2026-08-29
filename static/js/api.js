@@ -53,6 +53,7 @@ export const api = {
   bulkCollect:  (setId, selector) =>
                                  req('PUT', `/api/sets/${setId}/collect`, { selector }),
   setHidden:    (setId, hidden) => req('PUT', `/api/sets/${setId}/hidden`, { hidden }),
+  setLoose:     (setId, enabled) => req('PUT', `/api/sets/${setId}/loose`, { enabled }),
   hiddenSets:   ()            => req('GET', '/api/maintenance/hidden-sets'),
   health:       ()            => req('GET', '/api/maintenance/health'),
   episodes:     (q)           => req('GET', '/api/maintenance/episodes'

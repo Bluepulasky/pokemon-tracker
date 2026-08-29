@@ -222,6 +222,11 @@ async function setDetail(r) {
       · falta ${Math.max(0, collecting - p.owned)}</p>
     ${progressBar(p.owned, collecting)}
 
+    <label class="loose-toggle" title="Una carta de este set cuenta como poseída si tenés cualquier reimpresión suya de otro set.">
+      <input type="checkbox" id="loose-toggle" ${s.loose_completion ? 'checked' : ''}>
+      <span>Cualquier versión cuenta para el progreso <em>(experimental)</em></span>
+    </label>
+
     <div class="quick-select" id="q-collect">
       <span class="qs-label">Coleccionar ★</span>
       ${[['all', 'Todo'], ['holo', 'Solo holo'], ['non-holo', 'Solo no holo'],
@@ -257,6 +262,13 @@ async function setDetail(r) {
     location.hash = `#/set/${r.id}?${q.toString()}`;
   };
   view().querySelector('#f-sort').onchange = (e) => nav({ sort: e.target.value });
+  view().querySelector('#loose-toggle').onchange = async (e) => {
+    e.target.disabled = true;
+    try {
+      await api.setLoose(r.id, e.target.checked);
+      setDetail(r);   // re-render: counts and owned marks reflect the new mode
+    } catch (err) { toast(err.message, true); e.target.disabled = false; }
+  };
   view().querySelectorAll('#f-rar .chip').forEach((c) => c.onclick = () => nav({ rar: c.dataset.rar }));
   view().querySelectorAll('#f-own .chip').forEach((c) => c.onclick = () => nav({ own: c.dataset.own }));
   view().querySelectorAll('#f-col .chip').forEach((c) => c.onclick = () => nav({ col: c.dataset.col }));

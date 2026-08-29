@@ -316,6 +316,13 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
 /* Quick-select: bulk-applies the collecting star to the whole set. It is an
    action row, not a filter — it changes what you collect, so it sits above the
    filter toolbar and its buttons read as buttons, not toggles. */
+/* Experimental per-set completion mode. Deliberately understated. */
+.loose-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+                margin: 14px 0 0; font-size: 13px; color: var(--fg-dim); }
+.loose-toggle input { accent-color: var(--accent); }
+.loose-toggle em { color: var(--fg-faint); font-style: normal; font-size: 11px;
+                   text-transform: uppercase; letter-spacing: .04em; }
+
 .quick-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
                 margin: 16px 0 0; }
 .quick-select .qs-label { font-size: 12px; text-transform: uppercase;
