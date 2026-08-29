@@ -343,6 +343,30 @@ class PokemonRepo:
         with self.tx() as c:
             c.execute("DELETE FROM collection_sets WHERE id=?", (set_id,))
 
+    # ----------------------------------------------------------- hidden sets
+    def set_hidden(self, set_id: str, hidden: bool) -> None:
+        """Hide or show a set. Hiding keeps everything; it only marks the set so
+        it drops off the Sets page and out of the completion totals."""
+        with self.tx() as c:
+            if hidden:
+                c.execute("INSERT OR IGNORE INTO set_hidden(set_id) VALUES (?)",
+                          (set_id,))
+            else:
+                c.execute("DELETE FROM set_hidden WHERE set_id=?", (set_id,))
+
+    def list_hidden_sets(self) -> list[dict]:
+        """Hidden sets, with the logo, so Mantenimiento can list and un-hide them."""
+        return self._all(
+            """SELECT s.id, s.name, h.hidden_at,
+                      COALESCE(NULLIF(os.logo_url, ''), me.logo) AS logo_url
+                 FROM set_hidden h
+                 JOIN collection_sets s ON s.id = h.set_id
+                 LEFT JOIN official_sets os
+                        ON os.id = json_extract(s.rules_json, '$.include_sets[0]')
+                 LEFT JOIN set_episodes se ON se.official_set_id = os.id
+                 LEFT JOIN market_episodes me ON me.episode_id = se.episode_id
+                ORDER BY os.release_date, s.name""")
+
     def set_cards_with_state(self, set_id: str) -> list[dict]:
         """Every card in this set's source sets, tagged for the set view.
 
@@ -441,9 +465,20 @@ class PokemonRepo:
 
     def set_progress(self, set_id: str | None = None) -> list[dict]:
         """Completion per personal set. COUNT(DISTINCT slot) on the owned side is what
-        stops Charizard-holo + Charizard-non-holo counting twice."""
-        where = "WHERE s.id = ?" if set_id else ""
-        params = (set_id,) if set_id else ()
+        stops Charizard-holo + Charizard-non-holo counting twice.
+
+        Listing all sets skips the hidden ones, so they leave both the Sets page
+        and every completion total (dashboard, snapshots) at once. Asking for one
+        set by id returns it either way — a hidden set is still viewable, e.g. to
+        confirm before un-hiding.
+        """
+        if set_id:
+            where = "WHERE s.id = ?"
+            params: tuple = (set_id,)
+        else:
+            where = ("WHERE NOT EXISTS "
+                     "(SELECT 1 FROM set_hidden h WHERE h.set_id = s.id)")
+            params = ()
         # A slot counts once the copies held reach its target. With no target set
         # the target is 1, which is the same "do I have one" question as before.
         # The set's series and release date come from the catalogue set the rule

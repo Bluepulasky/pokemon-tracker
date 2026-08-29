@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS collection_sets (
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Sets hidden from the collection. The set stays fully imported — its cards,
+-- products and goal are untouched — it just drops off the Sets page and out of
+-- the completion totals, for sets added by accident or while testing. A row
+-- here means hidden; un-hiding is deleting it (done from Mantenimiento). It is
+-- its own table on purpose: a new column would not appear on an already-created
+-- database, but this CREATE ... IF NOT EXISTS does — so it ships without a
+-- migration and without recreating anything.
+CREATE TABLE IF NOT EXISTS set_hidden (
+    set_id     TEXT PRIMARY KEY REFERENCES collection_sets(id) ON DELETE CASCADE,
+    hidden_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- A slot is ONE completion target. Owning any member card completes it.
 -- This is what lets reprints/variants collapse to a single logical card.
 CREATE TABLE IF NOT EXISTS set_slots (

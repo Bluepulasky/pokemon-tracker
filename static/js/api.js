@@ -52,6 +52,8 @@ export const api = {
                                  req('PUT', `/api/sets/${setId}/card/${cardId}`, { action }),
   bulkCollect:  (setId, selector) =>
                                  req('PUT', `/api/sets/${setId}/collect`, { selector }),
+  setHidden:    (setId, hidden) => req('PUT', `/api/sets/${setId}/hidden`, { hidden }),
+  hiddenSets:   ()            => req('GET', '/api/maintenance/hidden-sets'),
   health:       ()            => req('GET', '/api/maintenance/health'),
   episodes:     (q)           => req('GET', '/api/maintenance/episodes'
                                    + (q ? `?q=${encodeURIComponent(q)}` : '')),

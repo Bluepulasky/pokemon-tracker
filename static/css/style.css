@@ -106,7 +106,27 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 32px 0 12px; color: var(--
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px; cursor: pointer; transition: .15s;
 }
+.set-card { position: relative; }
 .set-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+/* Hide (X): faint in the corner, sharpens on hover. Keeps a small gutter so it
+   never sits under the %. Hiding is reversible (Mantenimiento), so no confirm. */
+.set-card .set-hide {
+  position: absolute; top: 6px; right: 8px; z-index: 2;
+  border: 0; background: transparent; color: var(--fg-faint);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 5px;
+  opacity: .4; transition: .12s;
+}
+.set-card .set-hide:hover { opacity: 1; color: var(--bad); }
+.set-card .pct { margin-right: 20px; }
+
+/* Hidden-sets list in Mantenimiento: one row per set, logo + name + show. */
+.hidden-list { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+.hidden-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+              background: var(--bg-2); border: 1px solid var(--line);
+              border-radius: var(--radius-sm); }
+.hidden-row img, .hidden-row .noimg { height: 26px; width: 46px; object-fit: contain; }
+.hidden-row .noimg { background: rgba(127,127,127,.15); border-radius: 4px; }
+.hidden-row .h-name { flex: 1; font-weight: 600; }
 /* The set's own logo, top-left, with the % floated to its right. Set logos are
    wide transparent banners, so contain + left align keeps them tidy. */
 .set-card .set-logo { height: 34px; max-width: 60%; object-fit: contain;

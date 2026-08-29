@@ -348,6 +348,16 @@ def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
             "slots": slots.get("slots") if isinstance(slots, dict) else slots}
 
 
+@bp.get("/maintenance/hidden-sets")
+def maintenance_hidden_sets():
+    """Sets hidden from the collection, so they can be shown again from here.
+
+    Hiding lives on the Sets page (its X); showing again lives here, so a hidden
+    set never clutters the grid it was hidden from.
+    """
+    return jsonify({"data": repo().list_hidden_sets()})
+
+
 @bp.get("/maintenance/health")
 def maintenance_health():
     """Look for vocabulary mismatches before they become wrong numbers.
