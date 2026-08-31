@@ -545,22 +545,6 @@ async function mantenimiento() {
       <div id="targets-result"></div>
     </div>
 
-    <h2 style="margin-top: 16px;">Sets</h2>
-    <p class="sub">Buscá un set y añadilo. Trae sus cartas, sus versiones y sus
-      precios de una vez; después no cuesta consultas abrirlas.</p>
-    <div class="field" style="max-width:420px">
-      <input id="ep-search" type="search" placeholder="Neo Genesis, Fossil, BS…"
-             autocomplete="off">
-      <div class="note" id="ep-note">Los que ya conocés salen al instante.
-        Buscar uno nuevo cuesta una consulta.</div>
-    </div>
-    <div id="ep-list" class="episode-grid"></div>
-
-    <h2 style="margin-top: 16px;">Sets ocultos</h2>
-    <p class="sub">Sets que ocultaste de la colección con la ✕. Siguen importados
-      y no cuentan para el progreso; mostralos de nuevo acá.</p>
-    <div id="hidden-sets"></div>
-
     <h2 style="margin-top: 16px;">Revisión de datos</h2>
     <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
       rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
@@ -585,7 +569,23 @@ async function mantenimiento() {
                    data-kind="${esc(kind)}" data-key="${esc(key)}"
                    style="width:90px">
           </div>`).join('')}
-      </div>`).join('')}</div>`;
+      </div>`).join('')}</div>
+
+    <h2 style="margin-top: 16px;">Sets ocultos</h2>
+    <p class="sub">Sets que ocultaste de la colección con la ✕. Siguen importados
+      y no cuentan para el progreso; mostralos de nuevo acá.</p>
+    <div id="hidden-sets"></div>
+
+    <h2 style="margin-top: 16px;">DB Sets</h2>
+    <p class="sub">Buscá un set y añadilo. Trae sus cartas, sus versiones y sus
+      precios de una vez; después no cuesta consultas abrirlas.</p>
+    <div class="field" style="max-width:420px">
+      <input id="ep-search" type="search" placeholder="Neo Genesis, Fossil, BS…"
+             autocomplete="off">
+      <div class="note" id="ep-note">Los que ya conocés salen al instante.
+        Buscar uno nuevo cuesta una consulta.</div>
+    </div>
+    <div id="ep-list" class="episode-grid"></div>`;
 
   renderJob(job);
   renderHealth();
@@ -776,7 +776,13 @@ async function loadEpisodes(q) {
     list.innerHTML = '<div class="empty">Ningún set con ese nombre.</div>';
     return;
   }
-  list.innerHTML = r.episodes.map(episodeCard).join('');
+
+  // Ordenar del set más viejo al más nuevo
+  list.innerHTML = r.episodes
+    .sort((a, b) => (a.released_at || '').localeCompare(b.released_at || ''))
+    .map(episodeCard)
+    .join('');
+
   list.querySelectorAll('[data-add]').forEach((btn) => {
     btn.onclick = async () => {
       btn.disabled = true;
@@ -793,6 +799,7 @@ async function loadEpisodes(q) {
       }
     };
   });
+
   if (note) note.textContent = q
     ? `${r.episodes.length} resultado(s) para «${q}».`
     : 'Los que ya conocés salen al instante. Buscar uno nuevo cuesta una consulta.';
