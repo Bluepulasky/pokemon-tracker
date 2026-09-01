@@ -1331,6 +1331,48 @@ class PokemonRepo:
                                           AND mp.{f} IS NOT NULL)""").rowcount
         return {"products": products, "cards": cards}
 
+    def existing_card_ids(self, ids) -> set:
+        """Which of these card ids are in the catalog — so a fix file can report
+        the rows that match nothing rather than silently doing nothing."""
+        ids = [i for i in dict.fromkeys(ids) if i]
+        if not ids:
+            return set()
+        marks = ",".join("?" * len(ids))
+        return {r["id"] for r in self._all(
+            f"SELECT id FROM cards WHERE id IN ({marks})", tuple(ids))}
+
+    # The only card columns a CSV fix may write. A hard whitelist: the field name
+    # is interpolated into SQL, so it must never come from the file.
+    _FIXABLE_COLUMNS = ("artist", "supertype")
+
+    def fill_card_fields(self, updates: dict[str, list]) -> dict[str, int]:
+        """Fill blank card columns from (value, card_id) pairs, per field.
+
+        Only a blank (NULL or '') is written, so applying a fix file never
+        overwrites data already there and is safe to re-run.
+        """
+        filled: dict[str, int] = {}
+        with self.tx() as c:
+            for field, pairs in updates.items():
+                if field not in self._FIXABLE_COLUMNS:
+                    raise ValueError(f"campo no permitido: {field}")
+                if not pairs:
+                    filled[field] = 0
+                    continue
+                cur = c.executemany(
+                    f"UPDATE cards SET {field}=?, updated_at=datetime('now') "
+                    f"WHERE id=? AND ({field} IS NULL OR {field}='')", pairs)
+                # sqlite3 sums the per-statement counts into rowcount for
+                # executemany, which SELECT changes() (last statement only) does not.
+                filled[field] = cur.rowcount
+        return filled
+
+    def cards_meta_rows(self) -> list[dict]:
+        """Every card's fixable metadata, for the CSV export."""
+        return self._all(
+            "SELECT id AS card_id, name, official_set_id AS set, supertype, artist "
+            "FROM cards ORDER BY official_set_id, number_sort")
+
     def market_products_for_card(self, card_id: str) -> list[dict]:
         return self._all(
             "SELECT * FROM market_products WHERE card_id=? ORDER BY version",

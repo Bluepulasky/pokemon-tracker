@@ -1,0 +1,1090 @@
+card_id,name,set,supertype,artist
+bs-1,Alakazam,BS,Pokémon,Ken Sugimori
+bs-10,Mewtwo,BS,Pokémon,Ken Sugimori
+bs-100,Lightning Energy,BS,Energy,Keiji Kinebuchi
+bs-101,Psychic Energy,BS,Energy,Keiji Kinebuchi
+bs-102,Water Energy,BS,Energy,Keiji Kinebuchi
+bs-11,Nidoking,BS,Pokémon,Ken Sugimori
+bs-12,Ninetales,BS,Pokémon,Ken Sugimori
+bs-13,Poliwrath,BS,Pokémon,Ken Sugimori
+bs-14,Raichu,BS,Pokémon,Ken Sugimori
+bs-15,Venusaur,BS,Pokémon,Mitsuhiro Arita
+bs-16,Zapdos,BS,Pokémon,Ken Sugimori
+bs-17,Beedrill,BS,Pokémon,Ken Sugimori
+bs-18,Dragonair,BS,Pokémon,Mitsuhiro Arita
+bs-19,Dugtrio,BS,Pokémon,Keiji Kinebuchi
+bs-2,Blastoise,BS,Pokémon,Ken Sugimori
+bs-20,Electabuzz,BS,Pokémon,Ken Sugimori
+bs-21,Electrode,BS,Pokémon,Keiji Kinebuchi
+bs-22,Pidgeotto,BS,Pokémon,Ken Sugimori
+bs-23,Arcanine,BS,Pokémon,Ken Sugimori
+bs-24,Charmeleon,BS,Pokémon,Mitsuhiro Arita
+bs-25,Dewgong,BS,Pokémon,Mitsuhiro Arita
+bs-26,Dratini,BS,Pokémon,Ken Sugimori
+bs-27,Farfetch'd,BS,Pokémon,Ken Sugimori
+bs-28,Growlithe,BS,Pokémon,Ken Sugimori
+bs-29,Haunter,BS,Pokémon,Keiji Kinebuchi
+bs-3,Chansey,BS,Pokémon,Ken Sugimori
+bs-30,Ivysaur,BS,Pokémon,Ken Sugimori
+bs-31,Jynx,BS,Pokémon,Ken Sugimori
+bs-32,Kadabra,BS,Pokémon,Ken Sugimori
+bs-33,Kakuna,BS,Pokémon,Keiji Kinebuchi
+bs-34,Machoke,BS,Pokémon,Ken Sugimori
+bs-35,Magikarp,BS,Pokémon,Mitsuhiro Arita
+bs-36,Magmar,BS,Pokémon,Ken Sugimori
+bs-37,Nidorino,BS,Pokémon,Mitsuhiro Arita
+bs-38,Poliwhirl,BS,Pokémon,Ken Sugimori
+bs-39,Porygon,BS,Pokémon,Tomoaki Imakuni
+bs-4,Charizard,BS,Pokémon,Mitsuhiro Arita
+bs-40,Raticate,BS,Pokémon,Ken Sugimori
+bs-41,Seel,BS,Pokémon,Ken Sugimori
+bs-42,Wartortle,BS,Pokémon,Ken Sugimori
+bs-43,Abra,BS,Pokémon,Mitsuhiro Arita
+bs-44,Bulbasaur,BS,Pokémon,Mitsuhiro Arita
+bs-45,Caterpie,BS,Pokémon,Ken Sugimori
+bs-46,Charmander,BS,Pokémon,Mitsuhiro Arita
+bs-47,Diglett,BS,Pokémon,Keiji Kinebuchi
+bs-48,Doduo,BS,Pokémon,Mitsuhiro Arita
+bs-49,Drowzee,BS,Pokémon,Ken Sugimori
+bs-5,Clefairy,BS,Pokémon,Ken Sugimori
+bs-50,Gastly,BS,Pokémon,Keiji Kinebuchi
+bs-51,Koffing,BS,Pokémon,Mitsuhiro Arita
+bs-52,Machop,BS,Pokémon,Mitsuhiro Arita
+bs-53,Magnemite,BS,Pokémon,Keiji Kinebuchi
+bs-54,Metapod,BS,Pokémon,Ken Sugimori
+bs-55,Nidoran ♂,BS,Pokémon,Ken Sugimori
+bs-56,Onix,BS,Pokémon,Ken Sugimori
+bs-57,Pidgey,BS,Pokémon,Ken Sugimori
+bs-58,Pikachu,BS,Pokémon,Mitsuhiro Arita
+bs-59,Poliwag,BS,Pokémon,Ken Sugimori
+bs-6,Gyarados,BS,Pokémon,Mitsuhiro Arita
+bs-60,Ponyta,BS,Pokémon,Ken Sugimori
+bs-61,Rattata,BS,Pokémon,Mitsuhiro Arita
+bs-62,Sandshrew,BS,Pokémon,Ken Sugimori
+bs-63,Squirtle,BS,Pokémon,Mitsuhiro Arita
+bs-64,Starmie,BS,Pokémon,Keiji Kinebuchi
+bs-65,Staryu,BS,Pokémon,Keiji Kinebuchi
+bs-66,Tangela,BS,Pokémon,Mitsuhiro Arita
+bs-67,Voltorb,BS,Pokémon,Keiji Kinebuchi
+bs-68,Vulpix,BS,Pokémon,Ken Sugimori
+bs-69,Weedle,BS,Pokémon,Mitsuhiro Arita
+bs-7,Hitmonchan,BS,Pokémon,Ken Sugimori
+bs-70,Clefairy Doll,BS,Trainer,Keiji Kinebuchi
+bs-71,Computer Search,BS,Trainer,Keiji Kinebuchi
+bs-72,Devolution Spray,BS,Trainer,Keiji Kinebuchi
+bs-73,Impostor Professor Oak,BS,Trainer,Ken Sugimori
+bs-74,Item Finder,BS,Trainer,Keiji Kinebuchi
+bs-75,Lass,BS,Trainer,Ken Sugimori
+bs-76,Pokémon Breeder,BS,Trainer,Ken Sugimori
+bs-77,Pokémon Trader,BS,Trainer,Ken Sugimori
+bs-78,Scoop Up,BS,Trainer,Keiji Kinebuchi
+bs-79,Super Energy Removal,BS,Trainer,Keiji Kinebuchi
+bs-8,Machamp,BS,Pokémon,Ken Sugimori
+bs-80,Defender,BS,Trainer,Keiji Kinebuchi
+bs-81,Energy Retrieval,BS,Trainer,Keiji Kinebuchi
+bs-82,Full Heal,BS,Trainer,Keiji Kinebuchi
+bs-83,Maintenance,BS,Trainer,Keiji Kinebuchi
+bs-84,PlusPower,BS,Trainer,Keiji Kinebuchi
+bs-85,Pokémon Center,BS,Trainer,Keiji Kinebuchi
+bs-86,Pokémon Flute,BS,Trainer,Keiji Kinebuchi
+bs-87,Pokédex,BS,Trainer,Keiji Kinebuchi
+bs-88,Professor Oak,BS,Trainer,Ken Sugimori
+bs-89,Revive,BS,Trainer,Keiji Kinebuchi
+bs-9,Magneton,BS,Pokémon,Keiji Kinebuchi
+bs-90,Super Potion,BS,Trainer,Keiji Kinebuchi
+bs-91,Bill,BS,Trainer,Ken Sugimori
+bs-92,Energy Removal,BS,Trainer,Keiji Kinebuchi
+bs-93,Gust of Wind,BS,Trainer,Keiji Kinebuchi
+bs-94,Potion,BS,Trainer,Keiji Kinebuchi
+bs-95,Switch,BS,Trainer,Keiji Kinebuchi
+bs-96,Double Colorless Energy,BS,Energy,Keiji Kinebuchi
+bs-97,Fighting Energy,BS,Energy,Keiji Kinebuchi
+bs-98,Fire Energy,BS,Energy,Keiji Kinebuchi
+bs-99,Grass Energy,BS,Energy,Keiji Kinebuchi
+cel-1,Ho-Oh,CEL,Pokémon,Kouki Saitou
+cel-10,Zekrom,CEL,Pokémon,Aya Kusube
+cel-109,Luxray GL LV.X,CEL,Pokémon,Mitsuhiro Arita
+cel-11,Mew,CEL,Pokémon,Yuu Nishida
+cel-113,Reshiram,CEL,Pokémon,5ban Graphics
+cel-114,Zekrom,CEL,Pokémon,5ban Graphics
+cel-12,Xerneas,CEL,Pokémon,AKIRA EGAWA
+cel-13,Cosmog,CEL,Pokémon,kirisAki
+cel-14,Cosmoem,CEL,Pokémon,kirisAki
+cel-15,Lunala,CEL,Pokémon,kirisAki
+cel-16,Zacian V,CEL,Pokémon,Mitsuhiro Arita
+cel-17,Groudon,CEL,Pokémon,Ryuta Fuse
+cel-18,Zamazenta V,CEL,Pokémon,Mitsuhiro Arita
+cel-19,Yveltal,CEL,Pokémon,AKIRA EGAWA
+cel-2,Reshiram,CEL,Pokémon,Aya Kusube
+cel-20,Dialga,CEL,Pokémon,5ban Graphics
+cel-21,Solgaleo,CEL,Pokémon,kirisAki
+cel-22,Lugia,CEL,Pokémon,Kouki Saitou
+cel-23,Professor's Research (Professor Oak),CEL,Trainer,KIYOTAKA OSHIYAMA
+cel-24,Professor's Research (Professor Oak),CEL,Trainer,Ken Sugimori
+cel-25,Mew,CEL,Pokémon,Saki Hayashiro
+cel-3,Kyogre,CEL,Pokémon,Ryuta Fuse
+cel-4,Palkia,CEL,Pokémon,5ban Graphics
+cel-5,Pikachu,CEL,Pokémon,Mitsuhiro Arita
+cel-54,Mewtwo-EX,CEL,Pokémon,Shizurow
+cel-6,Flying Pikachu V,CEL,Pokémon,aky CG Works
+cel-60,Tapu Lele-GX,CEL,Pokémon,5ban Graphics
+cel-66,Shining Magikarp,CEL,Pokémon,Ken Sugimori
+cel-7,Flying Pikachu VMAX,CEL,Pokémon,aky CG Works
+cel-73,Imposter Professor Oak,CEL,Trainer,Ken Sugimori
+cel-76,M Rayquaza-EX,CEL,Pokémon,5ban Graphics
+cel-8,Surfing Pikachu V,CEL,Pokémon,aky CG Works
+cel-86,Rocket's Admin.,CEL,Trainer,Ken Sugimori
+cel-88,Mew ex,CEL,Pokémon,Ryo Ueda
+cel-9,Surfing Pikachu VMAX,CEL,Pokémon,aky CG Works
+cel-93,Gardevoir ex δ,CEL,Pokémon,Masahiko Ishii
+cel-97,Xerneas-EX,CEL,Pokémon,5ban Graphics
+celhs-107,Donphan,CEL HS,Pokémon,Kent Kanetsuna
+celsv-145,Garchomp [C] LV.X,CEL SV,Pokémon,Shizurow
+evo-1,Venusaur-EX,EVO,Pokémon,Eske Yoshinob
+evo-10,Charmeleon,EVO,Pokémon,Mitsuhiro Arita
+evo-100,M Venusaur-EX,EVO,Pokémon,5ban Graphics
+evo-101,M Charizard-EX,EVO,Pokémon,5ban Graphics
+evo-102,M Blastoise-EX,EVO,Pokémon,5ban Graphics
+evo-103,Mewtwo-EX,EVO,Pokémon,Ryo Ueda
+evo-104,Pidgeot-EX,EVO,Pokémon,Ryo Ueda
+evo-105,M Pidgeot-EX,EVO,Pokémon,5ban Graphics
+evo-106,Dragonite-EX,EVO,Pokémon,Ryo Ueda
+evo-107,Brock's Grit,EVO,Trainer,Hitoshi Ariga
+evo-108,Misty's Determination,EVO,Trainer,Megumi Mizutani
+evo-109,ナッシー[Exeggutor],EVO,Pokémon,Dr.Ooyama
+evo-11,Charizard,EVO,Pokémon,Mitsuhiro Arita
+evo-110,Flying Pikachu,EVO,Pokémon,Toshinao Aoki
+evo-111,Surfing Pikachu,EVO,Pokémon,Toshinao Aoki
+evo-112,Imakuni?'s Doduo,EVO,Pokémon,Imakuni?
+evo-113,Here Comes Team Rocket!,EVO,Trainer,Ken Sugimori
+evo-12,Charizard-EX,EVO,Pokémon,PLANETA
+evo-13,M Charizard-EX,EVO,Pokémon,5ban Graphics
+evo-14,Vulpix,EVO,Pokémon,Ken Sugimori
+evo-15,Ninetales,EVO,Pokémon,Ken Sugimori
+evo-16,Ninetales BREAK,EVO,Pokémon,5ban Graphics
+evo-17,Growlithe,EVO,Pokémon,Ken Sugimori
+evo-18,Arcanine,EVO,Pokémon,Ken Sugimori
+evo-19,Ponyta,EVO,Pokémon,Ken Sugimori
+evo-2,M Venusaur-EX,EVO,Pokémon,5ban Graphics
+evo-20,Magmar,EVO,Pokémon,Ken Sugimori
+evo-21,Blastoise-EX,EVO,Pokémon,Eske Yoshinob
+evo-22,M Blastoise-EX,EVO,Pokémon,5ban Graphics
+evo-23,Poliwag,EVO,Pokémon,Ken Sugimori
+evo-24,Poliwhirl,EVO,Pokémon,Ken Sugimori
+evo-25,Poliwrath,EVO,Pokémon,Ken Sugimori
+evo-26,Slowbro-EX,EVO,Pokémon,Ayaka Yoshida
+evo-27,M Slowbro-EX,EVO,Pokémon,5ban Graphics
+evo-28,Seel,EVO,Pokémon,Ken Sugimori
+evo-29,Dewgong,EVO,Pokémon,Mitsuhiro Arita
+evo-3,Caterpie,EVO,Pokémon,Ken Sugimori
+evo-30,Staryu,EVO,Pokémon,Keiji Kinebuchi
+evo-31,Starmie,EVO,Pokémon,Keiji Kinebuchi
+evo-32,Starmie BREAK,EVO,Pokémon,5ban Graphics
+evo-33,Magikarp,EVO,Pokémon,Mitsuhiro Arita
+evo-34,Gyarados,EVO,Pokémon,Mitsuhiro Arita
+evo-35,Pikachu,EVO,Pokémon,Mitsuhiro Arita
+evo-36,Raichu,EVO,Pokémon,Ken Sugimori
+evo-37,Magnemite,EVO,Pokémon,Keiji Kinebuchi
+evo-38,Magneton,EVO,Pokémon,Keiji Kinebuchi
+evo-39,Voltorb,EVO,Pokémon,Keiji Kinebuchi
+evo-4,Metapod,EVO,Pokémon,Ken Sugimori
+evo-40,Electrode,EVO,Pokémon,Keiji Kinebuchi
+evo-41,Electabuzz,EVO,Pokémon,Ken Sugimori
+evo-42,Zapdos,EVO,Pokémon,Ken Sugimori
+evo-43,Nidoran ♂,EVO,Pokémon,Ken Sugimori
+evo-44,Nidorino,EVO,Pokémon,Mitsuhiro Arita
+evo-45,Nidoking,EVO,Pokémon,Ken Sugimori
+evo-46,Nidoking BREAK,EVO,Pokémon,5ban Graphics
+evo-47,Gastly,EVO,Pokémon,Keiji Kinebuchi
+evo-48,Haunter,EVO,Pokémon,Keiji Kinebuchi
+evo-49,Drowzee,EVO,Pokémon,Ken Sugimori
+evo-5,Weedle,EVO,Pokémon,Mitsuhiro Arita
+evo-50,Koffing,EVO,Pokémon,Mitsuhiro Arita
+evo-51,Mewtwo,EVO,Pokémon,Ken Sugimori
+evo-52,Mewtwo-EX,EVO,Pokémon,Eske Yoshinob
+evo-53,Mew,EVO,Pokémon,Ken Sugimori
+evo-54,Sandshrew,EVO,Pokémon,Ken Sugimori
+evo-55,Diglett,EVO,Pokémon,Keiji Kinebuchi
+evo-56,Dugtrio,EVO,Pokémon,Keiji Kinebuchi
+evo-57,Machop,EVO,Pokémon,Mitsuhiro Arita
+evo-58,Machoke,EVO,Pokémon,Ken Sugimori
+evo-59,Machamp,EVO,Pokémon,Ken Sugimori
+evo-6,Kakuna,EVO,Pokémon,Keiji Kinebuchi
+evo-60,Machamp BREAK,EVO,Pokémon,5ban Graphics
+evo-61,Onix,EVO,Pokémon,Ken Sugimori
+evo-62,Hitmonchan,EVO,Pokémon,Ken Sugimori
+evo-63,Clefairy,EVO,Pokémon,Ken Sugimori
+evo-64,Pidgeot-EX,EVO,Pokémon,Eske Yoshinob
+evo-65,M Pidgeot-EX,EVO,Pokémon,5ban Graphics
+evo-66,Rattata,EVO,Pokémon,Mitsuhiro Arita
+evo-67,Raticate,EVO,Pokémon,Ken Sugimori
+evo-68,Farfetch'd,EVO,Pokémon,Ken Sugimori
+evo-69,Doduo,EVO,Pokémon,Mitsuhiro Arita
+evo-7,Beedrill,EVO,Pokémon,Ken Sugimori
+evo-70,Chansey,EVO,Pokémon,Ken Sugimori
+evo-71,Porygon,EVO,Pokémon,Tomoaki Imakuni
+evo-72,Dragonite-EX,EVO,Pokémon,Ayaka Yoshida
+evo-73,Blastoise Spirit Link,EVO,Trainer,5ban Graphics
+evo-74,Brock's Grit,EVO,Trainer,Ken Sugimori
+evo-75,Charizard Spirit Link,EVO,Trainer,5ban Graphics
+evo-76,Devolution Spray,EVO,Trainer,Keiji Kinebuchi
+evo-77,Energy Retrieval,EVO,Trainer,Keiji Kinebuchi
+evo-78,Full Heal,EVO,Trainer,Keiji Kinebuchi
+evo-79,Maintenance,EVO,Trainer,Keiji Kinebuchi
+evo-8,Tangela,EVO,Pokémon,Mitsuhiro Arita
+evo-80,Misty's Determination,EVO,Trainer,Ken Sugimori
+evo-81,Pidgeot Spirit Link,EVO,Trainer,5ban Graphics
+evo-82,Pokédex,EVO,Trainer,Keiji Kinebuchi
+evo-83,Potion,EVO,Trainer,Keiji Kinebuchi
+evo-84,Professor Oak's Hint,EVO,Trainer,Ken Sugimori
+evo-85,Revive,EVO,Trainer,Keiji Kinebuchi
+evo-86,Slowbro Spirit Link,EVO,Trainer,5ban Graphics
+evo-87,Super Potion,EVO,Trainer,Keiji Kinebuchi
+evo-88,Switch,EVO,Trainer,Keiji Kinebuchi
+evo-89,Venusaur Spirit Link,EVO,Trainer,5ban Graphics
+evo-9,Charmander,EVO,Pokémon,Mitsuhiro Arita
+evo-90,Double Colorless Energy,EVO,Energy,Keiji Kinebuchi
+evo-91,Grass Energy,EVO,Energy,
+evo-92,Fire Energy,EVO,Energy,
+evo-93,Water Energy,EVO,Energy,
+evo-94,Lightning Energy,EVO,Energy,
+evo-95,Psychic Energy,EVO,Energy,
+evo-96,Fighting Energy,EVO,Energy,
+evo-97,Darkness Energy,EVO,Energy,
+evo-98,Metal Energy,EVO,Energy,
+evo-99,Fairy Energy,EVO,Energy,
+fo-1,Aerodactyl,FO,Pokémon,Kagemaru Himeno
+fo-10,Lapras,FO,Pokémon,Ken Sugimori
+fo-11,Magneton,FO,Pokémon,Ken Sugimori
+fo-12,Moltres,FO,Pokémon,Mitsuhiro Arita
+fo-13,Muk,FO,Pokémon,Mitsuhiro Arita
+fo-14,Raichu,FO,Pokémon,Mitsuhiro Arita
+fo-15,Zapdos,FO,Pokémon,Mitsuhiro Arita
+fo-16,Aerodactyl,FO,Pokémon,Kagemaru Himeno
+fo-17,Articuno,FO,Pokémon,Mitsuhiro Arita
+fo-18,Ditto,FO,Pokémon,Keiji Kinebuchi
+fo-19,Dragonite,FO,Pokémon,Kagemaru Himeno
+fo-2,Articuno,FO,Pokémon,Mitsuhiro Arita
+fo-20,Gengar,FO,Pokémon,Keiji Kinebuchi
+fo-21,Haunter,FO,Pokémon,Ken Sugimori
+fo-22,Hitmonlee,FO,Pokémon,Ken Sugimori
+fo-23,Hypno,FO,Pokémon,Ken Sugimori
+fo-24,Kabutops,FO,Pokémon,Ken Sugimori
+fo-25,Lapras,FO,Pokémon,Ken Sugimori
+fo-26,Magneton,FO,Pokémon,Ken Sugimori
+fo-27,Moltres,FO,Pokémon,Mitsuhiro Arita
+fo-28,Muk,FO,Pokémon,Mitsuhiro Arita
+fo-29,Raichu,FO,Pokémon,Mitsuhiro Arita
+fo-3,Ditto,FO,Pokémon,Keiji Kinebuchi
+fo-30,Zapdos,FO,Pokémon,Mitsuhiro Arita
+fo-31,Arbok,FO,Pokémon,Ken Sugimori
+fo-32,Cloyster,FO,Pokémon,Kagemaru Himeno
+fo-33,Gastly,FO,Pokémon,Mitsuhiro Arita
+fo-34,Golbat,FO,Pokémon,Kagemaru Himeno
+fo-35,Golduck,FO,Pokémon,Kagemaru Himeno
+fo-36,Golem,FO,Pokémon,Kagemaru Himeno
+fo-37,Graveler,FO,Pokémon,Kagemaru Himeno
+fo-38,Kingler,FO,Pokémon,Kagemaru Himeno
+fo-39,Magmar,FO,Pokémon,Mitsuhiro Arita
+fo-4,Dragonite,FO,Pokémon,Kagemaru Himeno
+fo-40,Omastar,FO,Pokémon,Ken Sugimori
+fo-41,Sandslash,FO,Pokémon,Ken Sugimori
+fo-42,Seadra,FO,Pokémon,Ken Sugimori
+fo-43,Slowbro,FO,Pokémon,Kagemaru Himeno
+fo-44,Tentacruel,FO,Pokémon,Kagemaru Himeno
+fo-45,Weezing,FO,Pokémon,Mitsuhiro Arita
+fo-46,Ekans,FO,Pokémon,Kagemaru Himeno
+fo-47,Geodude,FO,Pokémon,Kagemaru Himeno
+fo-48,Grimer,FO,Pokémon,Mitsuhiro Arita
+fo-49,Horsea,FO,Pokémon,Mitsuhiro Arita
+fo-5,Gengar,FO,Pokémon,Keiji Kinebuchi
+fo-50,Kabuto,FO,Pokémon,Ken Sugimori
+fo-51,Krabby,FO,Pokémon,Mitsuhiro Arita
+fo-52,Omanyte,FO,Pokémon,Kagemaru Himeno
+fo-53,Psyduck,FO,Pokémon,Kagemaru Himeno
+fo-54,Shellder,FO,Pokémon,Mitsuhiro Arita
+fo-55,Slowpoke,FO,Pokémon,Miki Tanaka
+fo-56,Tentacool,FO,Pokémon,Kagemaru Himeno
+fo-57,Zubat,FO,Pokémon,Kagemaru Himeno
+fo-58,Mr. Fuji,FO,Trainer,Ken Sugimori
+fo-59,Energy Search,FO,Trainer,Keiji Kinebuchi
+fo-6,Haunter,FO,Pokémon,Ken Sugimori
+fo-60,Gambler,FO,Trainer,Keiji Kinebuchi
+fo-61,Recycle,FO,Trainer,Keiji Kinebuchi
+fo-62,Mysterious Fossil,FO,Trainer,Keiji Kinebuchi
+fo-7,Hitmonlee,FO,Pokémon,Ken Sugimori
+fo-8,Hypno,FO,Pokémon,Ken Sugimori
+fo-9,Kabutops,FO,Pokémon,Ken Sugimori
+gc-1,Blaine's Arcanine,GC,Pokémon,Ken Sugimori
+gc-10,Koga's Ditto,GC,Pokémon,Ken Sugimori
+gc-100,Blaine,GC,Trainer,Ken Sugimori
+gc-101,Brock's Protection,GC,Trainer,Ken Sugimori
+gc-102,Chaos Gym,GC,Trainer,Keiji Kinebuchi
+gc-103,Erika's Kindness,GC,Trainer,Ken Sugimori
+gc-104,Giovanni,GC,Trainer,Ken Sugimori
+gc-105,Giovanni's Last Resort,GC,Trainer,Ken Sugimori
+gc-106,Koga,GC,Trainer,Ken Sugimori
+gc-107,Lt. Surge's Secret Plan,GC,Trainer,Ken Sugimori
+gc-108,Misty's Wish,GC,Trainer,Ken Sugimori
+gc-109,Resistance Gym,GC,Trainer,Keiji Kinebuchi
+gc-11,Lt. Surge's Raichu,GC,Pokémon,Ken Sugimori
+gc-110,Sabrina,GC,Trainer,Ken Sugimori
+gc-111,Blaine's Quiz #2,GC,Trainer,Ken Sugimori
+gc-112,Blaine's Quiz #3,GC,Trainer,Ken Sugimori
+gc-113,Cinnabar City Gym,GC,Trainer,Keiji Kinebuchi
+gc-114,Fuchsia City Gym,GC,Trainer,Keiji Kinebuchi
+gc-115,Koga's Ninja Trick,GC,Trainer,Sumiyoshi Kizuki
+gc-116,Master Ball,GC,Trainer,Keiji Kinebuchi
+gc-117,Max Revive,GC,Trainer,Hikaru Koike
+gc-118,Misty's Tears,GC,Trainer,Ken Sugimori
+gc-119,Rocket's Minefield Gym,GC,Trainer,Keiji Kinebuchi
+gc-12,Misty's Golduck,GC,Pokémon,Ken Sugimori
+gc-120,Rocket's Secret Experiment,GC,Trainer,Ken Sugimori
+gc-121,Sabrina's Psychic Control,GC,Trainer,Ken Sugimori
+gc-122,Saffron City Gym,GC,Trainer,Keiji Kinebuchi
+gc-123,Viridian City Gym,GC,Trainer,Keiji Kinebuchi
+gc-124,Fervor,GC,Trainer,Ken Sugimori
+gc-125,Transparent Walls,GC,Trainer,Keiji Kinebuchi
+gc-126,Warp Point,GC,Trainer,Keiji Kinebuchi
+gc-127,Fighting Energy,GC,Energy,Keiji Kinebuchi
+gc-128,Fire Energy,GC,Energy,Keiji Kinebuchi
+gc-129,Grass Energy,GC,Energy,Keiji Kinebuchi
+gc-13,Misty's Gyarados,GC,Pokémon,Ken Sugimori
+gc-130,Lightning Energy,GC,Energy,Keiji Kinebuchi
+gc-131,Psychic Energy,GC,Energy,Keiji Kinebuchi
+gc-132,Water Energy,GC,Energy,Keiji Kinebuchi
+gc-14,Rocket's Mewtwo,GC,Pokémon,Shin-ichi Yoshida
+gc-15,Rocket's Zapdos,GC,Pokémon,Shin-ichi Yoshida
+gc-16,Sabrina's Alakazam,GC,Pokémon,Ken Sugimori
+gc-17,Blaine,GC,Trainer,Ken Sugimori
+gc-18,Giovanni,GC,Trainer,Ken Sugimori
+gc-19,Koga,GC,Trainer,Ken Sugimori
+gc-2,Blaine's Charizard,GC,Pokémon,Ken Sugimori
+gc-20,Sabrina,GC,Trainer,Ken Sugimori
+gc-21,Blaine's Ninetales,GC,Pokémon,Ken Sugimori
+gc-22,Brock's Dugtrio,GC,Pokémon,Ken Sugimori
+gc-23,Giovanni's Nidoqueen,GC,Pokémon,Ken Sugimori
+gc-24,Giovanni's Pinsir,GC,Pokémon,Ken Sugimori
+gc-25,Koga's Arbok,GC,Pokémon,Ken Sugimori
+gc-26,Koga's Muk,GC,Pokémon,Ken Sugimori
+gc-27,Koga's Pidgeotto,GC,Pokémon,Ken Sugimori
+gc-28,Lt. Surge's Jolteon,GC,Pokémon,Ken Sugimori
+gc-29,Sabrina's Gengar,GC,Pokémon,Ken Sugimori
+gc-3,Brock's Ninetales,GC,Pokémon,Ken Sugimori
+gc-30,Sabrina's Golduck,GC,Pokémon,Ken Sugimori
+gc-31,Blaine's Charmeleon,GC,Pokémon,Ken Sugimori
+gc-32,Blaine's Dodrio,GC,Pokémon,Ken Sugimori
+gc-33,Blaine's Rapidash,GC,Pokémon,Ken Sugimori
+gc-34,Brock's Graveler,GC,Pokémon,Atsuko Nishida
+gc-35,Brock's Primeape,GC,Pokémon,Ken Sugimori
+gc-36,Brock's Sandslash,GC,Pokémon,Atsuko Nishida
+gc-37,Brock's Vulpix,GC,Pokémon,Ken Sugimori
+gc-38,Erika's Bellsprout,GC,Pokémon,Ken Sugimori
+gc-39,Erika's Bulbasaur,GC,Pokémon,Ken Sugimori
+gc-4,Erika's Venusaur,GC,Pokémon,Ken Sugimori
+gc-40,Erika's Clefairy,GC,Pokémon,Atsuko Nishida
+gc-41,Erika's Ivysaur,GC,Pokémon,Ken Sugimori
+gc-42,Giovanni's Machoke,GC,Pokémon,Ken Sugimori
+gc-43,Giovanni's Meowth,GC,Pokémon,Atsuko Nishida
+gc-44,Giovanni's Nidorina,GC,Pokémon,Ken Sugimori
+gc-45,Giovanni's Nidorino,GC,Pokémon,Ken Sugimori
+gc-46,Koga's Golbat,GC,Pokémon,Ken Sugimori
+gc-47,Koga's Kakuna,GC,Pokémon,Ken Sugimori
+gc-48,Koga's Koffing,GC,Pokémon,Ken Sugimori
+gc-49,Koga's Pidgey,GC,Pokémon,Atsuko Nishida
+gc-5,Giovanni's Gyarados,GC,Pokémon,Ken Sugimori
+gc-50,Koga's Weezing,GC,Pokémon,Ken Sugimori
+gc-51,Lt. Surge's Eevee,GC,Pokémon,Ken Sugimori
+gc-52,Lt. Surge's Electrode,GC,Pokémon,Ken Sugimori
+gc-53,Lt. Surge's Raticate,GC,Pokémon,Ken Sugimori
+gc-54,Misty's Dewgong,GC,Pokémon,Ken Sugimori
+gc-55,Sabrina's Haunter,GC,Pokémon,Ken Sugimori
+gc-56,Sabrina's Hypno,GC,Pokémon,Ken Sugimori
+gc-57,Sabrina's Jynx,GC,Pokémon,Atsuko Nishida
+gc-58,Sabrina's Kadabra,GC,Pokémon,Ken Sugimori
+gc-59,Sabrina's Mr. Mime,GC,Pokémon,Ken Sugimori
+gc-6,Giovanni's Machamp,GC,Pokémon,Ken Sugimori
+gc-60,Blaine's Charmander,GC,Pokémon,Ken Sugimori
+gc-61,Blaine's Doduo,GC,Pokémon,Ken Sugimori
+gc-62,Blaine's Growlithe,GC,Pokémon,Ken Sugimori
+gc-63,Blaine's Mankey,GC,Pokémon,Atsuko Nishida
+gc-64,Blaine's Ponyta,GC,Pokémon,Ken Sugimori
+gc-65,Blaine's Rhyhorn,GC,Pokémon,Ken Sugimori
+gc-66,Blaine's Vulpix,GC,Pokémon,Ken Sugimori
+gc-67,Brock's Diglett,GC,Pokémon,Ken Sugimori
+gc-68,Brock's Geodude,GC,Pokémon,Ken Sugimori
+gc-69,Erika's Jigglypuff,GC,Pokémon,Ken Sugimori
+gc-7,Giovanni's Nidoking,GC,Pokémon,Ken Sugimori
+gc-70,Erika's Oddish,GC,Pokémon,Ken Sugimori
+gc-71,Erika's Paras,GC,Pokémon,Ken Sugimori
+gc-72,Giovanni's Machop,GC,Pokémon,Ken Sugimori
+gc-73,Giovanni's Magikarp,GC,Pokémon,Ken Sugimori
+gc-74,Giovanni's Meowth,GC,Pokémon,Ken Sugimori
+gc-75,Giovanni's Nidoran ♀,GC,Pokémon,Ken Sugimori
+gc-76,Giovanni's Nidoran ♂,GC,Pokémon,Ken Sugimori
+gc-77,Koga's Ekans,GC,Pokémon,Ken Sugimori
+gc-78,Koga's Grimer,GC,Pokémon,Ken Sugimori
+gc-79,Koga's Koffing,GC,Pokémon,Ken Sugimori
+gc-8,Giovanni's Persian,GC,Pokémon,Ken Sugimori
+gc-80,Koga's Pidgey,GC,Pokémon,Ken Sugimori
+gc-81,Koga's Tangela,GC,Pokémon,Atsuko Nishida
+gc-82,Koga's Weedle,GC,Pokémon,Ken Sugimori
+gc-83,Koga's Zubat,GC,Pokémon,Ken Sugimori
+gc-84,Lt. Surge's Pikachu,GC,Pokémon,Atsuko Nishida
+gc-85,Lt. Surge's Rattata,GC,Pokémon,Atsuko Nishida
+gc-86,Lt. Surge's Voltorb,GC,Pokémon,Atsuko Nishida
+gc-87,Misty's Horsea,GC,Pokémon,Ken Sugimori
+gc-88,Misty's Magikarp,GC,Pokémon,Ken Sugimori
+gc-89,Misty's Poliwag,GC,Pokémon,Ken Sugimori
+gc-9,Koga's Beedrill,GC,Pokémon,Ken Sugimori
+gc-90,Misty's Psyduck,GC,Pokémon,Ken Sugimori
+gc-91,Misty's Seel,GC,Pokémon,Ken Sugimori
+gc-92,Misty's Staryu,GC,Pokémon,Ken Sugimori
+gc-93,Sabrina's Abra,GC,Pokémon,Ken Sugimori
+gc-94,Sabrina's Abra,GC,Pokémon,Ken Sugimori
+gc-95,Sabrina's Drowzee,GC,Pokémon,Ken Sugimori
+gc-96,Sabrina's Gastly,GC,Pokémon,Ken Sugimori
+gc-97,Sabrina's Gastly,GC,Pokémon,Atsuko Nishida
+gc-98,Sabrina's Porygon,GC,Pokémon,Ken Sugimori
+gc-99,Sabrina's Psyduck,GC,Pokémon,Ken Sugimori
+gh-1,Blaine's Moltres,GH,Pokémon,Ken Sugimori
+gh-10,Misty's Tentacruel,GH,Pokémon,Ken Sugimori
+gh-100,Erika,GH,Trainer,Ken Sugimori
+gh-101,Lt. Surge,GH,Trainer,Ken Sugimori
+gh-102,Misty,GH,Trainer,Ken Sugimori
+gh-103,No Removal Gym,GH,Trainer,Keiji Kinebuchi
+gh-104,The Rocket's Training Gym,GH,Trainer,Keiji Kinebuchi
+gh-105,Blaine's Last Resort,GH,Trainer,Ken Sugimori
+gh-106,Brock's Training Method,GH,Trainer,Ken Sugimori
+gh-107,Celadon City Gym,GH,Trainer,Keiji Kinebuchi
+gh-108,Cerulean City Gym,GH,Trainer,Keiji Kinebuchi
+gh-109,Erika's Maids,GH,Trainer,Ken Sugimori
+gh-11,Rocket's Hitmonchan,GH,Pokémon,Ken Sugimori
+gh-110,Erika's Perfume,GH,Trainer,Ken Sugimori
+gh-111,Good Manners,GH,Trainer,Ken Sugimori
+gh-112,Lt. Surge's Treaty,GH,Trainer,Ken Sugimori
+gh-113,Minion of Team Rocket,GH,Trainer,Ken Sugimori
+gh-114,Misty's Wrath,GH,Trainer,Ken Sugimori
+gh-115,Pewter City Gym,GH,Trainer,Keiji Kinebuchi
+gh-116,Recall,GH,Trainer,Sumiyoshi Kizuki
+gh-117,Sabrina's ESP,GH,Trainer,Ken Sugimori
+gh-118,Secret Mission,GH,Trainer,Ken Sugimori
+gh-119,Tickling Machine,GH,Trainer,Sumiyoshi Kizuki
+gh-12,Rocket's Moltres,GH,Pokémon,Ken Sugimori
+gh-120,Vermilion City Gym,GH,Trainer,Keiji Kinebuchi
+gh-121,Blaine's Gamble,GH,Trainer,Ken Sugimori
+gh-122,Energy Flow,GH,Trainer,Keiji Kinebuchi
+gh-123,Misty's Duel,GH,Trainer,Ken Sugimori
+gh-124,Narrow Gym,GH,Trainer,Keiji Kinebuchi
+gh-125,Sabrina's Gaze,GH,Trainer,Ken Sugimori
+gh-126,Trash Exchange,GH,Trainer,Keiji Kinebuchi
+gh-127,Fighting Energy,GH,Energy,Keiji Kinebuchi
+gh-128,Fire Energy,GH,Energy,Keiji Kinebuchi
+gh-129,Grass Energy,GH,Energy,Keiji Kinebuchi
+gh-13,Rocket's Scyther,GH,Pokémon,Ken Sugimori
+gh-130,Lightning Energy,GH,Energy,Keiji Kinebuchi
+gh-131,Psychic Energy,GH,Energy,Keiji Kinebuchi
+gh-132,Water Energy,GH,Energy,Keiji Kinebuchi
+gh-14,Sabrina's Gengar,GH,Pokémon,Ken Sugimori
+gh-15,Brock,GH,Trainer,Ken Sugimori
+gh-16,Erika,GH,Trainer,Ken Sugimori
+gh-17,Lt. Surge,GH,Trainer,Ken Sugimori
+gh-18,Misty,GH,Trainer,Ken Sugimori
+gh-19,The Rocket's Trap,GH,Trainer,Ken Sugimori
+gh-2,Brock's Rhydon,GH,Pokémon,Ken Sugimori
+gh-20,Brock's Golem,GH,Pokémon,Ken Sugimori
+gh-21,Brock's Onix,GH,Pokémon,Benimaru Itoh
+gh-22,Brock's Rhyhorn,GH,Pokémon,Ken Sugimori
+gh-23,Brock's Sandslash,GH,Pokémon,Ken Sugimori
+gh-24,Brock's Zubat,GH,Pokémon,Ken Sugimori
+gh-25,Erika's Clefairy,GH,Pokémon,Ken Sugimori
+gh-26,Erika's Victreebel,GH,Pokémon,Ken Sugimori
+gh-27,Lt. Surge's Electabuzz,GH,Pokémon,Ken Sugimori
+gh-28,Lt. Surge's Raichu,GH,Pokémon,Ken Sugimori
+gh-29,Misty's Cloyster,GH,Pokémon,Ken Sugimori
+gh-3,Erika's Clefable,GH,Pokémon,Atsuko Nishida
+gh-30,Misty's Goldeen,GH,Pokémon,Ken Sugimori
+gh-31,Misty's Poliwrath,GH,Pokémon,Ken Sugimori
+gh-32,Misty's Tentacool,GH,Pokémon,Ken Sugimori
+gh-33,Rocket's Snorlax,GH,Pokémon,Shin-ichi Yoshida
+gh-34,Sabrina's Venomoth,GH,Pokémon,Ken Sugimori
+gh-35,Blaine's Growlithe,GH,Pokémon,Ken Sugimori
+gh-36,Blaine's Kangaskhan,GH,Pokémon,Ken Sugimori
+gh-37,Blaine's Magmar,GH,Pokémon,Ken Sugimori
+gh-38,Brock's Geodude,GH,Pokémon,Atsuko Nishida
+gh-39,Brock's Golbat,GH,Pokémon,Ken Sugimori
+gh-4,Erika's Dragonair,GH,Pokémon,Atsuko Nishida
+gh-40,Brock's Graveler,GH,Pokémon,Ken Sugimori
+gh-41,Brock's Lickitung,GH,Pokémon,Ken Sugimori
+gh-42,Erika's Dratini,GH,Pokémon,Ken Sugimori
+gh-43,Erika's Exeggcute,GH,Pokémon,Atsuko Nishida
+gh-44,Erika's Exeggutor,GH,Pokémon,Ken Sugimori
+gh-45,Erika's Gloom,GH,Pokémon,Ken Sugimori
+gh-46,Erika's Gloom,GH,Pokémon,Ken Sugimori
+gh-47,Erika's Oddish,GH,Pokémon,Atsuko Nishida
+gh-48,Erika's Weepinbell,GH,Pokémon,Atsuko Nishida
+gh-49,Erika's Weepinbell,GH,Pokémon,Ken Sugimori
+gh-5,Erika's Vileplume,GH,Pokémon,Ken Sugimori
+gh-50,Lt. Surge's Magnemite,GH,Pokémon,Atsuko Nishida
+gh-51,Lt. Surge's Raticate,GH,Pokémon,Ken Sugimori
+gh-52,Lt. Surge's Spearow,GH,Pokémon,Ken Sugimori
+gh-53,Misty's Poliwhirl,GH,Pokémon,Ken Sugimori
+gh-54,Misty's Psyduck,GH,Pokémon,Atsuko Nishida
+gh-55,Misty's Seaking,GH,Pokémon,Ken Sugimori
+gh-56,Misty's Starmie,GH,Pokémon,Ken Sugimori
+gh-57,Misty's Tentacool,GH,Pokémon,Ken Sugimori
+gh-58,Sabrina's Haunter,GH,Pokémon,Atsuko Nishida
+gh-59,Sabrina's Jynx,GH,Pokémon,Ken Sugimori
+gh-6,Lt. Surge's Electabuzz,GH,Pokémon,Ken Sugimori
+gh-60,Sabrina's Slowbro,GH,Pokémon,Ken Sugimori
+gh-61,Blaine's Charmander,GH,Pokémon,Ken Sugimori
+gh-62,Blaine's Growlithe,GH,Pokémon,Atsuko Nishida
+gh-63,Blaine's Ponyta,GH,Pokémon,Ken Sugimori
+gh-64,Blaine's Tauros,GH,Pokémon,Ken Sugimori
+gh-65,Blaine's Vulpix,GH,Pokémon,Ken Sugimori
+gh-66,Brock's Geodude,GH,Pokémon,Ken Sugimori
+gh-67,Brock's Mankey,GH,Pokémon,Atsuko Nishida
+gh-68,Brock's Mankey,GH,Pokémon,Ken Sugimori
+gh-69,Brock's Onix,GH,Pokémon,Ken Sugimori
+gh-7,Lt. Surge's Fearow,GH,Pokémon,Ken Sugimori
+gh-70,Brock's Rhyhorn,GH,Pokémon,Ken Sugimori
+gh-71,Brock's Sandshrew,GH,Pokémon,Ken Sugimori
+gh-72,Brock's Sandshrew,GH,Pokémon,Ken Sugimori
+gh-73,Brock's Vulpix,GH,Pokémon,Ken Sugimori
+gh-74,Brock's Zubat,GH,Pokémon,Atsuko Nishida
+gh-75,Erika's Bellsprout,GH,Pokémon,Atsuko Nishida
+gh-76,Erika's Bellsprout,GH,Pokémon,Ken Sugimori
+gh-77,Erika's Exeggcute,GH,Pokémon,Ken Sugimori
+gh-78,Erika's Oddish,GH,Pokémon,Ken Sugimori
+gh-79,Erika's Tangela,GH,Pokémon,Ken Sugimori
+gh-8,Lt. Surge's Magneton,GH,Pokémon,Ken Sugimori
+gh-80,Lt. Surge's Magnemite,GH,Pokémon,Ken Sugimori
+gh-81,Lt. Surge's Pikachu,GH,Pokémon,Ken Sugimori
+gh-82,Lt. Surge's Rattata,GH,Pokémon,Ken Sugimori
+gh-83,Lt. Surge's Spearow,GH,Pokémon,Atsuko Nishida
+gh-84,Lt. Surge's Voltorb,GH,Pokémon,Ken Sugimori
+gh-85,Misty's Goldeen,GH,Pokémon,Atsuko Nishida
+gh-86,Misty's Horsea,GH,Pokémon,Ken Sugimori
+gh-87,Misty's Poliwag,GH,Pokémon,Ken Sugimori
+gh-88,Misty's Seel,GH,Pokémon,Atsuko Nishida
+gh-89,Misty's Shellder,GH,Pokémon,Ken Sugimori
+gh-9,Misty's Seadra,GH,Pokémon,Atsuko Nishida
+gh-90,Misty's Staryu,GH,Pokémon,Ken Sugimori
+gh-91,Sabrina's Abra,GH,Pokémon,Ken Sugimori
+gh-92,Sabrina's Drowzee,GH,Pokémon,Atsuko Nishida
+gh-93,Sabrina's Gastly,GH,Pokémon,Ken Sugimori
+gh-94,Sabrina's Mr. Mime,GH,Pokémon,Ken Sugimori
+gh-95,Sabrina's Slowpoke,GH,Pokémon,Ken Sugimori
+gh-96,Sabrina's Venonat,GH,Pokémon,Ken Sugimori
+gh-97,Blaine's Quiz #1,GH,Trainer,Ken Sugimori
+gh-98,Brock,GH,Trainer,Ken Sugimori
+gh-99,Charity,GH,Trainer,Ken Sugimori
+ju-1,Clefable,JU,Pokémon,Mitsuhiro Arita
+ju-10,Scyther,JU,Pokémon,Ken Sugimori
+ju-11,Snorlax,JU,Pokémon,Ken Sugimori
+ju-12,Vaporeon,JU,Pokémon,Kagemaru Himeno
+ju-13,Venomoth,JU,Pokémon,Ken Sugimori
+ju-14,Victreebel,JU,Pokémon,Ken Sugimori
+ju-15,Vileplume,JU,Pokémon,Keiji Kinebuchi
+ju-16,Wigglytuff,JU,Pokémon,Mitsuhiro Arita
+ju-17,Clefable,JU,Pokémon,Mitsuhiro Arita
+ju-18,Electrode,JU,Pokémon,Mitsuhiro Arita
+ju-19,Flareon,JU,Pokémon,Kagemaru Himeno
+ju-2,Electrode,JU,Pokémon,Mitsuhiro Arita
+ju-20,Jolteon,JU,Pokémon,Kagemaru Himeno
+ju-21,Kangaskhan,JU,Pokémon,Mitsuhiro Arita
+ju-22,Mr. Mime,JU,Pokémon,Ken Sugimori
+ju-23,Nidoqueen,JU,Pokémon,Ken Sugimori
+ju-24,Pidgeot,JU,Pokémon,Kagemaru Himeno
+ju-25,Pinsir,JU,Pokémon,Kagemaru Himeno
+ju-26,Scyther,JU,Pokémon,Ken Sugimori
+ju-27,Snorlax,JU,Pokémon,Ken Sugimori
+ju-28,Vaporeon,JU,Pokémon,Kagemaru Himeno
+ju-29,Venomoth,JU,Pokémon,Ken Sugimori
+ju-3,Flareon,JU,Pokémon,Kagemaru Himeno
+ju-30,Victreebel,JU,Pokémon,Ken Sugimori
+ju-31,Vileplume,JU,Pokémon,Keiji Kinebuchi
+ju-32,Wigglytuff,JU,Pokémon,Mitsuhiro Arita
+ju-33,Butterfree,JU,Pokémon,Kagemaru Himeno
+ju-34,Dodrio,JU,Pokémon,Mitsuhiro Arita
+ju-35,Exeggutor,JU,Pokémon,Kagemaru Himeno
+ju-36,Fearow,JU,Pokémon,Mitsuhiro Arita
+ju-37,Gloom,JU,Pokémon,Keiji Kinebuchi
+ju-38,Lickitung,JU,Pokémon,Mitsuhiro Arita
+ju-39,Marowak,JU,Pokémon,Mitsuhiro Arita
+ju-4,Jolteon,JU,Pokémon,Kagemaru Himeno
+ju-40,Nidorina,JU,Pokémon,Ken Sugimori
+ju-41,Parasect,JU,Pokémon,Ken Sugimori
+ju-42,Persian,JU,Pokémon,Kagemaru Himeno
+ju-43,Primeape,JU,Pokémon,Kagemaru Himeno
+ju-44,Rapidash,JU,Pokémon,Mitsuhiro Arita
+ju-45,Rhydon,JU,Pokémon,Kagemaru Himeno
+ju-46,Seaking,JU,Pokémon,Kagemaru Himeno
+ju-47,Tauros,JU,Pokémon,Kagemaru Himeno
+ju-48,Weepinbell,JU,Pokémon,Kagemaru Himeno
+ju-49,Bellsprout,JU,Pokémon,Kagemaru Himeno
+ju-5,Kangaskhan,JU,Pokémon,Mitsuhiro Arita
+ju-50,Cubone,JU,Pokémon,Mitsuhiro Arita
+ju-51,Eevee,JU,Pokémon,Kagemaru Himeno
+ju-52,Exeggcute,JU,Pokémon,Mitsuhiro Arita
+ju-53,Goldeen,JU,Pokémon,Kagemaru Himeno
+ju-54,Jigglypuff,JU,Pokémon,Kagemaru Himeno
+ju-55,Mankey,JU,Pokémon,Kagemaru Himeno
+ju-56,Meowth,JU,Pokémon,Mitsuhiro Arita
+ju-57,Nidoran ♀,JU,Pokémon,Ken Sugimori
+ju-58,Oddish,JU,Pokémon,Keiji Kinebuchi
+ju-59,Paras,JU,Pokémon,Ken Sugimori
+ju-6,Mr. Mime,JU,Pokémon,Ken Sugimori
+ju-60,Pikachu,JU,Pokémon,Ken Sugimori
+ju-61,Rhyhorn,JU,Pokémon,Mitsuhiro Arita
+ju-62,Spearow,JU,Pokémon,Mitsuhiro Arita
+ju-63,Venonat,JU,Pokémon,Mitsuhiro Arita
+ju-64,Poké Ball,JU,Trainer,Keiji Kinebuchi
+ju-7,Nidoqueen,JU,Pokémon,Ken Sugimori
+ju-8,Pidgeot,JU,Pokémon,Kagemaru Himeno
+ju-9,Pinsir,JU,Pokémon,Kagemaru Himeno
+lc-1,Alakazam,LC,Pokémon,Ken Sugimori
+lc-10,Flareon,LC,Pokémon,Kagemaru Himeno
+lc-100,Full Heal Energy,LC,Energy,Keiji Kinebuchi
+lc-101,Potion Energy,LC,Energy,Keiji Kinebuchi
+lc-102,Pokémon Breeder,LC,Trainer,Ken Sugimori
+lc-103,Pokémon Trader,LC,Trainer,Ken Sugimori
+lc-104,Scoop Up,LC,Trainer,Keiji Kinebuchi
+lc-105,The Boss's Way,LC,Trainer,Ken Sugimori
+lc-106,Challenge!,LC,Trainer,Kagemaru Himeno
+lc-107,Energy Retrieval,LC,Trainer,Keiji Kinebuchi
+lc-108,Bill,LC,Trainer,Ken Sugimori
+lc-109,Mysterious Fossil,LC,Trainer,Keiji Kinebuchi
+lc-11,Gengar,LC,Pokémon,Keiji Kinebuchi
+lc-110,Potion,LC,Trainer,Keiji Kinebuchi
+lc-12,Gyarados,LC,Pokémon,Mitsuhiro Arita
+lc-13,Hitmonlee,LC,Pokémon,Ken Sugimori
+lc-14,Jolteon,LC,Pokémon,Kagemaru Himeno
+lc-15,Machamp,LC,Pokémon,Ken Sugimori
+lc-16,Muk,LC,Pokémon,Mitsuhiro Arita
+lc-17,Ninetales,LC,Pokémon,Ken Sugimori
+lc-18,Venusaur,LC,Pokémon,Mitsuhiro Arita
+lc-19,Zapdos,LC,Pokémon,Ken Sugimori
+lc-2,Articuno,LC,Pokémon,Mitsuhiro Arita
+lc-20,Beedrill,LC,Pokémon,Ken Sugimori
+lc-21,Butterfree,LC,Pokémon,Kagemaru Himeno
+lc-22,Electrode,LC,Pokémon,Mitsuhiro Arita
+lc-23,Exeggutor,LC,Pokémon,Kagemaru Himeno
+lc-24,Golem,LC,Pokémon,Kagemaru Himeno
+lc-25,Hypno,LC,Pokémon,Ken Sugimori
+lc-26,Jynx,LC,Pokémon,Ken Sugimori
+lc-27,Kabutops,LC,Pokémon,Ken Sugimori
+lc-28,Magneton,LC,Pokémon,Ken Sugimori
+lc-29,Mewtwo,LC,Pokémon,Christopher Rush
+lc-3,Charizard,LC,Pokémon,Mitsuhiro Arita
+lc-30,Moltres,LC,Pokémon,Mitsuhiro Arita
+lc-31,Nidoking,LC,Pokémon,Ken Sugimori
+lc-32,Nidoqueen,LC,Pokémon,Ken Sugimori
+lc-33,Pidgeot,LC,Pokémon,Kagemaru Himeno
+lc-34,Pidgeotto,LC,Pokémon,Ken Sugimori
+lc-35,Rhydon,LC,Pokémon,Kagemaru Himeno
+lc-36,Arcanine,LC,Pokémon,Ken Sugimori
+lc-37,Charmeleon,LC,Pokémon,Mitsuhiro Arita
+lc-38,Dark Dragonair,LC,Pokémon,Kagemaru Himeno
+lc-39,Dark Wartortle,LC,Pokémon,Kagemaru Himeno
+lc-4,Dark Blastoise,LC,Pokémon,Mitsuhiro Arita
+lc-40,Dewgong,LC,Pokémon,Mitsuhiro Arita
+lc-41,Dodrio,LC,Pokémon,Mitsuhiro Arita
+lc-42,Fearow,LC,Pokémon,Mitsuhiro Arita
+lc-43,Golduck,LC,Pokémon,Kagemaru Himeno
+lc-44,Graveler,LC,Pokémon,Kagemaru Himeno
+lc-45,Growlithe,LC,Pokémon,Ken Sugimori
+lc-46,Haunter,LC,Pokémon,Ken Sugimori
+lc-47,Ivysaur,LC,Pokémon,Ken Sugimori
+lc-48,Kabuto,LC,Pokémon,Ken Sugimori
+lc-49,Kadabra,LC,Pokémon,Ken Sugimori
+lc-5,Dark Dragonite,LC,Pokémon,Mitsuhiro Arita
+lc-50,Kakuna,LC,Pokémon,Keiji Kinebuchi
+lc-51,Machoke,LC,Pokémon,Ken Sugimori
+lc-52,Magikarp,LC,Pokémon,Mitsuhiro Arita
+lc-53,Meowth,LC,Pokémon,Mitsuhiro Arita
+lc-54,Metapod,LC,Pokémon,Ken Sugimori
+lc-55,Nidorina,LC,Pokémon,Ken Sugimori
+lc-56,Nidorino,LC,Pokémon,Mitsuhiro Arita
+lc-57,Omanyte,LC,Pokémon,Kagemaru Himeno
+lc-58,Omastar,LC,Pokémon,Ken Sugimori
+lc-59,Primeape,LC,Pokémon,Kagemaru Himeno
+lc-6,Dark Persian,LC,Pokémon,Shin-ichi Yoshida
+lc-60,Rapidash,LC,Pokémon,Mitsuhiro Arita
+lc-61,Raticate,LC,Pokémon,Ken Sugimori
+lc-62,Sandslash,LC,Pokémon,Ken Sugimori
+lc-63,Seadra,LC,Pokémon,Ken Sugimori
+lc-64,Snorlax,LC,Pokémon,Ken Sugimori
+lc-65,Tauros,LC,Pokémon,Kagemaru Himeno
+lc-66,Tentacruel,LC,Pokémon,Kagemaru Himeno
+lc-67,Abra,LC,Pokémon,Mitsuhiro Arita
+lc-68,Bulbasaur,LC,Pokémon,Mitsuhiro Arita
+lc-69,Caterpie,LC,Pokémon,Ken Sugimori
+lc-7,Dark Raichu,LC,Pokémon,Mitsuhiro Arita
+lc-70,Charmander,LC,Pokémon,Mitsuhiro Arita
+lc-71,Doduo,LC,Pokémon,Mitsuhiro Arita
+lc-72,Dratini,LC,Pokémon,Ken Sugimori
+lc-73,Drowzee,LC,Pokémon,Kagemaru Himeno
+lc-74,Eevee,LC,Pokémon,Kagemaru Himeno
+lc-75,Exeggcute,LC,Pokémon,Mitsuhiro Arita
+lc-76,Gastly,LC,Pokémon,Mitsuhiro Arita
+lc-77,Geodude,LC,Pokémon,Kagemaru Himeno
+lc-78,Grimer,LC,Pokémon,Mitsuhiro Arita
+lc-79,Machop,LC,Pokémon,Ken Sugimori
+lc-8,Dark Slowbro,LC,Pokémon,Mitsuhiro Arita
+lc-80,Magnemite,LC,Pokémon,Keiji Kinebuchi
+lc-81,Mankey,LC,Pokémon,Sumiyoshi Kizuki
+lc-82,Nidoran ♀,LC,Pokémon,Ken Sugimori
+lc-83,Nidoran ♂,LC,Pokémon,Ken Sugimori
+lc-84,Onix,LC,Pokémon,Ken Sugimori
+lc-85,Pidgey,LC,Pokémon,Ken Sugimori
+lc-86,Pikachu,LC,Pokémon,Ken Sugimori
+lc-87,Ponyta,LC,Pokémon,Ken Sugimori
+lc-88,Psyduck,LC,Pokémon,Mitsuhiro Arita
+lc-89,Rattata,LC,Pokémon,Mitsuhiro Arita
+lc-9,Dark Vaporeon,LC,Pokémon,Mitsuhiro Arita
+lc-90,Rhyhorn,LC,Pokémon,Mitsuhiro Arita
+lc-91,Sandshrew,LC,Pokémon,Ken Sugimori
+lc-92,Seel,LC,Pokémon,Ken Sugimori
+lc-93,Slowpoke,LC,Pokémon,Miki Tanaka
+lc-94,Spearow,LC,Pokémon,Mitsuhiro Arita
+lc-95,Squirtle,LC,Pokémon,Mitsuhiro Arita
+lc-96,Tentacool,LC,Pokémon,Kagemaru Himeno
+lc-97,Voltorb,LC,Pokémon,Keiji Kinebuchi
+lc-98,Vulpix,LC,Pokémon,Ken Sugimori
+lc-99,Weedle,LC,Pokémon,Mitsuhiro Arita
+nd-1,Espeon,ND,Pokémon,Atsuko Nishida
+nd-10,Scizor,ND,Pokémon,Kimiya Masago
+nd-11,Smeargle,ND,Pokémon,Hironobu Yoshida
+nd-12,Tyranitar,ND,Pokémon,Hironobu Yoshida
+nd-13,Umbreon,ND,Pokémon,Kimiya Masago
+nd-14,Unown [A],ND,Pokémon,CR CG gangs
+nd-15,Ursaring,ND,Pokémon,Naoyo Kimura
+nd-16,Wobbuffet,ND,Pokémon,Hironobu Yoshida
+nd-17,Yanma,ND,Pokémon,Atsuko Nishida
+nd-18,Beedrill,ND,Pokémon,Aya Kusube
+nd-19,Butterfree,ND,Pokémon,Atsuko Nishida
+nd-2,Forretress,ND,Pokémon,CR CG gangs
+nd-20,Espeon,ND,Pokémon,Naoyo Kimura
+nd-21,Forretress,ND,Pokémon,CR CG gangs
+nd-22,Hitmontop,ND,Pokémon,Sumiyoshi Kizuki
+nd-23,Houndoom,ND,Pokémon,Shin-ichi Yoshida
+nd-24,Houndour,ND,Pokémon,Aya Kusube
+nd-25,Kabutops,ND,Pokémon,Kimiya Masago
+nd-26,Magnemite,ND,Pokémon,"K. Hoshiba, CR CG gangs"
+nd-27,Politoed,ND,Pokémon,Tomokazu Komiya
+nd-28,Poliwrath,ND,Pokémon,Shin-ichi Yoshida
+nd-29,Scizor,ND,Pokémon,Kimiya Masago
+nd-3,Hitmontop,ND,Pokémon,Sumiyoshi Kizuki
+nd-30,Smeargle,ND,Pokémon,Hironobu Yoshida
+nd-31,Tyranitar,ND,Pokémon,Hironobu Yoshida
+nd-32,Umbreon,ND,Pokémon,Naoyo Kimura
+nd-33,Unown [A],ND,Pokémon,CR CG gangs
+nd-34,Ursaring,ND,Pokémon,Naoyo Kimura
+nd-35,Wobbuffet,ND,Pokémon,Hironobu Yoshida
+nd-36,Yanma,ND,Pokémon,Atsuko Nishida
+nd-37,Corsola,ND,Pokémon,Yuka Morii
+nd-38,Eevee,ND,Pokémon,Aya Kusube
+nd-39,Houndour,ND,Pokémon,Shin-ichi Yoshida
+nd-4,Houndoom,ND,Pokémon,Shin-ichi Yoshida
+nd-40,Igglybuff,ND,Pokémon,Miki Tanaka
+nd-41,Kakuna,ND,Pokémon,Yukiko Baba
+nd-42,Metapod,ND,Pokémon,Sumiyoshi Kizuki
+nd-43,Omastar,ND,Pokémon,Shin-ichi Yoshida
+nd-44,Poliwhirl,ND,Pokémon,Kagemaru Himeno
+nd-45,Pupitar,ND,Pokémon,Hironobu Yoshida
+nd-46,Scyther,ND,Pokémon,Kimiya Masago
+nd-47,Unown [D],ND,Pokémon,CR CG gangs
+nd-48,Unown [F],ND,Pokémon,CR CG gangs
+nd-49,Unown [M],ND,Pokémon,CR CG gangs
+nd-5,Houndour,ND,Pokémon,Aya Kusube
+nd-50,Unown [N],ND,Pokémon,CR CG gangs
+nd-51,Unown [U],ND,Pokémon,CR CG gangs
+nd-52,Xatu,ND,Pokémon,Sumiyoshi Kizuki
+nd-53,Caterpie,ND,Pokémon,Yuka Morii
+nd-54,Dunsparce,ND,Pokémon,Yukiko Baba
+nd-55,Hoppip,ND,Pokémon,Kagemaru Himeno
+nd-56,Kabuto,ND,Pokémon,Yuka Morii
+nd-57,Larvitar,ND,Pokémon,Hironobu Yoshida
+nd-58,Mareep,ND,Pokémon,Atsuko Nishida
+nd-59,Natu,ND,Pokémon,Sumiyoshi Kizuki
+nd-6,Kabutops,ND,Pokémon,Kimiya Masago
+nd-60,Omanyte,ND,Pokémon,Yuka Morii
+nd-61,Pineco,ND,Pokémon,Tomokazu Komiya
+nd-62,Poliwag,ND,Pokémon,Aya Kusube
+nd-63,Sentret,ND,Pokémon,Sumiyoshi Kizuki
+nd-64,Spinarak,ND,Pokémon,Yukiko Baba
+nd-65,Teddiursa,ND,Pokémon,Miki Tanaka
+nd-66,Tyrogue,ND,Pokémon,Miki Tanaka
+nd-67,Unown [E],ND,Pokémon,CR CG gangs
+nd-68,Unown [I],ND,Pokémon,CR CG gangs
+nd-69,Unown [O],ND,Pokémon,CR CG gangs
+nd-7,Magnemite,ND,Pokémon,"K. Hoshiba, CR CG gangs"
+nd-70,Weedle,ND,Pokémon,Miki Tanaka
+nd-71,Wooper,ND,Pokémon,Yukiko Baba
+nd-72,Fossil Egg,ND,Trainer,"K. Hoshiba, CR CG gangs"
+nd-73,Hyper Devolution Spray,ND,Trainer,"K. Hoshiba, CR CG gangs"
+nd-74,Ruin Wall,ND,Trainer,"""Big Mama"" Tagawa, CR CG gangs"
+nd-75,Energy Ark,ND,Trainer,"""Big Mama"" Tagawa & Benimaru Itoh"
+nd-8,Politoed,ND,Pokémon,Tomokazu Komiya
+nd-9,Poliwrath,ND,Pokémon,Shin-ichi Yoshida
+ng-1,Ampharos,NG,Pokémon,Ken Sugimori
+ng-10,Meganium,NG,Pokémon,Ken Sugimori
+ng-100,Double Gust,NG,Trainer,Tomokazu Komiya
+ng-101,Moo-Moo Milk,NG,Trainer,Tomokazu Komiya
+ng-102,Pokémon March,NG,Trainer,Tomokazu Komiya
+ng-103,Super Rod,NG,Trainer,Keiji Kinebuchi
+ng-104,Darkness Energy,NG,Energy,Milky Isobe
+ng-105,Recycle Energy,NG,Energy,Hideki Kazama
+ng-106,Fighting Energy,NG,Energy,Keiji Kinebuchi
+ng-107,Fire Energy,NG,Energy,Keiji Kinebuchi
+ng-108,Grass Energy,NG,Energy,Keiji Kinebuchi
+ng-109,Lightning Energy,NG,Energy,Keiji Kinebuchi
+ng-11,Meganium,NG,Pokémon,Ken Sugimori
+ng-110,Psychic Energy,NG,Energy,Keiji Kinebuchi
+ng-111,Water Energy,NG,Energy,Keiji Kinebuchi
+ng-12,Pichu,NG,Pokémon,Ken Sugimori
+ng-13,Skarmory,NG,Pokémon,Ken Sugimori
+ng-14,Slowking,NG,Pokémon,Ken Sugimori
+ng-15,Steelix,NG,Pokémon,Ken Sugimori
+ng-16,Togetic,NG,Pokémon,Ken Sugimori
+ng-17,Typhlosion,NG,Pokémon,Shin-ichi Yoshida
+ng-18,Typhlosion,NG,Pokémon,Ken Sugimori
+ng-19,Metal Energy,NG,Energy,Milky Isobe
+ng-2,Azumarill,NG,Pokémon,Ken Sugimori
+ng-20,Cleffa,NG,Pokémon,Kagemaru Himeno
+ng-21,Donphan,NG,Pokémon,Ken Sugimori
+ng-22,Elekid,NG,Pokémon,Miki Tanaka
+ng-23,Magby,NG,Pokémon,Ken Sugimori
+ng-24,Murkrow,NG,Pokémon,Shin-ichi Yoshida
+ng-25,Sneasel,NG,Pokémon,Ken Sugimori
+ng-26,Aipom,NG,Pokémon,Hironobu Yoshida
+ng-27,Ariados,NG,Pokémon,Ken Sugimori
+ng-28,Bayleef,NG,Pokémon,Ken Sugimori
+ng-29,Bayleef,NG,Pokémon,Ken Sugimori
+ng-3,Bellossom,NG,Pokémon,Atsuko Nishida
+ng-30,Clefairy,NG,Pokémon,Sumiyoshi Kizuki
+ng-31,Croconaw,NG,Pokémon,Ken Sugimori
+ng-32,Croconaw,NG,Pokémon,Ken Sugimori
+ng-33,Electabuzz,NG,Pokémon,Shin-ichi Yoshida
+ng-34,Flaaffy,NG,Pokémon,Ken Sugimori
+ng-35,Furret,NG,Pokémon,Ken Sugimori
+ng-36,Gloom,NG,Pokémon,Mitsuhiro Arita
+ng-37,Granbull,NG,Pokémon,Ken Sugimori
+ng-38,Lanturn,NG,Pokémon,Ken Sugimori
+ng-39,Ledian,NG,Pokémon,Ken Sugimori
+ng-4,Feraligatr,NG,Pokémon,Ken Sugimori
+ng-40,Magmar,NG,Pokémon,Naoyo Kimura
+ng-41,Miltank,NG,Pokémon,Ken Sugimori
+ng-42,Noctowl,NG,Pokémon,Ken Sugimori
+ng-43,Phanpy,NG,Pokémon,Ken Sugimori
+ng-44,Piloswine,NG,Pokémon,Ken Sugimori
+ng-45,Quagsire,NG,Pokémon,Atsuko Nishida
+ng-46,Quilava,NG,Pokémon,Ken Sugimori
+ng-47,Quilava,NG,Pokémon,Ken Sugimori
+ng-48,Seadra,NG,Pokémon,Shin-ichi Yoshida
+ng-49,Skiploom,NG,Pokémon,Atsuko Nishida
+ng-5,Feraligatr,NG,Pokémon,Ken Sugimori
+ng-50,Sunflora,NG,Pokémon,Kagemaru Himeno
+ng-51,Togepi,NG,Pokémon,Naoyo Kimura
+ng-52,Xatu,NG,Pokémon,Ken Sugimori
+ng-53,Chikorita,NG,Pokémon,Naoyo Kimura
+ng-54,Chikorita,NG,Pokémon,Ken Sugimori
+ng-55,Chinchou,NG,Pokémon,Ken Sugimori
+ng-56,Cyndaquil,NG,Pokémon,Ken Sugimori
+ng-57,Cyndaquil,NG,Pokémon,Shin-ichi Yoshida
+ng-58,Girafarig,NG,Pokémon,Ken Sugimori
+ng-59,Gligar,NG,Pokémon,Hironobu Yoshida
+ng-6,Heracross,NG,Pokémon,Ken Sugimori
+ng-60,Hoothoot,NG,Pokémon,Sumiyoshi Kizuki
+ng-61,Hoppip,NG,Pokémon,Atsuko Nishida
+ng-62,Horsea,NG,Pokémon,Miki Tanaka
+ng-63,Ledyba,NG,Pokémon,Sumiyoshi Kizuki
+ng-64,Mantine,NG,Pokémon,Ken Sugimori
+ng-65,Mareep,NG,Pokémon,Ken Sugimori
+ng-66,Marill,NG,Pokémon,Atsuko Nishida
+ng-67,Natu,NG,Pokémon,Ken Sugimori
+ng-68,Oddish,NG,Pokémon,Sumiyoshi Kizuki
+ng-69,Onix,NG,Pokémon,Mitsuhiro Arita
+ng-7,Jumpluff,NG,Pokémon,Atsuko Nishida
+ng-70,Pikachu,NG,Pokémon,Naoyo Kimura
+ng-71,Sentret,NG,Pokémon,Ken Sugimori
+ng-72,Shuckle,NG,Pokémon,Ken Sugimori
+ng-73,Slowpoke,NG,Pokémon,Tomokazu Komiya
+ng-74,Snubbull,NG,Pokémon,Mitsuhiro Arita
+ng-75,Spinarak,NG,Pokémon,Ken Sugimori
+ng-76,Stantler,NG,Pokémon,Ken Sugimori
+ng-77,Sudowoodo,NG,Pokémon,Ken Sugimori
+ng-78,Sunkern,NG,Pokémon,Kagemaru Himeno
+ng-79,Swinub,NG,Pokémon,Ken Sugimori
+ng-8,Kingdra,NG,Pokémon,Ken Sugimori
+ng-80,Totodile,NG,Pokémon,Ken Sugimori
+ng-81,Totodile,NG,Pokémon,Hironobu Yoshida
+ng-82,Wooper,NG,Pokémon,Miki Tanaka
+ng-83,Arcade Game,NG,Trainer,"K. Hoshiba, CR CG gangs"
+ng-84,Ecogym,NG,Trainer,"Shin-ichi Yoshikawa, CR CG gangs"
+ng-85,Energy Charge,NG,Trainer,Keiji Kinebuchi
+ng-86,Focus Band,NG,Trainer,Tomokazu Komiya
+ng-87,Mary,NG,Trainer,Ken Sugimori
+ng-88,PokéGear,NG,Trainer,"Katsura Tabata, CR CG gangs"
+ng-89,Super Energy Retrieval,NG,Trainer,Keiji Kinebuchi
+ng-9,Lugia,NG,Pokémon,Hironobu Yoshida
+ng-90,Time Capsule,NG,Trainer,"""Big Mama"" Tagawa, CR CG gangs"
+ng-91,Bill's Teleporter,NG,Trainer,Keiji Kinebuchi
+ng-92,Card-Flip Game,NG,Trainer,"K. Hoshiba, CR CG gangs"
+ng-93,Gold Berry,NG,Trainer,"Ryuta Kusumi, CR CG gangs"
+ng-94,Miracle Berry,NG,Trainer,"Yousuke Hirata, CR CG gangs"
+ng-95,New Pokédex,NG,Trainer,Keiji Kinebuchi
+ng-96,Professor Elm,NG,Trainer,Ken Sugimori
+ng-97,Sprout Tower,NG,Trainer,"Hiromichi Sugiyama, CR CG gangs"
+ng-98,Super Scoop Up,NG,Trainer,Keiji Kinebuchi
+ng-99,Berry,NG,Trainer,"Yousuke Hirata, CR CG gangs"
+nr-1,Ampharos,NR,Pokémon,Toshinao Aoki
+nr-10,Magneton,NR,Pokémon,"""Big Mama"" Tagawa, CR CG gangs"
+nr-11,Misdreavus,NR,Pokémon,Ken Sugimori
+nr-12,Porygon2,NR,Pokémon,Keiji Kinebuchi
+nr-13,Raikou,NR,Pokémon,Ken Sugimori
+nr-14,Suicune,NR,Pokémon,Ken Sugimori
+nr-15,Aerodactyl,NR,Pokémon,Shin-ichi Yoshida
+nr-16,Celebi,NR,Pokémon,Sumiyoshi Kizuki
+nr-17,Entei,NR,Pokémon,Naoyo Kimura
+nr-18,Ho-oh,NR,Pokémon,Aya Kusube
+nr-19,Kingdra,NR,Pokémon,Mitsuhiro Arita
+nr-2,Blissey,NR,Pokémon,Yuka Morii
+nr-20,Lugia,NR,Pokémon,Aya Kusube
+nr-21,Raichu,NR,Pokémon,Masako Yamashita
+nr-22,Raikou,NR,Pokémon,Naoyo Kimura
+nr-23,Skarmory,NR,Pokémon,Aya Kusube
+nr-24,Sneasel,NR,Pokémon,Sumiyoshi Kizuki
+nr-25,Starmie,NR,Pokémon,"Keita Komatsuya, CR CG gangs"
+nr-26,Sudowoodo,NR,Pokémon,Sumiyoshi Kizuki
+nr-27,Suicune,NR,Pokémon,Naoyo Kimura
+nr-28,Flaaffy,NR,Pokémon,Toshinao Aoki
+nr-29,Golbat,NR,Pokémon,Masako Yamashita
+nr-3,Celebi,NR,Pokémon,Hironobu Yoshida
+nr-30,Graveler,NR,Pokémon,Yukiko Baba
+nr-31,Jynx,NR,Pokémon,Tomokazu Komiya
+nr-32,Lanturn,NR,Pokémon,Kagemaru Himeno
+nr-33,Magcargo,NR,Pokémon,Shin-ichi Yoshida
+nr-34,Octillery,NR,Pokémon,Tomokazu Komiya
+nr-35,Parasect,NR,Pokémon,Atsuko Nishida
+nr-36,Piloswine,NR,Pokémon,Atsuko Nishida
+nr-37,Seaking,NR,Pokémon,Miki Tanaka
+nr-38,Stantler,NR,Pokémon,Yukiko Baba
+nr-39,Unown [B],NR,Pokémon,CR CG gangs
+nr-4,Crobat,NR,Pokémon,Shin-ichi Yoshida
+nr-40,Unown [Y],NR,Pokémon,CR CG gangs
+nr-41,Aipom,NR,Pokémon,Sumiyoshi Kizuki
+nr-42,Chinchou,NR,Pokémon,Atsuko Nishida
+nr-43,Farfetch'd,NR,Pokémon,Miki Tanaka
+nr-44,Geodude,NR,Pokémon,Masako Yamashita
+nr-45,Goldeen,NR,Pokémon,Yuka Morii
+nr-46,Murkrow,NR,Pokémon,Hironobu Yoshida
+nr-47,Paras,NR,Pokémon,Kagemaru Himeno
+nr-48,Quagsire,NR,Pokémon,Yuka Morii
+nr-49,Qwilfish,NR,Pokémon,Sumiyoshi Kizuki
+nr-5,Delibird,NR,Pokémon,Tomokazu Komiya
+nr-50,Remoraid,NR,Pokémon,Miki Tanaka
+nr-51,Shuckle,NR,Pokémon,Yuka Morii
+nr-52,Skiploom,NR,Pokémon,Mitsuhiro Arita
+nr-53,Slugma,NR,Pokémon,Kagemaru Himeno
+nr-54,Smoochum,NR,Pokémon,Atsuko Nishida
+nr-55,Snubbull,NR,Pokémon,Tomokazu Komiya
+nr-56,Staryu,NR,Pokémon,Mitsuhiro Arita
+nr-57,Swinub,NR,Pokémon,Miki Tanaka
+nr-58,Unown [K],NR,Pokémon,CR CG gangs
+nr-59,Zubat,NR,Pokémon,Yukiko Baba
+nr-6,Entei,NR,Pokémon,Ken Sugimori
+nr-60,Balloon Berry,NR,Trainer,Keiji Kinebuchi
+nr-61,Healing Field,NR,Trainer,Keiji Kinebuchi
+nr-62,Pokémon Breeder Fields,NR,Trainer,Ken Sugimori
+nr-63,Rocket's Hideout,NR,Trainer,Keiji Kinebuchi
+nr-64,Old Rod,NR,Trainer,Keiji Kinebuchi
+nr-65,Shining Gyarados,NR,Pokémon,Ken Sugimori
+nr-66,Shining Magikarp,NR,Pokémon,Ken Sugimori
+nr-7,Ho-oh,NR,Pokémon,Kimiya Masago
+nr-8,Houndoom,NR,Pokémon,Mitsuhiro Arita
+nr-9,Jumpluff,NR,Pokémon,Kagemaru Himeno
+tr-1,Dark Alakazam,TR,Pokémon,Ken Sugimori
+tr-10,Dark Machamp,TR,Pokémon,Mitsuhiro Arita
+tr-11,Dark Magneton,TR,Pokémon,Miki Tanaka
+tr-12,Dark Slowbro,TR,Pokémon,Mitsuhiro Arita
+tr-13,Dark Vileplume,TR,Pokémon,Kagemaru Himeno
+tr-14,Dark Weezing,TR,Pokémon,Shin-ichi Yoshida
+tr-15,Here Comes Team Rocket!,TR,Trainer,Ken Sugimori
+tr-16,Rocket's Sneak Attack,TR,Trainer,Ken Sugimori
+tr-17,Rainbow Energy,TR,Energy,Takumi Akabane
+tr-18,Dark Alakazam,TR,Pokémon,Ken Sugimori
+tr-19,Dark Arbok,TR,Pokémon,Mitsuhiro Arita
+tr-2,Dark Arbok,TR,Pokémon,Mitsuhiro Arita
+tr-20,Dark Blastoise,TR,Pokémon,Mitsuhiro Arita
+tr-21,Dark Charizard,TR,Pokémon,Ken Sugimori
+tr-22,Dark Dragonite,TR,Pokémon,Mitsuhiro Arita
+tr-23,Dark Dugtrio,TR,Pokémon,Kagemaru Himeno
+tr-24,Dark Golbat,TR,Pokémon,Mitsuhiro Arita
+tr-25,Dark Gyarados,TR,Pokémon,Kagemaru Himeno
+tr-26,Dark Hypno,TR,Pokémon,Kagemaru Himeno
+tr-27,Dark Machamp,TR,Pokémon,Mitsuhiro Arita
+tr-28,Dark Magneton,TR,Pokémon,Miki Tanaka
+tr-29,Dark Slowbro,TR,Pokémon,Mitsuhiro Arita
+tr-3,Dark Blastoise,TR,Pokémon,Mitsuhiro Arita
+tr-30,Dark Vileplume,TR,Pokémon,Kagemaru Himeno
+tr-31,Dark Weezing,TR,Pokémon,Shin-ichi Yoshida
+tr-32,Dark Charmeleon,TR,Pokémon,Kagemaru Himeno
+tr-33,Dark Dragonair,TR,Pokémon,Kagemaru Himeno
+tr-34,Dark Electrode,TR,Pokémon,Ken Sugimori
+tr-35,Dark Flareon,TR,Pokémon,Mitsuhiro Arita
+tr-36,Dark Gloom,TR,Pokémon,Kagemaru Himeno
+tr-37,Dark Golduck,TR,Pokémon,Mitsuhiro Arita
+tr-38,Dark Jolteon,TR,Pokémon,Mitsuhiro Arita
+tr-39,Dark Kadabra,TR,Pokémon,Kagemaru Himeno
+tr-4,Dark Charizard,TR,Pokémon,Ken Sugimori
+tr-40,Dark Machoke,TR,Pokémon,Mitsuhiro Arita
+tr-41,Dark Muk,TR,Pokémon,Kagemaru Himeno
+tr-42,Dark Persian,TR,Pokémon,Shin-ichi Yoshida
+tr-43,Dark Primeape,TR,Pokémon,Mitsuhiro Arita
+tr-44,Dark Rapidash,TR,Pokémon,Kagemaru Himeno
+tr-45,Dark Vaporeon,TR,Pokémon,Mitsuhiro Arita
+tr-46,Dark Wartortle,TR,Pokémon,Kagemaru Himeno
+tr-47,Magikarp,TR,Pokémon,Kagemaru Himeno
+tr-48,Porygon,TR,Pokémon,Keiji Kinebuchi
+tr-49,Abra,TR,Pokémon,Sumiyoshi Kizuki
+tr-5,Dark Dragonite,TR,Pokémon,Mitsuhiro Arita
+tr-50,Charmander,TR,Pokémon,Kagemaru Himeno
+tr-51,Dark Raticate,TR,Pokémon,Shin-ichi Yoshida
+tr-52,Diglett,TR,Pokémon,Sumiyoshi Kizuki
+tr-53,Dratini,TR,Pokémon,Kagemaru Himeno
+tr-54,Drowzee,TR,Pokémon,Kagemaru Himeno
+tr-55,Eevee,TR,Pokémon,Atsuko Nishida
+tr-56,Ekans,TR,Pokémon,Ken Sugimori
+tr-57,Grimer,TR,Pokémon,Kagemaru Himeno
+tr-58,Koffing,TR,Pokémon,Sumiyoshi Kizuki
+tr-59,Machop,TR,Pokémon,Ken Sugimori
+tr-6,Dark Dugtrio,TR,Pokémon,Kagemaru Himeno
+tr-60,Magnemite,TR,Pokémon,Miki Tanaka
+tr-61,Mankey,TR,Pokémon,Sumiyoshi Kizuki
+tr-62,Meowth,TR,Pokémon,Atsuko Nishida
+tr-63,Oddish,TR,Pokémon,Kagemaru Himeno
+tr-64,Ponyta,TR,Pokémon,Atsuko Nishida
+tr-65,Psyduck,TR,Pokémon,Mitsuhiro Arita
+tr-66,Rattata,TR,Pokémon,Atsuko Nishida
+tr-67,Slowpoke,TR,Pokémon,Sumiyoshi Kizuki
+tr-68,Squirtle,TR,Pokémon,Atsuko Nishida
+tr-69,Voltorb,TR,Pokémon,Ken Sugimori
+tr-7,Dark Golbat,TR,Pokémon,Mitsuhiro Arita
+tr-70,Zubat,TR,Pokémon,Mitsuhiro Arita
+tr-71,Here Comes Team Rocket!,TR,Trainer,Ken Sugimori
+tr-72,Rocket's Sneak Attack,TR,Trainer,Ken Sugimori
+tr-73,The Boss's Way,TR,Trainer,Ken Sugimori
+tr-74,Challenge!,TR,Trainer,Kagemaru Himeno
+tr-75,Digger,TR,Trainer,Sumiyoshi Kizuki
+tr-76,Imposter Oak's Revenge,TR,Trainer,Ken Sugimori
+tr-77,Nightly Garbage Run,TR,Trainer,Sumiyoshi Kizuki
+tr-78,Goop Gas Attack,TR,Trainer,Sumiyoshi Kizuki
+tr-79,Sleep!,TR,Trainer,Sumiyoshi Kizuki
+tr-8,Dark Gyarados,TR,Pokémon,Kagemaru Himeno
+tr-80,Rainbow Energy,TR,Energy,Takumi Akabane
+tr-81,Full Heal Energy,TR,Energy,Keiji Kinebuchi
+tr-82,Potion Energy,TR,Energy,Keiji Kinebuchi
+tr-83,Dark Raichu,TR,Pokémon,Mitsuhiro Arita
+tr-9,Dark Hypno,TR,Pokémon,Kagemaru Himeno

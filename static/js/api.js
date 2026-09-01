@@ -76,6 +76,18 @@ export const api = {
   },
   exportTargetsUrl: (setId) =>
     '/api/maintenance/targets/export' + (setId ? `?set_id=${encodeURIComponent(setId)}` : ''),
+  applyCardMeta: ()            => req('POST', '/api/maintenance/card-meta/apply', {}),
+  importCardMeta: (file) => {
+    const body = new FormData();
+    body.append('file', file);
+    return fetch('/api/maintenance/card-meta/import', { method: 'POST', body })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error((data.error && data.error.message) || `HTTP ${r.status}`);
+        return data;
+      });
+  },
+  cardMetaExportUrl: () => '/api/maintenance/card-meta/export',
   setManualPrice: (cardId, variant, price) =>
                                  req('PUT', `/api/prices/manual/${cardId}/${variant}`, { price }),
 };
