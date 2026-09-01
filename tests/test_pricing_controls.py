@@ -1,7 +1,7 @@
-"""Editing prices and multipliers from the UI, and running maintenance jobs."""
+"""Editing manual prices from the UI, and running maintenance jobs."""
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS, Config
+from tombot.config import Config
 from tombot.services.jobs import JobRunner
 from tombot.services.repository import PokemonRepo
 
@@ -16,7 +16,7 @@ def app(tmp_path, monkeypatch):
         monkeypatch.setattr(Config, attr, value)
 
     repo = PokemonRepo(Config.DB_PATH)
-    repo.init_db(DEFAULT_MODIFIERS)
+    repo.init_db()
     repo.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
                               "printed_total": 1, "total": 1,
                               "release_date": "1999/01/09", "ptcgo_code": None,
@@ -46,7 +46,7 @@ def test_a_typed_price_takes_effect_and_is_marked_as_manual(client, app):
 
     item = app.repo.items_by_card("base1-4")[0]
     from tombot.services.pricing import PricingService
-    est = PricingService(app.repo, Config).estimate_item(item, app.repo.get_modifiers())
+    est = PricingService(app.repo, Config).estimate_item(item)
     assert est["unit"] == 12.5 and est["manual"] is True
 
 
@@ -73,41 +73,23 @@ def test_an_unknown_variant_is_rejected(client):
     assert r.status_code == 400
 
 
-# ----------------------------------------------------------------- multiplier
-def test_the_first_edition_premium_is_editable(client, app):
-    """No source prices a 1st edition apart from its unstamped twin, and one
-    figure cannot be right for a Charizard and a common at once."""
-    assert app.repo.get_modifiers()["variant"]["first_edition"] == 2.0
-
-    assert client.put("/api/prices/modifiers/variant/first_edition",
-                      json={"multiplier": 3.5}).status_code == 200
-    assert app.repo.get_modifiers()["variant"]["first_edition"] == 3.5
-
-
-def test_the_edited_multiplier_changes_the_estimate(client, app):
-    app.repo.upsert_collection_item({"card_id": "base1-4", "variant": "first_edition"})
-    app.repo.upsert_price("base1-4", "first_edition", "cardmarket", "EUR", 100.0,
-                          None, None, None, None, variant_key="holo:shadowless:1st-edition")
+# --------------------------------------------------------------- exact pricing
+def test_the_value_is_the_printings_price_times_quantity(client, app):
+    """No condition/language/variant multipliers any more — each printing is its
+    own Cardmarket product with its own price, so the row is worth that price."""
+    app.repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
+                                     "condition": "PO", "quantity": 3},
+                                    mode="set")
+    app.repo.upsert_price("base1-4", "holo", "cardmarket", "EUR", 100.0,
+                          None, None, None, None, variant_key="holo:unlimited")
     from tombot.services.pricing import PricingService
-    svc = PricingService(app.repo, Config)
 
     item = next(i for i in app.repo.items_by_card("base1-4")
-                if i["variant"] == "first_edition")
-    assert svc.estimate_item(item, app.repo.get_modifiers())["unit"] == 200.0
-
-    client.put("/api/prices/modifiers/variant/first_edition", json={"multiplier": 1.5})
-    assert svc.estimate_item(item, app.repo.get_modifiers())["unit"] == 150.0
-
-
-@pytest.mark.parametrize("payload", [{"multiplier": "x"}, {"multiplier": 0}, {"multiplier": -1}])
-def test_bad_multipliers_are_rejected(client, payload):
-    r = client.put("/api/prices/modifiers/variant/first_edition", json=payload)
-    assert r.status_code >= 400 and r.get_json()["error"]["code"] == "invalid_modifier"
-
-
-def test_an_unknown_modifier_kind_is_rejected(client):
-    r = client.put("/api/prices/modifiers/nonsense/x", json={"multiplier": 2})
-    assert r.get_json()["error"]["code"] == "invalid_modifier"
+                if i["variant"] == "holo" and i["condition"] == "PO")
+    est = PricingService(app.repo, Config).estimate_item(item)
+    # Poor condition, but no discount is applied: unit is the raw price.
+    assert est["unit"] == 100.0
+    assert est["total"] == 300.0
 
 
 # ----------------------------------------------------------------------- jobs

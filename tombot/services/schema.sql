@@ -368,15 +368,6 @@ CREATE TABLE IF NOT EXISTS price_history (
 
 CREATE INDEX IF NOT EXISTS idx_pricehist_card ON price_history(card_id, captured_on);
 
--- Condition/language multipliers. No public source prices by condition or by
--- printing language, so these are local, editable estimates.
-CREATE TABLE IF NOT EXISTS price_modifiers (
-    kind       TEXT NOT NULL,                 -- 'condition' | 'language' | 'variant'
-    key        TEXT NOT NULL,
-    multiplier REAL NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (kind, key)
-);
-
 -- ---------------------------------------------------------------------------
 -- HISTORY  (current state cannot answer "how many did I own in March" — §2.6)
 -- ---------------------------------------------------------------------------

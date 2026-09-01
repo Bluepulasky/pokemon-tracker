@@ -7,14 +7,13 @@ matches when its name contains the query OR the query contains its name.
 """
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS
 from tombot.services.repository import PokemonRepo
 
 
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "e.db")
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     # what the tcggo catalogue actually stores for these sets
     r.remember_episodes([
         {"id": 171, "code": "BS", "name": "Base", "released_at": "1999-01-09"},

@@ -7,7 +7,7 @@ product's own URL.
 """
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -21,7 +21,7 @@ def app(tmp_path, monkeypatch):
         monkeypatch.setattr(Config, attr, value)
 
     repo = PokemonRepo(Config.DB_PATH)
-    repo.init_db(DEFAULT_MODIFIERS)
+    repo.init_db()
     repo.upsert_official_set({"id": "ju", "name": "Jungle", "series": "Base",
                               "printed_total": 64, "total": 64,
                               "release_date": "1999/06/16", "ptcgo_code": "JU",

@@ -9,7 +9,6 @@ import tempfile
 
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS
 from tombot.services.repository import PokemonRepo, _number_sort
 
 
@@ -18,7 +17,7 @@ def repo():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     r = PokemonRepo(path)
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     r.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
                            "printed_total": 102, "total": 102,
                            "release_date": "1999/01/09", "ptcgo_code": "BS",

@@ -14,8 +14,6 @@ import click
 from flask import current_app
 from flask.cli import with_appcontext
 
-from ..config import DEFAULT_MODIFIERS
-
 
 def _repo():
     return current_app.extensions["repo"]
@@ -24,8 +22,8 @@ def _repo():
 @click.command("init-db")
 @with_appcontext
 def init_db():
-    """Create the schema and seed the default price modifiers."""
-    _repo().init_db(DEFAULT_MODIFIERS)
+    """Create the schema (idempotent)."""
+    _repo().init_db()
     click.echo(f"schema ready at {current_app.extensions['config'].DB_PATH}")
 
 

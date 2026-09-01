@@ -10,7 +10,7 @@ import tempfile
 
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS, Config
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -24,7 +24,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(Config, "THUMB_DIR", tmp_path / "media" / "thumbs")
 
     repo = PokemonRepo(Config.DB_PATH)
-    repo.init_db(DEFAULT_MODIFIERS)
+    repo.init_db()
     repo.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
                               "printed_total": 3, "total": 3,
                               "release_date": "1999/01/09", "ptcgo_code": None,
@@ -91,9 +91,9 @@ def test_collection_rows_carry_a_computed_value(client, app):
                           None, None, None, None)
 
     row = client.get("/api/collection").get_json()["data"][0]
-    # 100 * 0.85 (EX) * 1.00 (en) = 85, times 3 copies
-    assert row["value"]["unit"] == 85.0
-    assert row["value"]["total"] == 255.0
+    # The printing's price, times 3 copies. No condition/language adjustment.
+    assert row["value"]["unit"] == 100.0
+    assert row["value"]["total"] == 300.0
 
 
 def test_unowned_rows_are_not_valued(client, app):

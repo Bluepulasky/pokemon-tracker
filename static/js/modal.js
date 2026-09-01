@@ -409,7 +409,6 @@ function versionTile(v) {
       ${v.image ? `<img src="${esc(v.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
       ${v.set ? `<span class="v-set">${esc(v.set)}</span>` : ''}
       <span class="v-code">${esc(v.code || '')}</span>
-      ${v.version ? `<span class="v-name">${esc(v.version)}</span>` : ''}
       <span class="v-price">${price}</span>
     </button>`;
 }
