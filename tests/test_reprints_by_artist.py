@@ -8,7 +8,6 @@ both name and illustrator (Ken Sugimori) — those are real reprints.
 """
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS
 from tombot.services.artist_backfill import scan_cache_for_artists
 from tombot.services.repository import PokemonRepo
 from tombot.services.setbuilder import SetBuilder
@@ -25,7 +24,7 @@ def _prod(pid, card_id, code, number, artist):
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "r.db")
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     for sid, name, rd in [("bs", "Base Set", "1999/01/09"),
                           ("fo", "Fossil", "1999/10/10"),
                           ("lc", "Legendary Collection", "2002/05/24")]:
