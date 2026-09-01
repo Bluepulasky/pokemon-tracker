@@ -73,23 +73,41 @@ def test_an_unknown_variant_is_rejected(client):
     assert r.status_code == 400
 
 
-# --------------------------------------------------------------- exact pricing
-def test_the_value_is_the_printings_price_times_quantity(client, app):
-    """No condition/language/variant multipliers any more — each printing is its
-    own Cardmarket product with its own price, so the row is worth that price."""
+# -------------------------------------------------- condition multiplier
+def test_the_condition_multiplier_scales_the_value(client, app):
+    """No source prices by condition, so a played card is the near-mint price
+    scaled by an editable factor (PO defaults to 0.35)."""
+    from tombot.services.pricing import PricingService
     app.repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
-                                     "condition": "PO", "quantity": 3},
-                                    mode="set")
+                                     "condition": "PO", "quantity": 3}, mode="set")
     app.repo.upsert_price("base1-4", "holo", "cardmarket", "EUR", 100.0,
                           None, None, None, None, variant_key="holo:unlimited")
-    from tombot.services.pricing import PricingService
-
+    svc = PricingService(app.repo, Config)
     item = next(i for i in app.repo.items_by_card("base1-4")
                 if i["variant"] == "holo" and i["condition"] == "PO")
-    est = PricingService(app.repo, Config).estimate_item(item)
-    # Poor condition, but no discount is applied: unit is the raw price.
-    assert est["unit"] == 100.0
-    assert est["total"] == 300.0
+    assert svc.estimate_item(item)["unit"] == 35.0           # 100 * 0.35
+    assert svc.estimate_item(item)["total"] == 105.0         # x3
+
+
+def test_the_condition_multiplier_is_editable(client, app):
+    assert app.repo.get_modifiers()["condition"]["EX"] == 0.85
+    assert client.put("/api/prices/modifiers/condition/EX",
+                      json={"multiplier": 0.9}).status_code == 200
+    assert app.repo.get_modifiers()["condition"]["EX"] == 0.9
+
+
+@pytest.mark.parametrize("payload", [{"multiplier": "x"}, {"multiplier": 0}, {"multiplier": -1}])
+def test_bad_multipliers_are_rejected(client, payload):
+    r = client.put("/api/prices/modifiers/condition/EX", json=payload)
+    assert r.status_code >= 400 and r.get_json()["error"]["code"] == "invalid_modifier"
+
+
+def test_only_condition_multipliers_are_editable(client):
+    """Language and variant are priced per-product; those kinds are refused."""
+    assert client.put("/api/prices/modifiers/variant/first_edition",
+                      json={"multiplier": 2}).get_json()["error"]["code"] == "invalid_modifier"
+    assert client.put("/api/prices/modifiers/condition/NM",     # retired grade
+                      json={"multiplier": 1}).status_code == 400
 
 
 # ----------------------------------------------------------------------- jobs

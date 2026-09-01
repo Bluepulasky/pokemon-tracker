@@ -432,6 +432,10 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 }
 .toast.err { border-color: var(--bad); color: var(--bad); }
 
+.modifier-grid { display: grid; gap: 12px;
+                 grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.modifier-grid input { background: var(--bg-3); border: 1px solid var(--line);
+                       border-radius: var(--radius-sm); padding: 6px 9px; }
 /* Maintenance is a desk job: long-running imports and price sweeps are not
    something to start by accident on a phone. */
 @media (max-width: 720px) { .desktop-only { display: none; } }

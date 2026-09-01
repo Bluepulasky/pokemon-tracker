@@ -91,9 +91,9 @@ def test_collection_rows_carry_a_computed_value(client, app):
                           None, None, None, None)
 
     row = client.get("/api/collection").get_json()["data"][0]
-    # The printing's price, times 3 copies. No condition/language adjustment.
-    assert row["value"]["unit"] == 100.0
-    assert row["value"]["total"] == 300.0
+    # 100 * 0.85 (EX condition multiplier), times 3 copies.
+    assert row["value"]["unit"] == 85.0
+    assert row["value"]["total"] == 255.0
 
 
 def test_unowned_rows_are_not_valued(client, app):

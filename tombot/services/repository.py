@@ -17,7 +17,8 @@ from typing import Any, Iterable, Sequence
 
 log = logging.getLogger(__name__)
 
-from ..config import CONDITIONS, DEFAULT_CONDITION, RETIRED_CONDITIONS
+from ..config import (CONDITIONS, DEFAULT_CONDITION, DEFAULT_MODIFIERS,
+                      RETIRED_CONDITIONS)
 from .printing_variants import variants_for
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -131,6 +132,12 @@ class PokemonRepo:
         there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
             c.executescript(SCHEMA_PATH.read_text())
+            # Seed the condition multipliers. INSERT OR IGNORE keeps any the user
+            # has edited, and costs nothing on a database that already has them.
+            for kind, key, mult in DEFAULT_MODIFIERS:
+                c.execute(
+                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) "
+                    "VALUES (?,?,?)", (kind, key, mult))
             c.execute(
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
@@ -1167,6 +1174,27 @@ class PokemonRepo:
 
     def get_official_set(self, set_id: str) -> dict | None:
         return self._one("SELECT * FROM official_sets WHERE id=?", (set_id,))
+
+    # ------------------------------------------------------ price modifiers
+    def get_modifiers(self) -> dict[str, dict[str, float]]:
+        """The condition price multipliers, as {'condition': {grade: factor}}.
+
+        Only condition is read: language and variant are priced per-product, so
+        any stale rows of those kinds left in the table are ignored.
+        """
+        out: dict[str, dict[str, float]] = {}
+        for r in self._all("SELECT key, multiplier FROM price_modifiers "
+                           "WHERE kind = 'condition'"):
+            out.setdefault("condition", {})[r["key"]] = r["multiplier"]
+        return out
+
+    def set_modifier(self, kind: str, key: str, multiplier: float) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?) "
+                "ON CONFLICT(kind, key) DO UPDATE SET multiplier=excluded.multiplier",
+                (kind, key, float(multiplier)),
+            )
 
     # ------------------------------------------------------- market episodes
     def remember_episodes(self, episodes: list[dict]) -> int:

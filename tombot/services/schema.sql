@@ -369,6 +369,17 @@ CREATE TABLE IF NOT EXISTS price_history (
 
 CREATE INDEX IF NOT EXISTS idx_pricehist_card ON price_history(card_id, captured_on);
 
+-- Condition price multipliers. No source prices by condition, so the value of a
+-- played card is the near-mint product price scaled by an editable, local factor
+-- (M/NM 1.00, down to PO). The `kind` column is kept general, but only
+-- 'condition' is seeded, read and edited today.
+CREATE TABLE IF NOT EXISTS price_modifiers (
+    kind       TEXT NOT NULL,                 -- 'condition'
+    key        TEXT NOT NULL,
+    multiplier REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (kind, key)
+);
+
 -- ---------------------------------------------------------------------------
 -- HISTORY  (current state cannot answer "how many did I own in March" — §2.6)
 -- ---------------------------------------------------------------------------
