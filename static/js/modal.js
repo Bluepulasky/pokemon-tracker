@@ -6,11 +6,13 @@ import { api } from './api.js';
 import { cardArt, el, esc, eur, hofBadge, photoUrl, toast } from './ui.js';
 
 let META = null;
+let COND_MULTIPLIERS = {};
 let onChange = () => {};
 
 export function initModal(meta, changeHandler) {
   META = meta;
   onChange = changeHandler;
+  api.modifiers().then((m) => { COND_MULTIPLIERS = m.condition || {}; }).catch(() => {});
   document.getElementById('modal-root').addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
   });
@@ -83,10 +85,22 @@ export async function openCard(cardId) {
   wireVariants(root, cardId);
 }
 
+// CAMBIO 1: añadir data-first-ed, data-price-unit-base, data-price-qty,
+// data-price-basis al div raíz — los lee editVariant para el preview.
 function variantCard(item) {
   const v = item.value || {};
   const label = (kind, key) => (META[kind].find((x) => x.key === key) || {}).label || key;
-  return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}">
+  // Precio base sin el multiplicador de primera edición, para que el preview
+  // pueda recalcular limpio en ambas direcciones.
+  const condMult = v.condition_multiplier || 1;
+  const priceRaw = v.unit != null
+    ? (v.unit / condMult / (item.first_edition ? 2 : 1)).toFixed(4)
+    : '';
+  return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}"
+     data-first-ed="${item.first_edition ? '1' : '0'}"
+     data-price-raw="${priceRaw}"
+     data-price-qty="${item.quantity}"
+     data-price-basis="${esc(v.basis || '')}">
     <div class="tags">
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
@@ -222,9 +236,6 @@ function wireForm(root, card) {
 
   form.onsubmit = async (e) => {
     e.preventDefault();
-    // The version picker is the only selector: which card the row is, and its
-    // edition/variant, all come from the chosen product. The backend derives the
-    // variant from it, so the client just sends the product and the copy details.
     if (!form.dataset.productId) {
       toast('Elegí una versión de Cardmarket', true);
       return;
@@ -232,8 +243,6 @@ function wireForm(root, card) {
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      // The picked product carries its own card_id (a reprint records the set it
-      // actually is, not the one the modal was opened on).
       const targetCard = form.dataset.cardId || card.id;
       await api.addItem({
         card_id: targetCard,
@@ -244,7 +253,7 @@ function wireForm(root, card) {
       });
       toast(`${card.name} añadida`);
       onChange();
-      openCard(targetCard);           // reopen the card it was actually saved to
+      openCard(targetCard);
     } catch (err) {
       toast(err.message, true);
       btn.disabled = false;
@@ -281,9 +290,6 @@ function wireVariants(root, cardId) {
 
     vc.querySelector('.act-edit').onclick = () => editVariant(vc, id, cardId);
 
-    /* Typed prices exist because the feed has real gaps — every WOTC promo comes
-       back with none — and because a listing in front of you beats an average.
-       Clearing the box hands the printing back to the feed. */
     const manual = vc.querySelector('.manual-price input');
     if (manual) {
       manual.onchange = async () => {
@@ -297,14 +303,6 @@ function wireVariants(root, cardId) {
       };
     }
 
-
-
-    /* Every quote we hold, not one blended number.
-
-       Two providers quoting the same market and disagreeing several times over
-       means one of them has the wrong card. An average would turn that into a
-       believable figure and hide it, so they are listed side by side and a
-       refused quote says who else claims its product. */
     const qbox = vc.querySelector('.quotes');
     if (qbox) renderQuotes(qbox, cardId, vc.dataset.variant);
 
@@ -318,17 +316,28 @@ function wireVariants(root, cardId) {
   });
 }
 
+// CAMBIO 2: editVariant — reemplaza el select de variante por ¿Primera edición?
+// y añade un preview de precio en tiempo real.
 function editVariant(vc, id, cardId) {
+  // Leer precio base y metadatos del DOM (puestos por variantCard arriba).
+  const priceRaw  = parseFloat(vc.dataset.priceRaw);
+  const qty       = Number(vc.dataset.priceQty);
+  const basis     = vc.dataset.priceBasis || '';
+  const firstEdOn = vc.dataset.firstEd === '1';
+
   const tags = vc.querySelectorAll('.tag');
   const cur = {
-    variant: META.variants.find((v) => v.label === tags[0].textContent)?.key || 'normal',
     condition: tags[1].textContent.trim(),
-    language: META.languages.find((l) => l.label === tags[2].textContent)?.key || 'es',
-    quantity: Number(tags[3].textContent.replace('×', '')) || 1,
+    language:  META.languages.find((l) => l.label === tags[2].textContent)?.key || 'es',
+    quantity:  Number(tags[3].textContent.replace('×', '')) || 1,
   };
+
   vc.innerHTML = `
-    <div class="field"><label>Variante</label>
-      <select name="variant">${opts(META.variants, cur.variant)}</select></div>
+    <div class="field"><label>¿Primera edición?</label>
+      <select name="first_edition">
+        <option value="0"${!firstEdOn ? ' selected' : ''}>No</option>
+        <option value="1"${firstEdOn  ? ' selected' : ''}>Sí (×2)</option>
+      </select></div>
     <div class="field" style="margin-top:8px"><label>Condición</label>
       <select name="condition">${opts(META.conditions.map((c) =>
         ({ key: c.key, label: `${c.key} — ${c.label}` })), cur.condition)}</select></div>
@@ -336,18 +345,46 @@ function editVariant(vc, id, cardId) {
       <select name="language">${opts(META.languages, cur.language)}</select></div>
     <div class="field" style="margin-top:8px"><label>Cantidad</label>
       <input name="quantity" type="number" min="1" value="${cur.quantity}" inputmode="numeric"></div>
+    <div class="price-preview"></div>
     <div class="btn-row">
       <button class="btn primary save">Guardar</button>
       <button class="btn ghost cancel">Cancelar</button>
     </div>`;
+
+  // Preview en tiempo real — solo si tenemos datos de precio.
+  const sel     = vc.querySelector('[name=first_edition]');
+  const preview = vc.querySelector('.price-preview');
+
+  function updatePreview() {
+    if (!preview || !Number.isFinite(priceRaw)) return;
+    const factor   = sel.value === '1' ? 2.0 : 1.0;
+    const condKey  = vc.querySelector('[name=condition]').value;
+    const condMult = COND_MULTIPLIERS[condKey] ?? 1.0;
+    const newUnit  = priceRaw * condMult * factor;
+    const newTotal = newUnit * qty;
+    const suffix   = factor > 1 ? ' · ×2 1ª ed.' : '';
+    const small    = basis === 'no_data'
+      ? 'sin datos para esta impresión'
+      : basis === 'printing_level'
+        ? `${eur(newUnit)} × ${qty} · precio de la impresión${suffix}`
+        : `${eur(newUnit)} × ${qty}${suffix}`;
+    preview.innerHTML = `<div class="price">${esc(eur(newTotal))}<small>${small}</small></div>`;
+  }
+
+  sel.onchange = updatePreview;
+  vc.querySelector('[name=condition]').onchange = updatePreview;
+  updatePreview();   // render inmediato al abrir el formulario
+
   vc.querySelector('.cancel').onclick = () => openCard(cardId);
+
+  // CAMBIO 3: save manda first_edition en lugar de variant.
   vc.querySelector('.save').onclick = async () => {
     try {
       await api.updateItem(id, {
-        variant: vc.querySelector('[name=variant]').value,
-        condition: vc.querySelector('[name=condition]').value,
-        language: vc.querySelector('[name=language]').value,
-        quantity: Number(vc.querySelector('[name=quantity]').value) || 1,
+        first_edition: vc.querySelector('[name=first_edition]').value === '1',
+        condition:     vc.querySelector('[name=condition]').value,
+        language:      vc.querySelector('[name=language]').value,
+        quantity:      Number(vc.querySelector('[name=quantity]').value) || 1,
       });
       toast('Actualizado');
       onChange();
@@ -358,10 +395,6 @@ function editVariant(vc, id, cardId) {
 
 
 /* ------------------------------------------------------------------ quotes */
-
-/* One price, from the source that maps a version to a real Cardmarket
-   product. Other stores appear only when that one has nothing to say, because
-   a second opinion is noise when the first is authoritative. */
 
 const STORE = { cardmarket: 'Cardmarket', tcgplayer: 'TCGplayer' };
 const PREFERRED = 'tcggo';
@@ -381,7 +414,7 @@ async function renderQuotes(box, cardId, variant) {
   const usable = quotes.filter((q) => q.trusted && q.price != null);
   const best = usable.find((q) => q.provider === PREFERRED && q.market === 'cardmarket');
 
-  if (best) {                       // the authoritative one: say where, nothing more
+  if (best) {
     box.innerHTML = `<div class="price-src">${esc(STORE[best.market])}</div>`;
     return;
   }
@@ -395,15 +428,8 @@ async function renderQuotes(box, cardId, variant) {
 
 /* ---------------------------------------------------------------- versions */
 
-/* Every product Cardmarket sells for this card, not a filtered guess at which
-   one you meant. Two entries can look alike — Jungle Flareon comes back twice
-   with nearly the same price and stock, and only one is a real product — so
-   the image, the stock and the price are all shown and the choice is yours. */
-
 function versionTile(v) {
   const price = v.price != null ? `${Number(v.price).toFixed(2)} €` : '—';
-  // A reprint (another set) is dimmed a touch and labelled with its set, so the
-  // card's own printings read as the default and reprints as the alternative.
   return `<button type="button" class="version${v.is_current ? '' : ' reprint'}"
       data-product="${v.market_product_id}" data-card="${esc(v.card_id || '')}">
       ${v.image ? `<img src="${esc(v.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
@@ -427,17 +453,12 @@ async function renderVersions(box, form, cardId) {
       Importá su set desde Mantenimiento para poder registrarla.</div>`;
     return;
   }
-  // The card's own printings come first; reprints from other sets follow under
-  // a divider, so it is clear they are the same card in a different set.
   const own = versions.filter((v) => v.is_current);
   const reprints = versions.filter((v) => !v.is_current);
   box.innerHTML =
     (own.length ? own.map(versionTile).join('') : '')
     + reprints.map(versionTile).join('');
 
-  // The picker is the single selector. The product decides which card the row
-  // is and — on the backend — which variant it represents, so there are no
-  // dropdowns to keep in sync any more.
   const byId = new Map(versions.map((v) => [String(v.market_product_id), v]));
   box.querySelectorAll('.version').forEach((btn) => {
     btn.onclick = () => {
@@ -449,16 +470,9 @@ async function renderVersions(box, form, cardId) {
   });
 }
 
-
-/* What the picked version means for the row. The product carries the card it
-   is (a reprint records its own set) and the summary spells out what will be
-   saved; the variant itself is derived from the product on the backend. */
-
 function applyVersion(form, v) {
   if (!v) return;
 
-  // The card the row is saved as: the picked product's own card_id (a reprint
-  // from another set records that set, not the one the modal was opened on).
   if (v.card_id) {
     form.dataset.cardId = v.card_id;
   } else {

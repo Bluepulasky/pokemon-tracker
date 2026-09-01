@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS collection_items (
     -- variant to translate, no printing to resolve, no field to pick.
     market_product_id INTEGER,
     notes      TEXT,
+    first_edition INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     -- Without this, two rows of the same combination silently double the physical count.

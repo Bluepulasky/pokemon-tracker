@@ -111,11 +111,13 @@ class PricingService:
             log.warning("no multiplier for condition %r; using 1.00. The grade "
                         "is not in config.CONDITIONS.", condition)
             cond_m = 1.0
-        unit = round(row["price"] * cond_m, 2)
+        first_ed_m = 2.0 if item.get("first_edition") else 1.0
+        unit = round(row["price"] * cond_m * first_ed_m, 2)
         qty = int(item.get("quantity", 1))
         return {
             "unit": unit,
             "total": round(unit * qty, 2),
+            "first_edition_multiplier": first_ed_m,
             "currency": row.get("currency", "EUR"),
             "basis": basis,
             "priced_variant": row.get("variant"),

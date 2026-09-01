@@ -132,6 +132,9 @@ class PokemonRepo:
         there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
             c.executescript(SCHEMA_PATH.read_text())
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
+            if "first_edition" not in cols:
+                c.execute("ALTER TABLE collection_items ADD COLUMN first_edition INTEGER NOT NULL DEFAULT 0")
             # Seed the condition multipliers. INSERT OR IGNORE keeps any the user
             # has edited, and costs nothing on a database that already has them.
             for kind, key, mult in DEFAULT_MODIFIERS:
@@ -619,6 +622,7 @@ class PokemonRepo:
             "quantity": int(item.get("quantity", 1)),
             "printing_id": item.get("printing_id"),
             "notes": item.get("notes"),
+            "first_edition": 1 if item.get("first_edition") else 0,
         }
         conflict = ("quantity = collection_items.quantity + excluded.quantity"
                     if mode == "add" else "quantity = excluded.quantity")
@@ -647,7 +651,7 @@ class PokemonRepo:
 
     def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
         allowed = {"variant", "condition", "language", "quantity",
-                   "printing_id", "notes"}
+                   "printing_id", "notes", "first_edition"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return self.get_collection_item(item_id)
@@ -662,7 +666,7 @@ class PokemonRepo:
 
     def get_collection_item(self, item_id: int) -> dict | None:
         row = self._one(
-            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
             "COALESCE(cr.rating, 0) AS rating "
             "FROM collection_items i JOIN cards c ON c.id=i.card_id "
