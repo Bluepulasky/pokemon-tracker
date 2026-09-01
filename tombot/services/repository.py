@@ -1270,6 +1270,31 @@ class PokemonRepo:
             tuple(ids))
         return {r["product_id"]: r for r in rows}
 
+    def market_urls_for_cards(self, card_ids: Sequence[str]) -> dict[str, str]:
+        """One representative Cardmarket URL per card, from the imported products.
+
+        Every catalogue card in an imported set maps directly to Cardmarket
+        products (tcggo <-> MKM), so a card-level link — the catalog grid, the
+        card modal, a collection row that never pinned an exact version — comes
+        from that direct match, not from a guess. A card with no product simply
+        gets no link: that is an unimported/stale card, and a missing link beats
+        a link to the dead redirector.
+        """
+        ids = [c for c in dict.fromkeys(card_ids) if c]
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        rows = self._all(
+            f"""SELECT card_id, market_url FROM market_products
+                 WHERE card_id IN ({marks})
+                   AND market_url IS NOT NULL AND market_url <> ''
+                 ORDER BY card_id, version""",
+            tuple(ids))
+        out: dict[str, str] = {}
+        for r in rows:                    # first per card; ORDER BY makes it stable
+            out.setdefault(r["card_id"], r["market_url"])
+        return out
+
     def episode_is_imported(self, episode_id: int) -> int:
         row = self._one(
             "SELECT COUNT(*) AS n FROM market_products WHERE episode_id=?",

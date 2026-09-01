@@ -65,6 +65,10 @@ def _priced(rows):
     # Grid art comes from the best-conditioned copy of the card, which may live
     # on a different row than the one being rendered.
     best = repo().best_photos_for_cards([r["card_id"] for r in rows if r.get("card_id")])
+    # The card's direct Cardmarket product match, for rows that never pinned an
+    # exact version. Replaces the old card-level redirector, which now only 404s
+    # (issue #27). One lookup for the whole page.
+    by_card = repo().market_urls_for_cards([r["card_id"] for r in rows if r.get("card_id")])
     for r in rows:
         r["display_photo"] = best.get(r["card_id"]) if r.get("owned", True) else None
         # A placeholder has no physical copy, so it has no estimated value —
@@ -72,10 +76,10 @@ def _priced(rows):
         r["value"] = (pricing.estimate_item(r, mods) if r.get("owned", True)
                       else {"unit": None, "total": None, "currency": "EUR",
                             "basis": "not_owned", "updated_at": None})
-        r["market_url"] = market_url(r, locale=locale)
+        r["market_url"] = market_url(r, locale=locale) or by_card.get(r.get("card_id"))
 
     # A row that chose a version knows its exact Cardmarket product, so its link
-    # is that product's URL — not the card-level guess, which pointed a Normal
+    # is that product's URL — not the card-level match, which pointed a Normal
     # Flareon at the Holo listing (issue #27). One lookup for the whole page.
     product_ids = [r["market_product_id"] for r in rows if r.get("market_product_id")]
     if product_ids:

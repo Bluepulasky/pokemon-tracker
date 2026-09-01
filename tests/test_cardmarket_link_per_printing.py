@@ -60,14 +60,18 @@ def test_the_row_links_to_its_chosen_product(app):
     assert rows[0]["market_url"].endswith("Flareon-V2-JU19")
 
 
-def test_a_row_without_a_chosen_product_keeps_the_card_level_link(app):
-    """Rows added before the picker existed must not break — they fall back."""
+def test_a_row_without_a_chosen_product_uses_the_cards_direct_match(app):
+    """A row that never pinned a version links to the card's own Cardmarket
+    product (the direct tcggo<->MKM match by card_id), not the dead
+    prices.pokemontcg.io redirector (issue #27, reopened)."""
     repo = app.extensions["repo"]
     repo.upsert_collection_item({"card_id": "ju-19", "variant": "normal",
                                  "condition": "M/NM", "language": "es"})
 
     rows = app.test_client().get("/api/collection/by-card/ju-19").get_json()["data"]
 
-    # No product chosen -> the card-level link (the redirector here), not a crash.
-    assert rows[0]["market_url"] is not None
-    assert "Flareon-V2-JU19" not in rows[0]["market_url"]
+    url = rows[0]["market_url"]
+    assert url is not None
+    assert "pokemontcg.io" not in url, "the dead redirector must be gone"
+    # ju-19's only product is V2; the direct match resolves to it (V1 is ju-3).
+    assert url.endswith("Flareon-V2-JU19")
