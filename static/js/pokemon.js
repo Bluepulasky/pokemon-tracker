@@ -831,7 +831,9 @@ function episodeCard(e) {
       <div class="e-meta">${esc(e.code || '')} · ${esc((e.released_at || '').slice(0, 4))}
         ${e.cards_total ? ` · ${e.cards_total} cartas` : ''}</div>
       ${added
-        ? `<div class="e-added">${e.products} productos importados</div>`
+        ? `<div class="e-added">${e.products} productos importados</div>
+           <button class="btn xs ghost" data-reimport="${e.id}"
+             title="Vuelve a traer el set — corrige datos y precios sin re-elegir cartas">Reimportar</button>`
         : `<button class="btn xs" data-add="${e.id}">Añadir</button>`}
     </div>`;
 }
@@ -869,6 +871,26 @@ async function loadEpisodes(q) {
         toast(e.message, true);
         btn.disabled = false;
         btn.textContent = 'Añadir';
+      }
+    };
+  });
+
+  // Re-import an already-imported set: same endpoint, so it refreshes prices and
+  // re-derives cards (splitting any that a collision had merged). Reads the cache
+  // first, so it usually costs nothing — the toast reports what it spent.
+  list.querySelectorAll('[data-reimport]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = 'Reimportando…';
+      try {
+        const res = await api.importEpisode(Number(btn.dataset.reimport));
+        toast(`${res.name}: ${res.cards} cartas, ${res.requests} consultas`);
+        loadEpisodes(view().querySelector('#ep-search').value.trim());
+        renderHealth();
+      } catch (e) {
+        toast(e.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Reimportar';
       }
     };
   });
