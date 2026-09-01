@@ -36,8 +36,9 @@ def create_app(config: type[Config] = Config) -> Flask:
     # tcggo is the only source: catalog, images, versions and prices all come
     # from importing a set. It is metered, so its request budget is counted in
     # the database — a restart cannot hand back a fresh allowance.
-    budgets = {"tcggo": RequestBudget(repo, "tcggo",
-                                      getattr(config, "TCGGO_DAILY_LIMIT", 0))}
+    budgets = {"tcggo": RequestBudget(
+        repo, "tcggo", getattr(config, "TCGGO_DAILY_LIMIT", 0),
+        per_minute=getattr(config, "TCGGO_PER_MINUTE_LIMIT", 0))}
     app.extensions["budgets"] = budgets
 
     from .services.httpcache import HttpCache
