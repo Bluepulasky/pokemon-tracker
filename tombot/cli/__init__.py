@@ -27,6 +27,26 @@ def init_db():
     click.echo(f"schema ready at {current_app.extensions['config'].DB_PATH}")
 
 
+@click.command("backfill-artists")
+@with_appcontext
+def backfill_artists():
+    """Fill card/product illustrator from the on-disk tcggo cache (no network).
+
+    The illustrator is the reprint-group key. Sets imported before it was stored
+    have it blank; this reads it back out of the cached responses so existing
+    installs get real reprints without re-importing (which would cost the cap)."""
+    from ..services.artist_backfill import scan_cache_for_artists
+
+    cfg = current_app.extensions["config"]
+    product_artist = scan_cache_for_artists(getattr(cfg, "DATA_DIR", None))
+    if not product_artist:
+        click.echo("no cached artist data found — import a set or check the cache dir")
+        return
+    result = _repo().backfill_artists(product_artist)
+    click.echo(f"artists found for {len(product_artist)} products; "
+               f"updated {result['products']} products, {result['cards']} cards")
+
+
 @click.command("prices")
 @click.option("--all", "all_cards", is_flag=True, help="Ignore cache age")
 @click.option("--stale-days", type=int, default=None)
@@ -122,5 +142,5 @@ def _bool_env(name: str) -> bool:
 
 
 def register(app):
-    for cmd in (init_db, prices, snapshot, monthly, scheduler):
+    for cmd in (init_db, backfill_artists, prices, snapshot, monthly, scheduler):
         app.cli.add_command(cmd)

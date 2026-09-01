@@ -197,7 +197,7 @@ def _versions_from_import(card_id: str | None, episode_id: int | None):
         return None
 
     current_set = card["official_set_id"]
-    rows = repo().market_products_for_name(card["name"])
+    rows = repo().market_products_for_reprint(card_id)
     items = [{
         "market_product_id": r["product_id"],
         "card_id": r["card_id"],

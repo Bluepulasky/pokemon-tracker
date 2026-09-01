@@ -134,4 +134,16 @@ class MarketImporter:
             "available": cm.get("available_items"),
             "image": raw.get("image"),
             "market_url": (raw.get("links") or {}).get("cardmarket"),
+            "artist": _artist_name(raw.get("artist")),
         }
+
+
+def _artist_name(artist) -> str | None:
+    """The illustrator's name, whatever shape tcggo sends it in.
+
+    tcggo returns artist as {id, name, slug} on cards and occasionally as a bare
+    string; both collapse to the display name.
+    """
+    if isinstance(artist, dict):
+        return artist.get("name") or artist.get("slug") or None
+    return artist or None
