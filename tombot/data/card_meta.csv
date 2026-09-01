@@ -53,6 +53,7 @@ bs-52,Machop,BS,Pokémon,Mitsuhiro Arita
 bs-53,Magnemite,BS,Pokémon,Keiji Kinebuchi
 bs-54,Metapod,BS,Pokémon,Ken Sugimori
 bs-55,Nidoran ♂,BS,Pokémon,Ken Sugimori
+bs-55-nidoran-m,Nidoran M,BS,,Ken Sugimori
 bs-56,Onix,BS,Pokémon,Ken Sugimori
 bs-57,Pidgey,BS,Pokémon,Ken Sugimori
 bs-58,Pikachu,BS,Pokémon,Mitsuhiro Arita
@@ -72,11 +73,14 @@ bs-7,Hitmonchan,BS,Pokémon,Ken Sugimori
 bs-70,Clefairy Doll,BS,Trainer,Keiji Kinebuchi
 bs-71,Computer Search,BS,Trainer,Keiji Kinebuchi
 bs-72,Devolution Spray,BS,Trainer,Keiji Kinebuchi
-bs-73,Impostor Professor Oak,BS,Trainer,Ken Sugimori
+bs-73,Imposter Professor Oak,BS,,Ken Sugimori
+bs-73-impostor-professor-oak,Impostor Professor Oak,BS,Trainer,Ken Sugimori
 bs-74,Item Finder,BS,Trainer,Keiji Kinebuchi
 bs-75,Lass,BS,Trainer,Ken Sugimori
-bs-76,Pokémon Breeder,BS,Trainer,Ken Sugimori
+bs-76,Pokemon Breeder,BS,,Ken Sugimori
+bs-76-pok-mon-breeder,Pokémon Breeder,BS,Trainer,Ken Sugimori
 bs-77,Pokémon Trader,BS,Trainer,Ken Sugimori
+bs-77-pokemon-trader,Pokemon Trader,BS,,Ken Sugimori
 bs-78,Scoop Up,BS,Trainer,Keiji Kinebuchi
 bs-79,Super Energy Removal,BS,Trainer,Keiji Kinebuchi
 bs-8,Machamp,BS,Pokémon,Ken Sugimori
@@ -85,9 +89,12 @@ bs-81,Energy Retrieval,BS,Trainer,Keiji Kinebuchi
 bs-82,Full Heal,BS,Trainer,Keiji Kinebuchi
 bs-83,Maintenance,BS,Trainer,Keiji Kinebuchi
 bs-84,PlusPower,BS,Trainer,Keiji Kinebuchi
-bs-85,Pokémon Center,BS,Trainer,Keiji Kinebuchi
+bs-85,Pokemon Center,BS,,Keiji Kinebuchi
+bs-85-pok-mon-center,Pokémon Center,BS,Trainer,Keiji Kinebuchi
 bs-86,Pokémon Flute,BS,Trainer,Keiji Kinebuchi
+bs-86-pokemon-flute,Pokemon Flute,BS,,Keiji Kinebuchi
 bs-87,Pokédex,BS,Trainer,Keiji Kinebuchi
+bs-87-pokedex,Pokedex,BS,,Keiji Kinebuchi
 bs-88,Professor Oak,BS,Trainer,Ken Sugimori
 bs-89,Revive,BS,Trainer,Keiji Kinebuchi
 bs-9,Magneton,BS,Pokémon,Keiji Kinebuchi
@@ -111,19 +118,28 @@ cel-12,Xerneas,CEL,Pokémon,AKIRA EGAWA
 cel-13,Cosmog,CEL,Pokémon,kirisAki
 cel-14,Cosmoem,CEL,Pokémon,kirisAki
 cel-15,Lunala,CEL,Pokémon,kirisAki
+cel-15-claydol,Claydol,CEL,Pokémon,Midori Harada
+cel-15-here-comes-team-rocket,Here Comes Team Rocket!,CEL,Trainer,Ken Sugimori
+cel-15-rocket-s-zapdos,Rocket's Zapdos,CEL,Pokémon,Shin-ichi Yoshida
+cel-15-venusaur,Venusaur,CEL,Pokémon,Mitsuhiro Arita
 cel-16,Zacian V,CEL,Pokémon,Mitsuhiro Arita
 cel-17,Groudon,CEL,Pokémon,Ryuta Fuse
+cel-17-umbreon,Umbreon ★,CEL,Pokémon,Masakazu Fukuda
 cel-18,Zamazenta V,CEL,Pokémon,Mitsuhiro Arita
 cel-19,Yveltal,CEL,Pokémon,AKIRA EGAWA
 cel-2,Reshiram,CEL,Pokémon,Aya Kusube
+cel-2-blastoise,Blastoise,CEL,Pokémon,Ken Sugimori
 cel-20,Dialga,CEL,Pokémon,5ban Graphics
+cel-20-cleffa,Cleffa,CEL,Pokémon,Kagemaru Himeno
 cel-21,Solgaleo,CEL,Pokémon,kirisAki
 cel-22,Lugia,CEL,Pokémon,Kouki Saitou
 cel-23,Professor's Research (Professor Oak),CEL,Trainer,KIYOTAKA OSHIYAMA
 cel-24,Professor's Research (Professor Oak),CEL,Trainer,Ken Sugimori
+cel-24-s-pikachu,_____'s Pikachu,CEL,Pokémon,Kagemaru Himeno
 cel-25,Mew,CEL,Pokémon,Saki Hayashiro
 cel-3,Kyogre,CEL,Pokémon,Ryuta Fuse
 cel-4,Palkia,CEL,Pokémon,5ban Graphics
+cel-4-charizard,Charizard,CEL,Pokémon,Mitsuhiro Arita
 cel-5,Pikachu,CEL,Pokémon,Mitsuhiro Arita
 cel-54,Mewtwo-EX,CEL,Pokémon,Shizurow
 cel-6,Flying Pikachu V,CEL,Pokémon,aky CG Works
@@ -133,9 +149,11 @@ cel-7,Flying Pikachu VMAX,CEL,Pokémon,aky CG Works
 cel-73,Imposter Professor Oak,CEL,Trainer,Ken Sugimori
 cel-76,M Rayquaza-EX,CEL,Pokémon,5ban Graphics
 cel-8,Surfing Pikachu V,CEL,Pokémon,aky CG Works
+cel-8-dark-gyarados,Dark Gyarados,CEL,Pokémon,Kagemaru Himeno
 cel-86,Rocket's Admin.,CEL,Trainer,Ken Sugimori
 cel-88,Mew ex,CEL,Pokémon,Ryo Ueda
 cel-9,Surfing Pikachu VMAX,CEL,Pokémon,aky CG Works
+cel-9-team-magma-s-groudon,Team Magma's Groudon,CEL,Pokémon,Kazuo Yazawa
 cel-93,Gardevoir ex δ,CEL,Pokémon,Masahiko Ishii
 cel-97,Xerneas-EX,CEL,Pokémon,5ban Graphics
 celhs-107,Donphan,CEL HS,Pokémon,Kent Kanetsuna
@@ -351,10 +369,10 @@ gc-128,Fire Energy,GC,Energy,Keiji Kinebuchi
 gc-129,Grass Energy,GC,Energy,Keiji Kinebuchi
 gc-13,Misty's Gyarados,GC,Pokémon,Ken Sugimori
 gc-130,Lightning Energy,GC,Energy,Keiji Kinebuchi
-gc-131,Psychic Energy,GC,Energy,Keiji Kinebuchi
+gc-131,Psychic Energy,GC,,Keiji Kinebuchi
 gc-132,Water Energy,GC,Energy,Keiji Kinebuchi
 gc-14,Rocket's Mewtwo,GC,Pokémon,Shin-ichi Yoshida
-gc-15,Rocket's Zapdos,GC,Pokémon,Shin-ichi Yoshida
+gc-15,Rocket's Zapdos,GC,,Shin-ichi Yoshida
 gc-16,Sabrina's Alakazam,GC,Pokémon,Ken Sugimori
 gc-17,Blaine,GC,Trainer,Ken Sugimori
 gc-18,Giovanni,GC,Trainer,Ken Sugimori
@@ -370,12 +388,11 @@ gc-26,Koga's Muk,GC,Pokémon,Ken Sugimori
 gc-27,Koga's Pidgeotto,GC,Pokémon,Ken Sugimori
 gc-28,Lt. Surge's Jolteon,GC,Pokémon,Ken Sugimori
 gc-29,Sabrina's Gengar,GC,Pokémon,Ken Sugimori
-gc-3,Brock's Ninetales,GC,Pokémon,Ken Sugimori
+gc-3,Brock's Ninetales,GC,,Ken Sugimori
 gc-30,Sabrina's Golduck,GC,Pokémon,Ken Sugimori
 gc-31,Blaine's Charmeleon,GC,Pokémon,Ken Sugimori
 gc-32,Blaine's Dodrio,GC,Pokémon,Ken Sugimori
 gc-33,Blaine's Rapidash,GC,Pokémon,Ken Sugimori
-gc-34,Brock's Graveler,GC,Pokémon,Atsuko Nishida
 gc-35,Brock's Primeape,GC,Pokémon,Ken Sugimori
 gc-36,Brock's Sandslash,GC,Pokémon,Atsuko Nishida
 gc-37,Brock's Vulpix,GC,Pokémon,Ken Sugimori
@@ -399,7 +416,7 @@ gc-52,Lt. Surge's Electrode,GC,Pokémon,Ken Sugimori
 gc-53,Lt. Surge's Raticate,GC,Pokémon,Ken Sugimori
 gc-54,Misty's Dewgong,GC,Pokémon,Ken Sugimori
 gc-55,Sabrina's Haunter,GC,Pokémon,Ken Sugimori
-gc-56,Sabrina's Hypno,GC,Pokémon,Ken Sugimori
+gc-56,Sabrina's Hypno,GC,,Ken Sugimori
 gc-57,Sabrina's Jynx,GC,Pokémon,Atsuko Nishida
 gc-58,Sabrina's Kadabra,GC,Pokémon,Ken Sugimori
 gc-59,Sabrina's Mr. Mime,GC,Pokémon,Ken Sugimori
@@ -422,6 +439,7 @@ gc-73,Giovanni's Magikarp,GC,Pokémon,Ken Sugimori
 gc-74,Giovanni's Meowth,GC,Pokémon,Ken Sugimori
 gc-75,Giovanni's Nidoran ♀,GC,Pokémon,Ken Sugimori
 gc-76,Giovanni's Nidoran ♂,GC,Pokémon,Ken Sugimori
+gc-76-giovanni-s-nidoran-m,Giovanni's Nidoran \[M\],GC,,Ken Sugimori
 gc-77,Koga's Ekans,GC,Pokémon,Ken Sugimori
 gc-78,Koga's Grimer,GC,Pokémon,Ken Sugimori
 gc-79,Koga's Koffing,GC,Pokémon,Ken Sugimori
@@ -508,7 +526,7 @@ gh-31,Misty's Poliwrath,GH,Pokémon,Ken Sugimori
 gh-32,Misty's Tentacool,GH,Pokémon,Ken Sugimori
 gh-33,Rocket's Snorlax,GH,Pokémon,Shin-ichi Yoshida
 gh-34,Sabrina's Venomoth,GH,Pokémon,Ken Sugimori
-gh-35,Blaine's Growlithe,GH,Pokémon,Ken Sugimori
+gh-35,Blaine's Growlithe,GH,,Ken Sugimori
 gh-36,Blaine's Kangaskhan,GH,Pokémon,Ken Sugimori
 gh-37,Blaine's Magmar,GH,Pokémon,Ken Sugimori
 gh-38,Brock's Geodude,GH,Pokémon,Atsuko Nishida
@@ -522,7 +540,7 @@ gh-44,Erika's Exeggutor,GH,Pokémon,Ken Sugimori
 gh-45,Erika's Gloom,GH,Pokémon,Ken Sugimori
 gh-46,Erika's Gloom,GH,Pokémon,Ken Sugimori
 gh-47,Erika's Oddish,GH,Pokémon,Atsuko Nishida
-gh-48,Erika's Weepinbell,GH,Pokémon,Atsuko Nishida
+gh-48,Erika's Weepinbell,GH,,Atsuko Nishida
 gh-49,Erika's Weepinbell,GH,Pokémon,Ken Sugimori
 gh-5,Erika's Vileplume,GH,Pokémon,Ken Sugimori
 gh-50,Lt. Surge's Magnemite,GH,Pokémon,Atsuko Nishida
@@ -556,9 +574,9 @@ gh-75,Erika's Bellsprout,GH,Pokémon,Atsuko Nishida
 gh-76,Erika's Bellsprout,GH,Pokémon,Ken Sugimori
 gh-77,Erika's Exeggcute,GH,Pokémon,Ken Sugimori
 gh-78,Erika's Oddish,GH,Pokémon,Ken Sugimori
-gh-79,Erika's Tangela,GH,Pokémon,Ken Sugimori
+gh-79,Erika's Tangela,GH,,Ken Sugimori
 gh-8,Lt. Surge's Magneton,GH,Pokémon,Ken Sugimori
-gh-80,Lt. Surge's Magnemite,GH,Pokémon,Ken Sugimori
+gh-80,Lt. Surge's Magnemite,GH,,Ken Sugimori
 gh-81,Lt. Surge's Pikachu,GH,Pokémon,Ken Sugimori
 gh-82,Lt. Surge's Rattata,GH,Pokémon,Ken Sugimori
 gh-83,Lt. Surge's Spearow,GH,Pokémon,Atsuko Nishida
@@ -576,7 +594,7 @@ gh-93,Sabrina's Gastly,GH,Pokémon,Ken Sugimori
 gh-94,Sabrina's Mr. Mime,GH,Pokémon,Ken Sugimori
 gh-95,Sabrina's Slowpoke,GH,Pokémon,Ken Sugimori
 gh-96,Sabrina's Venonat,GH,Pokémon,Ken Sugimori
-gh-97,Blaine's Quiz #1,GH,Trainer,Ken Sugimori
+gh-97,Blaine's Quiz #1,GH,,Ken Sugimori
 gh-98,Brock,GH,Trainer,Ken Sugimori
 gh-99,Charity,GH,Trainer,Ken Sugimori
 ju-1,Clefable,JU,Pokémon,Mitsuhiro Arita
@@ -759,6 +777,7 @@ nd-11,Smeargle,ND,Pokémon,Hironobu Yoshida
 nd-12,Tyranitar,ND,Pokémon,Hironobu Yoshida
 nd-13,Umbreon,ND,Pokémon,Kimiya Masago
 nd-14,Unown [A],ND,Pokémon,CR CG gangs
+nd-14-unown-a,Unown \[A\],ND,,CR CG gangs
 nd-15,Ursaring,ND,Pokémon,Naoyo Kimura
 nd-16,Wobbuffet,ND,Pokémon,Hironobu Yoshida
 nd-17,Yanma,ND,Pokémon,Atsuko Nishida
@@ -780,6 +799,7 @@ nd-30,Smeargle,ND,Pokémon,Hironobu Yoshida
 nd-31,Tyranitar,ND,Pokémon,Hironobu Yoshida
 nd-32,Umbreon,ND,Pokémon,Naoyo Kimura
 nd-33,Unown [A],ND,Pokémon,CR CG gangs
+nd-33-unown-a,Unown \[A\],ND,,CR CG gangs
 nd-34,Ursaring,ND,Pokémon,Naoyo Kimura
 nd-35,Wobbuffet,ND,Pokémon,Hironobu Yoshida
 nd-36,Yanma,ND,Pokémon,Atsuko Nishida
@@ -796,9 +816,12 @@ nd-45,Pupitar,ND,Pokémon,Hironobu Yoshida
 nd-46,Scyther,ND,Pokémon,Kimiya Masago
 nd-47,Unown [D],ND,Pokémon,CR CG gangs
 nd-48,Unown [F],ND,Pokémon,CR CG gangs
-nd-49,Unown [M],ND,Pokémon,CR CG gangs
+nd-48-unown-f,Unown \[F\],ND,,CR CG gangs
+nd-49,Unown \[M\],ND,,CR CG gangs
+nd-49-unown-m,Unown [M],ND,Pokémon,CR CG gangs
 nd-5,Houndour,ND,Pokémon,Aya Kusube
 nd-50,Unown [N],ND,Pokémon,CR CG gangs
+nd-50-unown-n,Unown \[N\],ND,,CR CG gangs
 nd-51,Unown [U],ND,Pokémon,CR CG gangs
 nd-52,Xatu,ND,Pokémon,Sumiyoshi Kizuki
 nd-53,Caterpie,ND,Pokémon,Yuka Morii
@@ -817,8 +840,11 @@ nd-64,Spinarak,ND,Pokémon,Yukiko Baba
 nd-65,Teddiursa,ND,Pokémon,Miki Tanaka
 nd-66,Tyrogue,ND,Pokémon,Miki Tanaka
 nd-67,Unown [E],ND,Pokémon,CR CG gangs
+nd-67-unown-e,Unown \[E\],ND,,CR CG gangs
 nd-68,Unown [I],ND,Pokémon,CR CG gangs
+nd-68-unown-i,Unown \[I\],ND,,CR CG gangs
 nd-69,Unown [O],ND,Pokémon,CR CG gangs
+nd-69-unown-o,Unown \[O\],ND,,CR CG gangs
 nd-7,Magnemite,ND,Pokémon,"K. Hoshiba, CR CG gangs"
 nd-70,Weedle,ND,Pokémon,Miki Tanaka
 nd-71,Wooper,ND,Pokémon,Yukiko Baba
@@ -949,6 +975,7 @@ nr-15,Aerodactyl,NR,Pokémon,Shin-ichi Yoshida
 nr-16,Celebi,NR,Pokémon,Sumiyoshi Kizuki
 nr-17,Entei,NR,Pokémon,Naoyo Kimura
 nr-18,Ho-oh,NR,Pokémon,Aya Kusube
+nr-18-ho-oh,Ho-Oh,NR,,Aya Kusube
 nr-19,Kingdra,NR,Pokémon,Mitsuhiro Arita
 nr-2,Blissey,NR,Pokémon,Yuka Morii
 nr-20,Lugia,NR,Pokémon,Aya Kusube
@@ -972,8 +999,10 @@ nr-36,Piloswine,NR,Pokémon,Atsuko Nishida
 nr-37,Seaking,NR,Pokémon,Miki Tanaka
 nr-38,Stantler,NR,Pokémon,Yukiko Baba
 nr-39,Unown [B],NR,Pokémon,CR CG gangs
+nr-39-unown-b,Unown \[B\],NR,,CR CG gangs
 nr-4,Crobat,NR,Pokémon,Shin-ichi Yoshida
 nr-40,Unown [Y],NR,Pokémon,CR CG gangs
+nr-40-unown-y,Unown \[Y\],NR,,CR CG gangs
 nr-41,Aipom,NR,Pokémon,Sumiyoshi Kizuki
 nr-42,Chinchou,NR,Pokémon,Atsuko Nishida
 nr-43,Farfetch'd,NR,Pokémon,Miki Tanaka
@@ -993,6 +1022,7 @@ nr-55,Snubbull,NR,Pokémon,Tomokazu Komiya
 nr-56,Staryu,NR,Pokémon,Mitsuhiro Arita
 nr-57,Swinub,NR,Pokémon,Miki Tanaka
 nr-58,Unown [K],NR,Pokémon,CR CG gangs
+nr-58-unown-k,Unown \[K\],NR,,CR CG gangs
 nr-59,Zubat,NR,Pokémon,Yukiko Baba
 nr-6,Entei,NR,Pokémon,Ken Sugimori
 nr-60,Balloon Berry,NR,Trainer,Keiji Kinebuchi
@@ -1003,6 +1033,7 @@ nr-64,Old Rod,NR,Trainer,Keiji Kinebuchi
 nr-65,Shining Gyarados,NR,Pokémon,Ken Sugimori
 nr-66,Shining Magikarp,NR,Pokémon,Ken Sugimori
 nr-7,Ho-oh,NR,Pokémon,Kimiya Masago
+nr-7-ho-oh,Ho-Oh,NR,,Kimiya Masago
 nr-8,Houndoom,NR,Pokémon,Mitsuhiro Arita
 nr-9,Jumpluff,NR,Pokémon,Kagemaru Himeno
 tr-1,Dark Alakazam,TR,Pokémon,Ken Sugimori
@@ -1030,7 +1061,7 @@ tr-29,Dark Slowbro,TR,Pokémon,Mitsuhiro Arita
 tr-3,Dark Blastoise,TR,Pokémon,Mitsuhiro Arita
 tr-30,Dark Vileplume,TR,Pokémon,Kagemaru Himeno
 tr-31,Dark Weezing,TR,Pokémon,Shin-ichi Yoshida
-tr-32,Dark Charmeleon,TR,Pokémon,Kagemaru Himeno
+tr-32,Dark Charmeleon,TR,,Kagemaru Himeno
 tr-33,Dark Dragonair,TR,Pokémon,Kagemaru Himeno
 tr-34,Dark Electrode,TR,Pokémon,Ken Sugimori
 tr-35,Dark Flareon,TR,Pokémon,Mitsuhiro Arita
@@ -1078,7 +1109,7 @@ tr-72,Rocket's Sneak Attack,TR,Trainer,Ken Sugimori
 tr-73,The Boss's Way,TR,Trainer,Ken Sugimori
 tr-74,Challenge!,TR,Trainer,Kagemaru Himeno
 tr-75,Digger,TR,Trainer,Sumiyoshi Kizuki
-tr-76,Imposter Oak's Revenge,TR,Trainer,Ken Sugimori
+tr-76,Imposter Oak's Revenge,TR,,Ken Sugimori
 tr-77,Nightly Garbage Run,TR,Trainer,Sumiyoshi Kizuki
 tr-78,Goop Gas Attack,TR,Trainer,Sumiyoshi Kizuki
 tr-79,Sleep!,TR,Trainer,Sumiyoshi Kizuki

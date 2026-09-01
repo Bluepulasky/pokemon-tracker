@@ -15,7 +15,8 @@ import glob
 import json
 from pathlib import Path
 
-from tombot.services.tcggo_catalog import card_id_for, split_code
+from tombot.services.tcggo_catalog import (card_id_for, resolve_collisions,
+                                           split_code)
 
 OUT = Path("tombot/data/card_meta.csv")
 CACHE_GLOBS = [".cache/**/*.json", "data/.cache-tcggo/*.json"]
@@ -46,31 +47,31 @@ def _records():
 
 
 def main() -> None:
-    rows: dict[str, dict] = {}
+    # Build product rows and run the same collision resolution the importer does,
+    # so the CSV's card_ids match what an import produces (e.g. cel-2-blastoise).
+    products = []
     for c in _records():
         prefix, number = split_code(c.get("card_code_number") or "")
         cid = card_id_for(prefix, number)
-        if not cid or cid.endswith("-"):
+        if not cid or cid.endswith("-") or not c.get("cardmarket_id"):
             continue
-        artist = _artist(c.get("artist"))
-        supertype = c.get("supertype") or ""
-        cur = rows.get(cid)
-        # One row per card. A colliding id (two different cards share a code, e.g.
-        # Celebrations base vs Classic Collection) prefers the base card — the
-        # Classic Collection entry is a separate concern and its rarity marks it.
-        is_cc = (c.get("rarity") or "") == "Classic Collection"
+        products.append({
+            "product_id": c["cardmarket_id"], "card_id": cid,
+            "name": c.get("name") or "", "set": prefix.upper(),
+            "artist": _artist(c.get("artist")), "supertype": c.get("supertype") or "",
+        })
+    resolve_collisions(products)
+
+    rows: dict[str, dict] = {}
+    for p in products:
+        cur = rows.get(p["card_id"])
         if cur is None:
-            rows[cid] = {"card_id": cid, "name": c.get("name") or "",
-                         "set": prefix.upper(), "supertype": supertype,
-                         "artist": artist, "_cc": is_cc}
-        elif cur.get("_cc") and not is_cc:
-            rows[cid] = {"card_id": cid, "name": c.get("name") or "",
-                         "set": prefix.upper(), "supertype": supertype,
-                         "artist": artist, "_cc": is_cc}
-        else:
-            # Fill any blank the winning record left.
-            cur["artist"] = cur["artist"] or artist
-            cur["supertype"] = cur["supertype"] or supertype
+            rows[p["card_id"]] = {"card_id": p["card_id"], "name": p["name"],
+                                  "set": p["set"], "supertype": p["supertype"],
+                                  "artist": p["artist"]}
+        else:                                   # fill any blank a sibling left
+            cur["artist"] = cur["artist"] or p["artist"]
+            cur["supertype"] = cur["supertype"] or p["supertype"]
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fields = ["card_id", "name", "set", "supertype", "artist"]
