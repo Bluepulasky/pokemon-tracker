@@ -1345,32 +1345,48 @@ class PokemonRepo:
     # is interpolated into SQL, so it must never come from the file.
     _FIXABLE_COLUMNS = ("artist", "supertype")
 
-    def fill_card_fields(self, updates: dict[str, list]) -> dict[str, int]:
-        """Fill blank card columns from (value, card_id) pairs, per field.
+    def fill_card_fields(self, updates: dict[str, list],
+                         overwrite: bool = False) -> dict[str, int]:
+        """Write card columns from (value, card_id) pairs, per field.
 
-        Only a blank (NULL or '') is written, so applying a fix file never
-        overwrites data already there and is safe to re-run.
+        Default is fill-only: a value is written only where the column is blank
+        (NULL or ''), so it never touches data already there and is safe to
+        re-run. With overwrite=True it replaces an existing value too — for
+        deliberately correcting a wrong one. Either way the count is rows
+        actually changed (a no-op equal value is not counted), so re-running or
+        overwriting with the same value reports 0.
         """
-        filled: dict[str, int] = {}
+        counts: dict[str, int] = {}
         with self.tx() as c:
             for field, pairs in updates.items():
                 if field not in self._FIXABLE_COLUMNS:
                     raise ValueError(f"campo no permitido: {field}")
                 if not pairs:
-                    filled[field] = 0
+                    counts[field] = 0
                     continue
-                cur = c.executemany(
-                    f"UPDATE cards SET {field}=?, updated_at=datetime('now') "
-                    f"WHERE id=? AND ({field} IS NULL OR {field}='')", pairs)
+                if overwrite:
+                    # Change only where the value actually differs.
+                    cur = c.executemany(
+                        f"UPDATE cards SET {field}=?, updated_at=datetime('now') "
+                        f"WHERE id=? AND IFNULL({field},'') <> ?",
+                        [(v, cid, v) for v, cid in pairs])
+                else:
+                    cur = c.executemany(
+                        f"UPDATE cards SET {field}=?, updated_at=datetime('now') "
+                        f"WHERE id=? AND ({field} IS NULL OR {field}='')", pairs)
                 # sqlite3 sums the per-statement counts into rowcount for
                 # executemany, which SELECT changes() (last statement only) does not.
-                filled[field] = cur.rowcount
-        return filled
+                counts[field] = cur.rowcount
+        return counts
 
     def cards_meta_rows(self) -> list[dict]:
-        """Every card's fixable metadata, for the CSV export."""
+        """Every card's fixable metadata, for the CSV export.
+
+        `set` is a SQL keyword, so the alias must be quoted — an unquoted
+        `AS set` is a syntax error that 500s the export.
+        """
         return self._all(
-            "SELECT id AS card_id, name, official_set_id AS set, supertype, artist "
+            'SELECT id AS card_id, name, official_set_id AS "set", supertype, artist '
             "FROM cards ORDER BY official_set_id, number_sort")
 
     def market_products_for_card(self, card_id: str) -> list[dict]:

@@ -76,11 +76,13 @@ export const api = {
   },
   exportTargetsUrl: (setId) =>
     '/api/maintenance/targets/export' + (setId ? `?set_id=${encodeURIComponent(setId)}` : ''),
-  applyCardMeta: ()            => req('POST', '/api/maintenance/card-meta/apply', {}),
-  importCardMeta: (file) => {
+  applyCardMeta: (overwrite) =>
+                                 req('POST', `/api/maintenance/card-meta/apply${overwrite ? '?overwrite=1' : ''}`, {}),
+  importCardMeta: (file, overwrite) => {
     const body = new FormData();
     body.append('file', file);
-    return fetch('/api/maintenance/card-meta/import', { method: 'POST', body })
+    return fetch(`/api/maintenance/card-meta/import${overwrite ? '?overwrite=1' : ''}`,
+      { method: 'POST', body })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error((data.error && data.error.message) || `HTTP ${r.status}`);

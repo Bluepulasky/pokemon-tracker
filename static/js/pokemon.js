@@ -546,8 +546,9 @@ async function mantenimiento() {
     </div>
 
     <h2 style="margin-top: 16px;">Correcciones de datos</h2>
-    <p class="sub">Rellena datos que quedaron vacíos en importaciones viejas —
-      ilustrador y tipo — sin volver a importar ni gastar consultas.</p>
+    <p class="sub">Corrige datos de las cartas — ilustrador y tipo
+      (Pokémon/Trainer/Energy) — que quedaron vacíos en importaciones viejas,
+      sin volver a importar ni gastar consultas. Se cruza por <code>card_id</code>.</p>
     <div class="stat">
       <div class="btn-row" style="flex-wrap:wrap;gap:8px;align-items:center">
         <button class="btn primary" id="apply-meta">Aplicar correcciones incluidas</button>
@@ -555,9 +556,15 @@ async function mantenimiento() {
         <label class="btn" for="up-meta" style="cursor:pointer">Subir CSV propio</label>
         <input type="file" id="up-meta" accept=".csv,text/csv" hidden>
       </div>
-      <div class="note">Rellena solo lo que esté vacío; nunca pisa un valor ya
-        cargado, así que se puede aplicar las veces que haga falta. Columnas:
-        <code>card_id</code> + <code>artist</code>, <code>supertype</code>.</div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:10px">
+        <input type="checkbox" id="meta-overwrite">
+        <span>Sobrescribir valores existentes
+          <span class="note" style="display:inline">(por defecto solo rellena los vacíos)</span></span>
+      </label>
+      <div class="note" style="margin-top:8px">«Aplicar correcciones incluidas» usa el
+        archivo que viene con la app; «Subir CSV propio» aplica el tuyo al instante.
+        Columnas: <code>card_id</code> + <code>artist</code>, <code>supertype</code>
+        (celda vacía = no toca ese campo). Ambas acciones respetan la casilla de arriba.</div>
       <div id="meta-result"></div>
     </div>
 
@@ -657,13 +664,14 @@ async function mantenimiento() {
   const dlMeta = view().querySelector('#dl-meta');
   if (dlMeta) dlMeta.href = api.cardMetaExportUrl();
 
+  const overwriteOn = () => !!view().querySelector('#meta-overwrite')?.checked;
   const applyMeta = view().querySelector('#apply-meta');
   if (applyMeta) {
     applyMeta.onclick = async () => {
       const box = view().querySelector('#meta-result');
       box.innerHTML = '<div class="note">Aplicando…</div>';
       try {
-        renderMetaResult(box, await api.applyCardMeta());
+        renderMetaResult(box, await api.applyCardMeta(overwriteOn()));
       } catch (e) { box.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`; }
     };
   }
@@ -675,7 +683,7 @@ async function mantenimiento() {
       const box = view().querySelector('#meta-result');
       box.innerHTML = '<div class="note">Procesando…</div>';
       try {
-        renderMetaResult(box, await api.importCardMeta(file));
+        renderMetaResult(box, await api.importCardMeta(file, overwriteOn()));
       } catch (e) { box.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`; }
       upMeta.value = '';
     };
@@ -717,13 +725,18 @@ function renderTargetImport(box, r) {
    field. Unknown ids (cards this install does not have) are surfaced, not
    swallowed, so a file aimed at the wrong catalog is obvious. */
 function renderMetaResult(box, r) {
-  const filled = r.filled || {};
-  const parts = Object.entries(filled)
-    .map(([f, n]) => `<strong>${n}</strong> ${esc(f)}`).join(' · ') || 'nada que rellenar';
+  const changed = r.changed || {};
+  const total = Object.values(changed).reduce((a, n) => a + n, 0);
+  const parts = Object.entries(changed)
+    .map(([f, n]) => `<strong>${n}</strong> ${esc(f)}`).join(' · ');
+  const verb = r.overwrite ? 'Sobrescrito' : 'Rellenado';
+  const headline = total ? `${verb}: ${parts}`
+    : (r.overwrite ? 'Nada que cambiar (los valores ya coincidían)'
+                   : 'Nada que rellenar (no había campos vacíos)');
   const unknownList = (r.unknown_ids || []).map((id) => `<code>${esc(id)}</code>`).join(', ');
   box.innerHTML = `
     <div class="import-summary ${r.unknown ? 'partial' : 'ok'}">
-      Rellenado: ${parts}
+      ${headline}
       ${r.unknown ? ` · <span class="bad">${r.unknown} id(s) desconocidos</span>` : ''}
     </div>
     ${r.unknown ? `<details class="import-detail"><summary>Ids no encontrados en tu catálogo (${r.unknown})</summary>

@@ -39,6 +39,48 @@ def split_code(card_code_number: str) -> tuple[str, str]:
     return (parts[0], parts[1]) if len(parts) == 2 else (card_code_number or "", "")
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+
+
+def resolve_collisions(rows: list[dict]) -> list[dict]:
+    """Give genuinely different cards distinct card_ids, in place.
+
+    card_id is `{setcode}-{number}`, which assumes code+number identifies a card
+    within an episode. Some episodes break that: the tcggo "Celebrations" episode
+    bundles the Classic Collection under the same CEL code, so its Blastoise
+    ("CEL 2") lands on the same id as the base Reshiram ("CEL 2"), and five cards
+    share "CEL 15". Products of one printing share a name (Base Set Blastoise's
+    four printings are all "Blastoise"), so a single id carrying two names is a
+    collision, not a card with variants.
+
+    When it happens the lowest Cardmarket product id keeps the plain id — the base
+    card, added to Cardmarket first — and the others take `{id}-{name-slug}`, so
+    every logical card ends up with its own id and its own products.
+    """
+    from collections import defaultdict
+    by_id: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_id[r["card_id"]].append(r)
+
+    for cid, group in by_id.items():
+        by_name: dict[str, list[dict]] = defaultdict(list)
+        for r in group:
+            by_name[r.get("name") or ""].append(r)
+        if len(by_name) <= 1:
+            continue                                   # one card, its printings
+        # The name whose cheapest product id is lowest keeps the plain id.
+        ordered = sorted(by_name.items(),
+                         key=lambda kv: min(x["product_id"] for x in kv[1]))
+        for i, (name, sub) in enumerate(ordered):
+            if i == 0:
+                continue
+            new_id = f"{cid}-{_slug(name)}"
+            for r in sub:
+                r["card_id"] = new_id
+    return rows
+
+
 def number_sort(number: str) -> float:
     """Numeric where it can be, so #10 does not sort before #2."""
     m = re.match(r"^(\d+)", str(number or ""))
@@ -109,20 +151,23 @@ class TcggoCatalog:
             "symbol_url": None,
         })
 
-        # One card per code; its versions are the products carrying that code.
-        by_code: dict[str, list[dict]] = {}
+        # One card per card_id; its versions are the products sharing it. Grouping
+        # by card_id (not code) is what keeps two different cards that upstream
+        # gave the same code+number — Celebrations base vs Classic Collection —
+        # apart: resolve_collisions has already given them distinct ids.
+        by_card: dict[str, list[dict]] = {}
         for p in products:
-            by_code.setdefault(p["code"], []).append(p)
+            by_card.setdefault(p["card_id"], []).append(p)
 
         cards = []
-        for card_code, group in by_code.items():
-            _, number = split_code(card_code)
+        for card_id, group in by_card.items():
+            _, number = split_code(group[0]["code"])
             # Prefer a row with a real offer behind it for the display data:
             # the phantom versions carry the emptier records.
             best = max(group, key=lambda r: (r["price_low"] is not None,
                                              r["available"] or 0))
             cards.append({
-                "id": card_id_for(code, number),
+                "id": card_id,
                 "official_set_id": set_id,
                 "name": best["name"],
                 "number": number,

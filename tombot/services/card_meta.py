@@ -79,8 +79,11 @@ def parse_csv(text: str) -> tuple[list[dict], list[dict]]:
     return rows, errors
 
 
-def apply_fixes(repo, rows: list[dict]) -> dict:
-    """Fill blank fields on the named cards. Returns per-field counts + misses."""
+def apply_fixes(repo, rows: list[dict], overwrite: bool = False) -> dict:
+    """Write fields on the named cards. Returns per-field counts + misses.
+
+    Fills blanks only by default; overwrite=True also replaces existing values.
+    """
     known = repo.existing_card_ids({r["card_id"] for r in rows})
     updates: dict[str, list[tuple[str, str]]] = {f: [] for f in FIXABLE}
     missing = []
@@ -91,6 +94,6 @@ def apply_fixes(repo, rows: list[dict]) -> dict:
         for f in FIXABLE:
             if r.get(f):
                 updates[f].append((r[f], r["card_id"]))
-    filled = repo.fill_card_fields(updates)
-    return {"filled": filled, "missing": missing,
+    changed = repo.fill_card_fields(updates, overwrite=overwrite)
+    return {"changed": changed, "overwrite": overwrite, "missing": missing,
             "cards_in_file": len(rows)}
