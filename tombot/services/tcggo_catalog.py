@@ -130,6 +130,9 @@ class TcggoCatalog:
                 "rarity": canonical_rarity(best["rarity"]),
                 "image_small_url": best["image"],
                 "image_large_url": best["image"],
+                # The illustrator, used as the reprint-group key: a reprint reuses
+                # the artwork, so same name + same artist is the same logical card.
+                "artist": best.get("artist"),
             })
         self.repo.upsert_cards(cards)
 

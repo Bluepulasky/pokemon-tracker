@@ -400,14 +400,17 @@ class PokemonRepo:
         if not sources:
             return []
 
-        # Loose completion: a card counts as owned when any same-name printing is
-        # held (a Jungle Pikachu marks the Base Set Pikachu owned). Strict: only
-        # this exact card_id. Same rule the completion count uses, so the grid and
-        # the progress bar agree.
+        # Loose completion: a card counts as owned when any reprint of it is held
+        # — a reprint being the same logical card (same name and illustrator, the
+        # latter standing in for the shared artwork). This is what separates the
+        # Base Set Magneton from the Fossil one, which share only a name. Strict:
+        # only this exact card_id. Same rule the completion count uses, so the
+        # grid and the progress bar agree.
         if self.is_loose_completion(set_id):
             owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
                           "JOIN cards ci ON ci.id = i.card_id "
-                          "WHERE ci.name = c.name), 0)")
+                          "WHERE ci.name = c.name "
+                          "AND IFNULL(ci.artist,'') = IFNULL(c.artist,'')), 0)")
         else:
             owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
                           "WHERE i.card_id = c.id), 0)")
@@ -534,17 +537,20 @@ class PokemonRepo:
                     SELECT sl.id, sl.set_id,
                            COALESCE(t.target, 1) AS want,
                            -- Strict: only the set's own printing counts. Loose
-                           -- (a set_loose_completion row): any owned card of the
-                           -- same name as a slot member counts — a Jungle Pikachu
-                           -- fills the Base Set Pikachu slot.
+                           -- (a set_loose_completion row): any owned reprint of a
+                           -- slot member counts, a reprint being the same name AND
+                           -- illustrator — so the Fossil Magneton fills a Fossil
+                           -- slot but the Base Set one does not.
                            CASE WHEN lc.set_id IS NOT NULL THEN
                              (SELECT COALESCE(SUM(i.quantity), 0)
                                 FROM collection_items i
                                 JOIN cards ci ON ci.id = i.card_id
-                               WHERE ci.name IN (
-                                   SELECT c2.name FROM set_slot_cards m2
+                               WHERE EXISTS (
+                                   SELECT 1 FROM set_slot_cards m2
                                    JOIN cards c2 ON c2.id = m2.card_id
-                                  WHERE m2.slot_id = sl.id))
+                                  WHERE m2.slot_id = sl.id
+                                    AND c2.name = ci.name
+                                    AND IFNULL(c2.artist,'') = IFNULL(ci.artist,'')))
                            ELSE
                              (SELECT COALESCE(SUM(i.quantity), 0)
                                 FROM set_slot_cards m
@@ -1193,15 +1199,21 @@ class PokemonRepo:
         if not rows:
             return 0
         with self.tx() as c:
+            # A database created before market_products.artist existed does not
+            # gain the column on init_db (that only adds new tables), so add it
+            # here — the same self-heal link_products_to_cards uses for card_id.
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
+            if "artist" not in cols:
+                c.execute("ALTER TABLE market_products ADD COLUMN artist TEXT")
             c.executemany(
                 """INSERT INTO market_products(product_id, episode_id, card_id, code,
                        number, name, version, rarity, currency, price, price_low,
                        price_avg30, price_avg7, available, image, market_url,
-                       updated_at)
+                       artist, updated_at)
                    VALUES(:product_id,:episode_id,:card_id,:code,:number,:name,
                           :version,:rarity,:currency,:price,:price_low,
                           :price_avg30,:price_avg7,:available,:image,
-                          :market_url,datetime('now'))
+                          :market_url,:artist,datetime('now'))
                    ON CONFLICT(product_id) DO UPDATE SET
                      episode_id=excluded.episode_id, card_id=excluded.card_id,
                      code=excluded.code,
@@ -1211,8 +1223,9 @@ class PokemonRepo:
                      price_low=excluded.price_low, price_avg30=excluded.price_avg30,
                      price_avg7=excluded.price_avg7, available=excluded.available,
                      image=excluded.image, market_url=excluded.market_url,
+                     artist=excluded.artist,
                      updated_at=datetime('now')""",
-                rows)
+                [{"artist": None, **r} for r in rows])
         return len(rows)
 
     def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
@@ -1228,6 +1241,35 @@ class PokemonRepo:
                 (episode_code.lower(), episode_code))
             return cur.rowcount
 
+    def backfill_artists(self, product_artist: dict[int, str]) -> dict:
+        """Fill in the illustrator on already-imported data, no network.
+
+        Writes the artist onto each market_product by its Cardmarket id, then
+        carries it up to the card. Existing imports predate the column, and
+        re-importing to fill it would spend the metered allowance; this reads the
+        illustrator out of the on-disk request cache instead.
+        """
+        if not product_artist:
+            return {"products": 0, "cards": 0}
+        with self.tx() as c:
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
+            if "artist" not in cols:
+                c.execute("ALTER TABLE market_products ADD COLUMN artist TEXT")
+            c.executemany(
+                "UPDATE market_products SET artist=? WHERE product_id=?",
+                [(a, pid) for pid, a in product_artist.items()])
+            products = c.execute(
+                "SELECT COUNT(*) FROM market_products "
+                "WHERE artist IS NOT NULL AND artist <> ''").fetchone()[0]
+            # One card, several products; take any product that named an artist.
+            cards = c.execute(
+                """UPDATE cards SET artist = (
+                       SELECT mp.artist FROM market_products mp
+                        WHERE mp.card_id = cards.id AND mp.artist IS NOT NULL
+                        LIMIT 1)
+                    WHERE artist IS NULL OR artist = ''""").rowcount
+        return {"products": products, "cards": cards}
+
     def market_products_for_card(self, card_id: str) -> list[dict]:
         return self._all(
             "SELECT * FROM market_products WHERE card_id=? ORDER BY version",
@@ -1239,6 +1281,29 @@ class PokemonRepo:
             """SELECT * FROM market_products
                 WHERE episode_id=? AND code=? ORDER BY version""",
             (episode_id, code))
+
+    def market_products_for_reprint(self, card_id: str) -> list[dict]:
+        """Every product of this card's reprints, across every imported set.
+
+        A reprint is the same logical card — same name and illustrator — so the
+        version picker opened on the Fossil Magneton lists the Fossil and
+        Legendary Collection ones (both Ken Sugimori) but not the Base Set
+        Magneton, which only shares the name. Each row keeps its own card_id and
+        set, so a pick records the printing it actually is.
+        """
+        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
+        if not ref:
+            return []
+        return self._all(
+            """SELECT mp.*, os.name AS set_name, os.release_date AS set_release,
+                      c.official_set_id AS set_id
+                 FROM market_products mp
+                 JOIN cards c ON c.id = mp.card_id
+                 JOIN official_sets os ON os.id = c.official_set_id
+                WHERE c.name = ?
+                  AND IFNULL(c.artist,'') = IFNULL(?,'')
+                ORDER BY os.release_date, mp.code, mp.version""",
+            (ref["name"], ref["artist"]))
 
     def market_products_for_name(self, name: str) -> list[dict]:
         """Every product of a card by name, across every set already imported.

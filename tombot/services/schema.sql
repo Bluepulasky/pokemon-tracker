@@ -294,6 +294,7 @@ CREATE TABLE IF NOT EXISTS market_products (
     available   INTEGER,
     image       TEXT,
     market_url  TEXT,
+    artist      TEXT,                    -- illustrator; part of the reprint key
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
