@@ -1543,6 +1543,28 @@ class PokemonRepo:
                 [(provider,)] * n)
             return used + n
 
+    def minute_window_wait(self, provider: str, per_minute: int, n: int = 1) -> float:
+        """Seconds to wait before `n` more requests fit under the per-minute cap.
+
+        0.0 when they fit right now. Reads the same api_requests rows the daily
+        budget writes, so no extra bookkeeping. The wait is always bounded by the
+        60s window — a slot cannot take longer than that to age out."""
+        if per_minute <= 0 or n <= 0:
+            return 0.0
+        rows = self._all(
+            "SELECT sent_at FROM api_requests WHERE provider=? "
+            "AND sent_at > datetime('now', '-60 seconds') ORDER BY sent_at",
+            (provider,))
+        if len(rows) + n <= per_minute:
+            return 0.0
+        # The (len+n-per_minute)-th oldest request must age past 60s to make room.
+        idx = len(rows) + n - per_minute - 1
+        if idx < 0 or idx >= len(rows):
+            return 0.0
+        age = self._scalar(
+            "SELECT (julianday('now') - julianday(?)) * 86400.0", (rows[idx]["sent_at"],))
+        return max(0.0, 60.0 - float(age or 0.0))
+
     def budget_used(self, provider: str, day: str) -> int:
         row = self._one("SELECT count FROM api_budget WHERE provider=? AND day=?",
                         (provider, day))

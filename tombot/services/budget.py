@@ -17,6 +17,7 @@ Three decisions follow from that:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
@@ -39,10 +40,16 @@ def _today() -> str:
 
 
 class RequestBudget:
-    def __init__(self, repo, provider: str, limit: int):
+    def __init__(self, repo, provider: str, limit: int, per_minute: int = 0,
+                 sleep=time.sleep):
         self.repo = repo
         self.provider = provider
         self.limit = max(0, int(limit))
+        # A second, softer cap: the plan also limits requests per minute. Unlike
+        # the daily cap (money), going over this only earns a 429, so a burst
+        # waits for a slot rather than failing.
+        self.per_minute = max(0, int(per_minute))
+        self._sleep = sleep          # injectable so tests don't actually wait
 
     def used(self, day: str | None = None) -> int:
         """Requests spent in the last 24 hours, not since midnight.
@@ -65,6 +72,16 @@ class RequestBudget:
         """
         if n <= 0:
             return self.used()
+        # Per-minute throttle first: wait (don't fail) for a slot to free. The
+        # 60s window guarantees this returns — a slot cannot take longer to age
+        # out — so there is no unbounded hang. Runs outside any transaction.
+        if self.per_minute:
+            for _ in range(120):          # safety stop; each wait is <= ~60s
+                wait = self.repo.minute_window_wait(self.provider, self.per_minute, n)
+                if wait <= 0:
+                    break
+                log.info("%s: per-minute cap reached, waiting %.1fs", self.provider, wait)
+                self._sleep(min(wait, 5.0))
         used = self.repo.budget_reserve_window(self.provider, n, self.limit)
         if used is None:
             raise BudgetExhausted(self.provider, self.used(), self.limit)
