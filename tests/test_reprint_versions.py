@@ -9,7 +9,7 @@ is, in its own set, not the card the modal was opened on.
 """
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -31,7 +31,7 @@ def app(tmp_path, monkeypatch):
                         ("THUMB_DIR", tmp_path / "m" / "t")):
         monkeypatch.setattr(Config, attr, value)
     r = PokemonRepo(Config.DB_PATH)
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     for sid, name, code, ep, rel in (("bs", "Base Set", "BS", 1, "1999/01/09"),
                                      ("ju", "Jungle", "JU", 170, "1999/06/16"),
                                      ("ng", "Neo Genesis", "NG", 200, "2000/12/16")):

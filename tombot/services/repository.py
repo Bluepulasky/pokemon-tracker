@@ -121,7 +121,7 @@ class PokemonRepo:
             return r[0] if r else None
 
     # ---------------------------------------------------------------- schema
-    def init_db(self, default_modifiers: Iterable[tuple] = ()) -> None:
+    def init_db(self) -> None:
         """Create the schema. schema.sql is the single source of truth.
 
         Every statement is CREATE ... IF NOT EXISTS, so this is safe to run on
@@ -131,10 +131,6 @@ class PokemonRepo:
         there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
             c.executescript(SCHEMA_PATH.read_text())
-            for kind, key, mult in default_modifiers:
-                c.execute(
-                    "INSERT OR IGNORE INTO price_modifiers(kind, key, multiplier) "
-                    "VALUES (?,?,?)", (kind, key, mult))
             c.execute(
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
@@ -1482,20 +1478,6 @@ class PokemonRepo:
         return self._scalar(
             "SELECT COUNT(*) FROM price_cache "
             "WHERE variant_key IS NULL AND source <> 'manual'") or 0
-
-    def set_modifier(self, kind: str, key: str, multiplier: float) -> None:
-        with self.tx() as c:
-            c.execute(
-                "INSERT INTO price_modifiers(kind, key, multiplier) VALUES (?,?,?) "
-                "ON CONFLICT(kind, key) DO UPDATE SET multiplier=excluded.multiplier",
-                (kind, key, float(multiplier)),
-            )
-
-    def get_modifiers(self) -> dict[str, dict[str, float]]:
-        out: dict[str, dict[str, float]] = {}
-        for r in self._all("SELECT * FROM price_modifiers"):
-            out.setdefault(r["kind"], {})[r["key"]] = r["multiplier"]
-        return out
 
     def price_history(self, card_id: str | None = None, set_id: str | None = None) -> list[dict]:
         if card_id:

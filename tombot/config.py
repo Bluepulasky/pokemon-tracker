@@ -149,13 +149,3 @@ VARIANT_LABELS = {
     "normal": "Normal", "holo": "Holo", "reverse": "Reverse Holo",
     "first_edition": "1st Edition", "shadowless": "Shadowless", "other": "Otra",
 }
-
-DEFAULT_MODIFIERS = [
-    ("condition", "M/NM", 1.00), ("condition", "EX", 0.85), ("condition", "GD", 0.70),
-    ("condition", "PL", 0.50), ("condition", "PO", 0.35),
-    ("language", "en", 1.00), ("language", "es", 1.00),
-    ("language", "pt", 0.85), ("language", "other", 1.00),
-    # The feed never prices a 1st edition apart from its unstamped twin, so
-    # the premium lives here. 2.0 is a starting point, not a measurement.
-    ("variant", "first_edition", 2.00),
-]

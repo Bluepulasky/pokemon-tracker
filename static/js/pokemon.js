@@ -508,7 +508,7 @@ function itemHtml(i) {
 
 /* ---------------------------------------------------------- mantenimiento */
 async function mantenimiento() {
-  const [job, mods] = await Promise.all([api.jobStatus(), api.modifiers()]);
+  const job = await api.jobStatus();
 
   view().innerHTML = `
     <h1>Mantenimiento</h1>
@@ -556,20 +556,6 @@ async function mantenimiento() {
 
     <h2 style="margin-top: 16px;">Estado</h2>
     <div id="job-state" class="missing-list"></div>
-
-    <h2 style="margin-top: 16px;">Multiplicadores de precio</h2>
-    <p class="sub">El precio de una impresión se ajusta por estos factores.</p>
-    <div class="modifier-grid">${Object.entries(mods).map(([kind, rows]) => `
-      <div class="stat">
-        <div class="k">${esc(kind)}</div>
-        ${Object.entries(rows).map(([key, value]) => `
-          <div class="form-row" style="align-items:center;gap:8px;margin:6px 0">
-            <span style="flex:1">${esc(key)}</span>
-            <input type="number" step="0.05" min="0.05" value="${value}"
-                   data-kind="${esc(kind)}" data-key="${esc(key)}"
-                   style="width:90px">
-          </div>`).join('')}
-      </div>`).join('')}</div>
 
     <h2 style="margin-top: 16px;">Sets ocultos</h2>
     <p class="sub">Sets que ocultaste de la colección con la ✕. Siguen importados
@@ -638,14 +624,6 @@ async function mantenimiento() {
     };
   }
 
-  view().querySelectorAll('.modifier-grid input').forEach((input) => {
-    input.onchange = async () => {
-      try {
-        await api.setModifier(input.dataset.kind, input.dataset.key, Number(input.value));
-        toast(`${input.dataset.key}: ×${input.value}`);
-      } catch (e) { toast(e.message, true); }
-    };
-  });
   if (job.status === 'running') pollJob();
 }
 

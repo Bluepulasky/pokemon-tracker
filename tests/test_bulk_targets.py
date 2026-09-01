@@ -7,7 +7,7 @@ import io
 
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS, Config
+from tombot.config import Config
 from tombot.services import bulk
 from tombot.services.repository import PokemonRepo
 
@@ -15,7 +15,7 @@ from tombot.services.repository import PokemonRepo
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "b.db")
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     r.upsert_official_set({"id": "base1", "name": "Base", "series": "Base",
                            "printed_total": 102, "total": 102,
                            "release_date": "1999/01/09", "ptcgo_code": None,

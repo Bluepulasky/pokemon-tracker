@@ -10,7 +10,6 @@ import threading
 
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS
 from tombot.services.budget import BudgetExhausted, RequestBudget
 from tombot.services.repository import PokemonRepo
 from tombot.services.sources.tcggo import TcggoSource
@@ -21,7 +20,7 @@ FIX = pathlib.Path(__file__).parent / "fixtures" / "tcggo"
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "b.db")
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     return r
 
 
@@ -36,7 +35,7 @@ def app(tmp_path, monkeypatch):
                         ("THUMB_DIR", tmp_path / "m" / "t")):
         monkeypatch.setattr(Config, attr, value)
     monkeypatch.setattr(Config, "TCGGO_DAILY_LIMIT", 40, raising=False)
-    PokemonRepo(Config.DB_PATH).init_db(DEFAULT_MODIFIERS)
+    PokemonRepo(Config.DB_PATH).init_db()
     from tombot import create_app
     a = create_app(Config)
     a.config["TESTING"] = True
@@ -61,7 +60,7 @@ def test_a_restart_does_not_hand_back_a_fresh_allowance(repo, tmp_path):
     RequestBudget(repo, "tcggo", limit=5).reserve(4)
 
     reopened = PokemonRepo(tmp_path / "b.db")
-    reopened.init_db(DEFAULT_MODIFIERS)
+    reopened.init_db()
     fresh = RequestBudget(reopened, "tcggo", limit=5)
 
     assert fresh.used() == 4

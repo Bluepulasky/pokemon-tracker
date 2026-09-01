@@ -7,7 +7,7 @@ variant from the product, which is also what keeps two products of the same card
 """
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.printing_variants import variant_from_product
 from tombot.services.repository import PokemonRepo
 
@@ -36,7 +36,7 @@ def app(tmp_path, monkeypatch):
         monkeypatch.setattr(Config, attr, value)
 
     repo = PokemonRepo(Config.DB_PATH)
-    repo.init_db(DEFAULT_MODIFIERS)
+    repo.init_db()
     repo.upsert_official_set({"id": "bs", "name": "Base Set", "series": "Base",
                               "printed_total": 102, "total": 102,
                               "release_date": "1999/01/09", "ptcgo_code": "BS",

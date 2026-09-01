@@ -5,7 +5,7 @@ import logging
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
-from .config import Config, DEFAULT_MODIFIERS
+from .config import Config
 from .services.repository import PokemonRepo
 from .services.pricing import PricingService
 from .services.budget import RequestBudget

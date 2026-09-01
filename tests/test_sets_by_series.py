@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -22,7 +22,7 @@ def app(tmp_path, monkeypatch):
                         ("THUMB_DIR", tmp_path / "m" / "t")):
         monkeypatch.setattr(Config, attr, value)
     r = PokemonRepo(Config.DB_PATH)
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     # Deliberately out of chronological order, and one with a blank series.
     for sid, name, series, rel in (
             ("ng", "Neo Genesis", "Neo", "2000/12/16"),

@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -21,7 +21,7 @@ def app(tmp_path, monkeypatch):
                         ("THUMB_DIR", tmp_path / "m" / "t")):
         monkeypatch.setattr(Config, attr, value)
     r = PokemonRepo(Config.DB_PATH)
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     for sid, name, rel in (("bs", "Base Set", "1999/01/09"),
                            ("ju", "Jungle", "1999/06/16")):
         r.upsert_official_set({"id": sid, "name": name, "series": "Base",
