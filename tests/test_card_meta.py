@@ -68,8 +68,8 @@ def test_apply_fills_blank_but_never_overwrites(repo):
     assert repo.get_card("bs-2")["artist"] == "Ken Sugimori"
     assert repo.get_card("bs-4")["artist"] == "Mitsuhiro Arita"   # NOT overwritten
     assert repo.get_card("bs-2")["supertype"] == "Pokémon"
-    assert result["filled"]["artist"] == 1                        # only bs-2
-    assert result["filled"]["supertype"] == 2                     # bs-2 and bs-4
+    assert result["changed"]["artist"] == 1                       # only bs-2
+    assert result["changed"]["supertype"] == 2                    # bs-2 and bs-4
     assert [m["card_id"] for m in result["missing"]] == ["zz-9"]
 
 
@@ -77,7 +77,22 @@ def test_apply_is_idempotent(repo):
     rows, _ = card_meta.parse_csv("card_id,artist\nbs-2,Ken Sugimori\n")
     card_meta.apply_fixes(repo, rows)
     again = card_meta.apply_fixes(repo, rows)
-    assert again["filled"]["artist"] == 0        # nothing left blank
+    assert again["changed"]["artist"] == 0       # nothing left blank
+
+
+def test_overwrite_replaces_an_existing_value(repo):
+    """With overwrite, a CSV value corrects a wrong one it would otherwise skip."""
+    rows, _ = card_meta.parse_csv("card_id,artist\nbs-4,Corrected Name\n")
+    result = card_meta.apply_fixes(repo, rows, overwrite=True)
+    assert repo.get_card("bs-4")["artist"] == "Corrected Name"
+    assert result["changed"]["artist"] == 1 and result["overwrite"] is True
+
+
+def test_overwrite_counts_only_real_changes(repo):
+    """Overwriting with the value already there is a no-op, reported as 0."""
+    rows, _ = card_meta.parse_csv("card_id,artist\nbs-4,Mitsuhiro Arita\n")
+    result = card_meta.apply_fixes(repo, rows, overwrite=True)
+    assert result["changed"]["artist"] == 0
 
 
 # ------------------------------------------------------------------ bundled

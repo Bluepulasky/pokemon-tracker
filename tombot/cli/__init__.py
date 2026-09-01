@@ -51,13 +51,15 @@ def backfill_card_meta():
 @click.command("fix-card-meta")
 @click.option("--file", "path", default=None,
               help="CSV to apply (default: the bundled fix file)")
+@click.option("--overwrite", is_flag=True,
+              help="Replace existing values too, not just fill blanks")
 @with_appcontext
-def fix_card_meta(path):
+def fix_card_meta(path, overwrite):
     """Apply card-metadata fixes (artist, supertype) from a CSV.
 
     With no --file it applies the pre-baked file shipped with the app, so an
-    install self-heals missing illustrators/supertypes with no network. Only
-    blank fields are filled, so it is safe to run repeatedly."""
+    install self-heals missing illustrators/supertypes with no network. Fills
+    blanks only unless --overwrite is given; safe to run repeatedly."""
     from ..services import card_meta
 
     if path:
@@ -71,8 +73,9 @@ def fix_card_meta(path):
         for e in errors:
             click.echo(f"  error (line {e.get('line')}): {e['error']}")
         return
-    result = card_meta.apply_fixes(_repo(), rows)
-    click.echo(f"filled {result['filled']}; {len(result['missing'])} unknown "
+    result = card_meta.apply_fixes(_repo(), rows, overwrite=overwrite)
+    verb = "changed (overwrite)" if overwrite else "filled"
+    click.echo(f"{verb} {result['changed']}; {len(result['missing'])} unknown "
                f"card id(s); {result['cards_in_file']} card(s) in file")
 
 

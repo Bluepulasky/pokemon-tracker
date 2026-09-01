@@ -257,14 +257,19 @@ def import_targets():
 
 
 # ----------------------------------------------------------- card-metadata fixes
+def _overwrite_flag() -> bool:
+    return (request.args.get("overwrite") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _card_meta_result(text):
     from ..services import card_meta
     rows, errors = card_meta.parse_csv(text)
     if errors:
-        return jsonify({"filled": {}, "errors": errors, "unknown": 0}), 400
-    result = card_meta.apply_fixes(repo(), rows)
+        return jsonify({"changed": {}, "errors": errors, "unknown": 0}), 400
+    result = card_meta.apply_fixes(repo(), rows, overwrite=_overwrite_flag())
     return jsonify({
-        "filled": result["filled"],                 # {'artist': n, 'supertype': n}
+        "changed": result["changed"],               # {'artist': n, 'supertype': n}
+        "overwrite": result["overwrite"],
         "cards_in_file": result["cards_in_file"],
         "unknown": len(result["missing"]),
         "unknown_ids": [m["card_id"] for m in result["missing"][:50]],
@@ -276,7 +281,8 @@ def apply_bundled_card_meta():
     """Apply the fix file shipped with the app — the one-click self-heal.
 
     Fills blank illustrators/supertypes from data bundled in the image, so an
-    older install gets them without re-importing (which would cost the cap)."""
+    older install gets them without re-importing (which would cost the cap).
+    `?overwrite=1` replaces existing values too."""
     from ..services import card_meta
     text = card_meta.bundled_text()
     if text is None:
@@ -286,7 +292,8 @@ def apply_bundled_card_meta():
 
 @bp.post("/maintenance/card-meta/import")
 def import_card_meta():
-    """Apply an uploaded fix CSV (card_id + the columns to fill)."""
+    """Apply an uploaded fix CSV (card_id + the columns to fill). `?overwrite=1`
+    replaces existing values too."""
     if "file" in request.files:
         raw = request.files["file"].read()
     else:
