@@ -48,6 +48,34 @@ def backfill_card_meta():
                f"updated {result['products']} products, {result['cards']} cards")
 
 
+@click.command("fix-card-meta")
+@click.option("--file", "path", default=None,
+              help="CSV to apply (default: the bundled fix file)")
+@with_appcontext
+def fix_card_meta(path):
+    """Apply card-metadata fixes (artist, supertype) from a CSV.
+
+    With no --file it applies the pre-baked file shipped with the app, so an
+    install self-heals missing illustrators/supertypes with no network. Only
+    blank fields are filled, so it is safe to run repeatedly."""
+    from ..services import card_meta
+
+    if path:
+        text = open(path, encoding="utf-8-sig").read()
+    else:
+        text = card_meta.bundled_text()
+        if text is None:
+            click.echo("no bundled fix file found"); return
+    rows, errors = card_meta.parse_csv(text)
+    if errors:
+        for e in errors:
+            click.echo(f"  error (line {e.get('line')}): {e['error']}")
+        return
+    result = card_meta.apply_fixes(_repo(), rows)
+    click.echo(f"filled {result['filled']}; {len(result['missing'])} unknown "
+               f"card id(s); {result['cards_in_file']} card(s) in file")
+
+
 @click.command("prices")
 @click.option("--all", "all_cards", is_flag=True, help="Ignore cache age")
 @click.option("--stale-days", type=int, default=None)
@@ -143,5 +171,6 @@ def _bool_env(name: str) -> bool:
 
 
 def register(app):
-    for cmd in (init_db, backfill_card_meta, prices, snapshot, monthly, scheduler):
+    for cmd in (init_db, backfill_card_meta, fix_card_meta, prices, snapshot,
+                monthly, scheduler):
         app.cli.add_command(cmd)

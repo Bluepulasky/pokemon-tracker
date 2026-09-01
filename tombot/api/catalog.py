@@ -256,6 +256,66 @@ def import_targets():
     })
 
 
+# ----------------------------------------------------------- card-metadata fixes
+def _card_meta_result(text):
+    from ..services import card_meta
+    rows, errors = card_meta.parse_csv(text)
+    if errors:
+        return jsonify({"filled": {}, "errors": errors, "unknown": 0}), 400
+    result = card_meta.apply_fixes(repo(), rows)
+    return jsonify({
+        "filled": result["filled"],                 # {'artist': n, 'supertype': n}
+        "cards_in_file": result["cards_in_file"],
+        "unknown": len(result["missing"]),
+        "unknown_ids": [m["card_id"] for m in result["missing"][:50]],
+    })
+
+
+@bp.post("/maintenance/card-meta/apply")
+def apply_bundled_card_meta():
+    """Apply the fix file shipped with the app — the one-click self-heal.
+
+    Fills blank illustrators/supertypes from data bundled in the image, so an
+    older install gets them without re-importing (which would cost the cap)."""
+    from ..services import card_meta
+    text = card_meta.bundled_text()
+    if text is None:
+        raise ApiError("no hay archivo de correcciones incluido", "not_found", 404)
+    return _card_meta_result(text)
+
+
+@bp.post("/maintenance/card-meta/import")
+def import_card_meta():
+    """Apply an uploaded fix CSV (card_id + the columns to fill)."""
+    if "file" in request.files:
+        raw = request.files["file"].read()
+    else:
+        raw = request.get_data()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")
+    return _card_meta_result(text)
+
+
+@bp.get("/maintenance/card-meta/export")
+def export_card_meta():
+    """Current card metadata as CSV, so gaps are visible and easy to fill by hand."""
+    import csv
+    import io
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow(["card_id", "name", "set", "supertype", "artist"])
+    for r in repo().cards_meta_rows():
+        writer.writerow([r["card_id"], r["name"] or "", r["set"] or "",
+                         r["supertype"] or "", r["artist"] or ""])
+    return Response(
+        "﻿" + buf.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="card-meta.csv"'},
+    )
+
+
 @bp.get("/maintenance/episodes")
 def list_episodes():
     """Sets available to add, with whether they are already imported.

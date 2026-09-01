@@ -545,6 +545,22 @@ async function mantenimiento() {
       <div id="targets-result"></div>
     </div>
 
+    <h2 style="margin-top: 16px;">Correcciones de datos</h2>
+    <p class="sub">Rellena datos que quedaron vacíos en importaciones viejas —
+      ilustrador y tipo — sin volver a importar ni gastar consultas.</p>
+    <div class="stat">
+      <div class="btn-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <button class="btn primary" id="apply-meta">Aplicar correcciones incluidas</button>
+        <a class="btn" id="dl-meta" download>Descargar CSV actual</a>
+        <label class="btn" for="up-meta" style="cursor:pointer">Subir CSV propio</label>
+        <input type="file" id="up-meta" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="note">Rellena solo lo que esté vacío; nunca pisa un valor ya
+        cargado, así que se puede aplicar las veces que haga falta. Columnas:
+        <code>card_id</code> + <code>artist</code>, <code>supertype</code>.</div>
+      <div id="meta-result"></div>
+    </div>
+
     <h2 style="margin-top: 16px;">Revisión de datos</h2>
     <p class="sub">Busca desajustes de vocabulario — un grado renombrado, una
       rareza escrita de dos formas — que no dan error y sí dan números mal.</p>
@@ -638,6 +654,33 @@ async function mantenimiento() {
     };
   }
 
+  const dlMeta = view().querySelector('#dl-meta');
+  if (dlMeta) dlMeta.href = api.cardMetaExportUrl();
+
+  const applyMeta = view().querySelector('#apply-meta');
+  if (applyMeta) {
+    applyMeta.onclick = async () => {
+      const box = view().querySelector('#meta-result');
+      box.innerHTML = '<div class="note">Aplicando…</div>';
+      try {
+        renderMetaResult(box, await api.applyCardMeta());
+      } catch (e) { box.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`; }
+    };
+  }
+  const upMeta = view().querySelector('#up-meta');
+  if (upMeta) {
+    upMeta.onchange = async () => {
+      const file = upMeta.files && upMeta.files[0];
+      if (!file) return;
+      const box = view().querySelector('#meta-result');
+      box.innerHTML = '<div class="note">Procesando…</div>';
+      try {
+        renderMetaResult(box, await api.importCardMeta(file));
+      } catch (e) { box.innerHTML = `<div class="import-bad">${esc(e.message)}</div>`; }
+      upMeta.value = '';
+    };
+  }
+
   view().querySelectorAll('.modifier-grid input').forEach((input) => {
     input.onchange = async () => {
       try {
@@ -668,6 +711,23 @@ function renderTargetImport(box, r) {
        <ul>${changes}</ul></details>` : ''}
     ${problems ? `<details class="import-detail" open><summary>Problemas (${r.errors})</summary>
        <ul class="bad">${problems}</ul></details>` : ''}`;
+}
+
+/* A fix run fills blanks only, so the headline is how many gaps it closed, per
+   field. Unknown ids (cards this install does not have) are surfaced, not
+   swallowed, so a file aimed at the wrong catalog is obvious. */
+function renderMetaResult(box, r) {
+  const filled = r.filled || {};
+  const parts = Object.entries(filled)
+    .map(([f, n]) => `<strong>${n}</strong> ${esc(f)}`).join(' · ') || 'nada que rellenar';
+  const unknownList = (r.unknown_ids || []).map((id) => `<code>${esc(id)}</code>`).join(', ');
+  box.innerHTML = `
+    <div class="import-summary ${r.unknown ? 'partial' : 'ok'}">
+      Rellenado: ${parts}
+      ${r.unknown ? ` · <span class="bad">${r.unknown} id(s) desconocidos</span>` : ''}
+    </div>
+    ${r.unknown ? `<details class="import-detail"><summary>Ids no encontrados en tu catálogo (${r.unknown})</summary>
+       <div class="note">${unknownList}${r.unknown > 50 ? ' …' : ''}</div></details>` : ''}`;
 }
 
 /* Silent fallbacks are the failure mode here, so the absence of an error is
