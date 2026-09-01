@@ -6,13 +6,11 @@ import { api } from './api.js';
 import { cardArt, el, esc, eur, hofBadge, photoUrl, toast } from './ui.js';
 
 let META = null;
-let MULTIPLIERS = {};
 let onChange = () => {};
 
 export function initModal(meta, changeHandler) {
   META = meta;
   onChange = changeHandler;
-  api.modifiers().then((m) => { MULTIPLIERS = m.variant || {}; }).catch(() => {});
   document.getElementById('modal-root').addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
   });
@@ -23,21 +21,6 @@ export function closeModal() {
   const root = document.getElementById('modal-root');
   root.hidden = true;
   root.innerHTML = '';
-}
-
-/* Variants offered are the ones the chosen edition was actually printed in —
-   a Base Set holo can be 1st Edition or Shadowless, a modern card cannot. */
-/* Print runs live in the Edición dropdown, so they are excluded here. Offering
-   "1st Edition" in both boxes asks the same question twice and leaves it unclear
-   which one the saved row reflects. */
-const EDITION_KEYS = ["first_edition", "shadowless"];
-
-function variantOpts(variants, selected) {
-  const allowed = ((variants && variants.length)
-    ? META.variants.filter((v) => variants.includes(v.key))
-    : META.variants
-  ).filter((v) => !EDITION_KEYS.includes(v.key));
-  return opts(allowed, selected);
 }
 
 const opts = (list, sel) => list
@@ -157,43 +140,15 @@ function rankRow(current) {
 }
 
 function addForm(card) {
-  const printings = card.available_printings || [];
-  const current = printings.find((p) => p.card_id === card.id) || printings[0] || {};
   return `<form class="add-form" data-card="${esc(card.id)}">
     <div class="field versions-field" style="margin-bottom:12px">
       <label>Versión en Cardmarket</label>
       <div class="version-list" data-versions-for="${esc(card.id)}">
         <div class="note">Buscando versiones…</div>
       </div>
-      <div class="note">Cada opción es un producto real con su propio precio.
-        La imagen y el stock son para reconocer cuál tenés.</div>
+      <div class="note">Elegí el producto que tenés — su edición y variante salen
+        de ahí. La imagen, el stock y el precio son para reconocer cuál es.</div>
       <div class="version-picked" hidden></div>
-    ${printings.length > 1 ? `
-    <div class="field" style="margin-bottom:12px">
-      <label>Edición / Set actual</label>
-      <select name="printing">
-        ${printings.map((p) => `<option value="${p.id ?? ''}" data-card="${esc(p.card_id)}"${
-          p.card_id === card.id ? ' selected' : ''}>${esc(p.display_name)}${
-          p.is_reprint ? ' (reimpresión)' : ''}</option>`).join('')}
-      </select>
-      <div class="note">Esta carta existe en varias ediciones. Elige la que tienes.</div>
-    </div>` : ''}
-    <div class="legacy-fields">
-    <div class="field" style="margin-bottom:12px">
-      <label>Edición</label>
-      <select name="edition">
-        ${(card.editions && card.editions.length)
-          ? card.editions.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join('')
-          : `<option value="">Unlimited</option>
-             <option value="first_edition">1st Edition</option>
-             <option value="shadowless">Shadowless</option>`}
-      </select>
-      <div class="note edition-note"></div>
-    </div>
-    <div class="form-row">
-      <div class="field"><label>Variante</label>
-        <select name="variant">${variantOpts(current.variants)}</select></div>
-    </div>
     </div>
     <div class="form-row">
       <div class="field"><label>Idioma</label>
@@ -205,13 +160,6 @@ function addForm(card) {
       <div class="chips">${META.conditions.map((c, i) =>
         `<span class="chip${i === 0 ? ' on' : ''}" data-cond="${esc(c.key)}"
            title="${esc(c.label)}">${esc(c.key)}</span>`).join('')}</div>
-    </div>
-
-    <div class="field mult-box" hidden style="margin-top:12px">
-      <label>Multiplicador 1st Edition</label>
-      <input type="number" step="0.1" min="0.1" inputmode="decimal">
-      <div class="note">Ninguna fuente cotiza la 1st Edition por separado, así que
-        el sobreprecio se aplica con este factor. Editable y compartido por todas.</div>
     </div>
     <div class="btn-row">
       <button type="submit" class="btn primary">Guardar</button>
@@ -269,100 +217,30 @@ function wireForm(root, card) {
       condition = chip.dataset.cond;
     };
   });
-  const printingSel = form.querySelector('[name=printing]');
-  const editionSel = form.querySelector('[name=edition]');
-  const variantSel = form.querySelector('[name=variant]');
-
-  /* A printing's variant list comes from the catalogue, so a single option means
-     there is nothing to choose — showing an active dropdown with one entry only
-     invites a pointless click. */
-  const refreshVariants = () => {
-    const chosen = (card.available_printings || [])
-      .find((p) => String(p.id ?? '') === (printingSel ? printingSel.value : ''))
-      || (card.available_printings || [])[0];
-    variantSel.innerHTML = variantOpts(chosen && chosen.variants);
-    variantSel.disabled = variantSel.options.length <= 1;
-
-    /* When the print runs are known from the imported products, they ARE the
-       options and there is nothing to disable — the list is already only what
-       exists. The rule below is for cards with no products imported, where the
-       runs have to be inferred from the set instead. That inference is keyed on
-       catalogue set ids, so it silently says "no 1st Edition" for any catalogue
-       whose ids differ, which is what it did here. */
-    const fromProducts = Array.isArray(card.editions) && card.editions.length > 0;
-    if (!fromProducts) {
-      const keys = (chosen && chosen.variants) || [];
-      for (const opt of editionSel.options) {
-        if (!opt.value) continue;
-        opt.disabled = !keys.includes(opt.value);
-      }
-      if (editionSel.selectedOptions[0]?.disabled) editionSel.value = '';
-    }
-    const available = [...editionSel.options].filter((o) => !o.disabled).length;
-    editionSel.disabled = available <= 1;
-    form.querySelector('.edition-note').textContent = editionSel.disabled
-      ? (fromProducts
-          ? 'Esta carta salió en una sola tirada.'
-          : 'Este set no tuvo tiradas 1st Edition ni Shadowless.')
-      : '';
-    updateMultiplierField();
-  };
-
-  /* The premium is shown only when it applies, because that is the moment it
-     means something — and it is editable there because one figure cannot be
-     right for a Charizard and a common at once. */
-  function updateMultiplierField() {
-    const box = form.querySelector('.mult-box');
-    const active = editionSel.value === 'first_edition';
-    box.hidden = !active;
-    if (active) box.querySelector('input').value = MULTIPLIERS.first_edition ?? 2;
-  }
-
-  if (printingSel) printingSel.onchange = refreshVariants;
-  editionSel.onchange = updateMultiplierField;
-  refreshVariants();
-
-  form.querySelector('.mult-box input').onchange = async (e) => {
-    const value = Number(e.target.value) || 1;
-    try {
-      await api.setModifier('variant', 'first_edition', value);
-      MULTIPLIERS.first_edition = value;
-      toast(`Multiplicador 1st Edition: ×${value}`);
-      onChange();
-    } catch (err) { toast(err.message, true); }
-  };
 
   form.querySelector('.cancel').onclick = closeModal;
 
   form.onsubmit = async (e) => {
     e.preventDefault();
+    // The version picker is the only selector: which card the row is, and its
+    // edition/variant, all come from the chosen product. The backend derives the
+    // variant from it, so the client just sends the product and the copy details.
+    if (!form.dataset.productId) {
+      toast('Elegí una versión de Cardmarket', true);
+      return;
+    }
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      const chosen = printingSel?.selectedOptions?.[0];
-      // A reprint pick (another set) overrides the card: it records the printing
-      // it actually is. The opened card's printing_id and edition dropdown belong
-      // to the wrong set then, so they are dropped in favour of the product.
-      const override = form.dataset.cardOverride;
-      const targetCard = override || (chosen ? chosen.dataset.card : card.id);
+      // The picked product carries its own card_id (a reprint records the set it
+      // actually is, not the one the modal was opened on).
+      const targetCard = form.dataset.cardId || card.id;
       await api.addItem({
-        // Picking a different edition records that printing's catalog card, so
-        // the slot is still satisfied and the physical edition is preserved.
         card_id: targetCard,
-        printing_id: (!override && printingSel && printingSel.value)
-          ? Number(printingSel.value) : undefined,
-        // A chosen edition IS the variant we store: 1st Edition and Shadowless
-        // are print runs, and the collection records one variant per row. For a
-        // reprint the edition lives in the product, so holo/normal is enough.
-        variant: override ? form.variant.value
-                          : (editionSel.value || form.variant.value),
         language: form.language.value,
         condition,
         quantity: Number(form.quantity.value) || 1,
-        // The version the user actually picked. Once this is set the card no
-        // longer needs resolving at price time: it IS a Cardmarket product.
-        market_product_id: form.dataset.productId
-          ? Number(form.dataset.productId) : undefined,
+        market_product_id: Number(form.dataset.productId),
       });
       toast(`${card.name} añadida`);
       onChange();
@@ -542,13 +420,13 @@ async function renderVersions(box, form, cardId) {
     ({ versions } = await api.versions(cardId));
   } catch (e) {
     box.innerHTML = `<div class="note">No se pudieron cargar las versiones
-      (${esc(e.message)}). Usá los campos de abajo.</div>`;
-    return;                     // legacy fields stay visible
+      (${esc(e.message)}). Volvé a intentar.</div>`;
+    return;
   }
   if (!versions.length) {
     box.innerHTML = `<div class="note">Sin versiones conocidas para esta carta.
-      Usá los campos de abajo.</div>`;
-    return;                     // legacy fields stay visible
+      Importá su set desde Mantenimiento para poder registrarla.</div>`;
+    return;
   }
   // The card's own printings come first; reprints from other sets follow under
   // a divider, so it is clear they are the same card in a different set.
@@ -558,14 +436,9 @@ async function renderVersions(box, form, cardId) {
     (own.length ? own.map(versionTile).join('') : '')
     + reprints.map(versionTile).join('');
 
-  /* The dropdowns stay. The picker fills them in, it does not replace them.
-
-     Replacing them would mean trusting the version list to be complete, and it
-     is not: Jungle Flareon comes back with three products where Cardmarket has
-     two, and the label on JU 19 says "1st Edition" for a card Cardmarket does
-     not split at all. Extra entries and wrong labels are both confirmed;
-     "never omits" is not. Until it is, the person holding the card keeps the
-     final say. */
+  // The picker is the single selector. The product decides which card the row
+  // is and — on the backend — which variant it represents, so there are no
+  // dropdowns to keep in sync any more.
   const byId = new Map(versions.map((v) => [String(v.market_product_id), v]));
   box.querySelectorAll('.version').forEach((btn) => {
     btn.onclick = () => {
@@ -578,57 +451,19 @@ async function renderVersions(box, form, cardId) {
 }
 
 
-/* What the picked version means for the rest of the form.
-
-   Choosing a product answers questions the fields below were asking, so it
-   answers them: leaving "Unlimited" selected while a Shadowless product is
-   picked would record a card nobody chose. The fields stay editable — the
-   version label upstream is not always right, and the person holding the card
-   is a better judge than the label. */
-
-const EDITION_FROM_VERSION = [
-  [/1st\s*edition\s*shadowless/i, 'shadowless'],
-  [/shadowless/i, 'shadowless'],
-  [/1st\s*edition/i, 'first_edition'],
-  [/unlimited/i, ''],
-];
+/* What the picked version means for the row. The product carries the card it
+   is (a reprint records its own set) and the summary spells out what will be
+   saved; the variant itself is derived from the product on the backend. */
 
 function applyVersion(form, v) {
   if (!v) return;
 
-  // A reprint from another set is saved as the card it actually is, not the one
-  // the modal was opened on. cardOverride carries that; the submit handler reads
-  // it before falling back to the opened card. The card's own set clears it.
-  if (v.card_id && v.is_current === false) {
-    form.dataset.cardOverride = v.card_id;
+  // The card the row is saved as: the picked product's own card_id (a reprint
+  // from another set records that set, not the one the modal was opened on).
+  if (v.card_id) {
+    form.dataset.cardId = v.card_id;
   } else {
-    delete form.dataset.cardOverride;
-  }
-
-  const edition = form.querySelector('[name=edition]');
-  const label = v.version || '';
-  if (edition) {
-    // The options are the real version strings now, so the picked one is
-    // selectable as itself — including "1st Edition Shadowless", which the old
-    // three fixed options could not express at all.
-    let opt = [...edition.options].find((o) => o.value === label);
-    if (!opt) {
-      const match = EDITION_FROM_VERSION.find(([re]) => re.test(label));
-      if (match) opt = [...edition.options].find((o) => o.value === match[1]);
-    }
-    if (opt) {
-      opt.disabled = false;
-      edition.disabled = false;
-      edition.value = opt.value;
-    }
-  }
-
-  // Holo or not is in the rarity, which is the one thing the label never says.
-  const variant = form.querySelector('[name=variant]');
-  if (variant) {
-    const wanted = /holo/i.test(v.rarity || '') ? 'holo' : 'normal';
-    const opt = [...variant.options].find((o) => o.value === wanted);
-    if (opt) variant.value = wanted;
+    delete form.dataset.cardId;
   }
 
   const summary = form.querySelector('.version-picked');

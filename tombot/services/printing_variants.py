@@ -30,6 +30,36 @@ SHADOWLESS_SETS = {"base1", "bs"}
 HOLO_RARITIES = {"Rare Holo", "Rare Secret", "Rare Holo EX", "Rare Shining"}
 
 
+def variant_from_product(version: str | None, rarity: str | None) -> str:
+    """The single collection variant a chosen Cardmarket product represents.
+
+    The add-card modal has one selector now — the version picker — and the
+    product it points at decides everything. This maps that product's `version`
+    (and `rarity`, the one thing the version string never says) onto the fixed
+    variant vocabulary, so the row records what the card physically is without a
+    second dropdown asking again.
+
+    It is also what keeps two products of the SAME card distinct: the collection
+    row is unique on (card_id, variant, condition, language), so a Chansey held
+    as both "Unlimited" and "1st Edition Shadowless" must land on different
+    variants (normal vs shadowless) or the second would fold into the first.
+
+    Order matters — "1st Edition Shadowless" is a shadowless run, so shadowless
+    is checked before 1st edition, matching how the picker used to fill the boxes.
+    """
+    v = (version or "").lower()
+    r = (rarity or "").lower()
+    if "reverse" in v or "reverse" in r:
+        return "reverse"
+    if "shadowless" in v:
+        return "shadowless"
+    if "1st edition" in v or "first edition" in v:
+        return "first_edition"
+    if "holo" in v or "holo" in r:
+        return "holo"
+    return "normal"
+
+
 # Reverse holos begin with Legendary Collection. Nothing printed before that
 # date exists as one, so offering it on a Base Set trainer is not a harmless
 # extra option — it is a variant that cannot be bought, priced, or owned.
