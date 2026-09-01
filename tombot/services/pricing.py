@@ -1,25 +1,16 @@
 """Price and value the collection from imported Cardmarket products.
 
-Prices come from what a set import already stored in `market_products`. A card
-you own carries the Cardmarket product it is (chosen from the version picker),
-so pricing is a local lookup by product id — no per-card network call, and no
-guessing which printing a variant maps to. That guessing is what produced every
-mispriced card in the old pokemontcg.io/TCGdex path, and it is gone with them.
+Prices are read from `market_products` by the product id on each owned row, so
+pricing is a local lookup with no network call. A row's value is its printing's
+price times the quantity.
 
-Two honesties the UI depends on:
-
-1. No source prices by condition or language. The estimate is
-   base_price x condition x language x variant multiplier, all editable
-   (price_modifiers).
-2. "No price data" is NOT "worth zero". Unpriced rows return None and show as
-   "—", so the dashboard total never quietly under-reports.
+Unpriced rows return None (shown as "—") rather than 0, so a missing price does
+not read as "worth zero" in the totals.
 """
 from __future__ import annotations
 
 import logging
 from datetime import date
-
-from ..config import DEFAULT_CONDITION
 
 log = logging.getLogger(__name__)
 
@@ -84,14 +75,14 @@ class PricingService:
                 "unpriced": unpriced, "manual_kept": manual_kept}
 
     # -------------------------------------------------------------- estimate
-    def estimate_item(self, item: dict, modifiers: dict | None = None) -> dict:
+    def estimate_item(self, item: dict) -> dict:
         """Estimated value of one collection row, including quantity.
 
-        Priced against the exact printing recorded and nothing else. A wrong
-        number is worse than no number here, because it lands in the dashboard
-        total looking like fact, so missing data reports itself.
+        Priced against the exact printing recorded and nothing else: the value is
+        the printing's own price times the quantity. A wrong number is worse than
+        no number here, because it lands in the dashboard total looking like fact,
+        so missing data reports itself.
         """
-        mods = modifiers if modifiers is not None else self.repo.get_modifiers()
         row = self.repo.get_price(item["card_id"], item.get("variant", "normal"))
 
         if not row or row.get("price") is None:
@@ -109,20 +100,7 @@ class PricingService:
         else:
             basis = "exact"
 
-        # A missing multiplier used to become 1.00 in silence, valuing a played
-        # card as mint. It now warns.
-        condition = item.get("condition") or DEFAULT_CONDITION
-        cond_m = mods.get("condition", {}).get(condition)
-        if cond_m is None:
-            log.warning("no multiplier for condition %r; using 1.00. The grade "
-                        "is not in config.CONDITIONS.", condition)
-            cond_m = 1.0
-        lang_m = mods.get("language", {}).get(item.get("language", "es"), 1.0)
-        # A 1st edition is not priced apart from its unstamped twin, so the
-        # premium is applied here. Editable, because one figure cannot be right
-        # for both a Charizard and a common.
-        var_m = mods.get("variant", {}).get(item.get("variant", "normal"), 1.0)
-        unit = round(row["price"] * cond_m * lang_m * var_m, 2)
+        unit = round(row["price"], 2)
         qty = int(item.get("quantity", 1))
         return {
             "unit": unit,
@@ -130,9 +108,6 @@ class PricingService:
             "currency": row.get("currency", "EUR"),
             "basis": basis,
             "priced_variant": row.get("variant"),
-            "condition_multiplier": cond_m,
-            "language_multiplier": lang_m,
-            "variant_multiplier": var_m,
             "variant_key": row.get("variant_key"),
             "manual": row.get("source") == "manual",
             "updated_at": row.get("updated_at"),
@@ -144,7 +119,6 @@ class PricingService:
         `unpriced_items` is reported so a low total reads as 'missing data'
         rather than 'cheap collection'.
         """
-        mods = self.repo.get_modifiers()
         total = 0.0
         priced = unpriced = 0
         per_set: dict[str, float] = {}
@@ -154,7 +128,7 @@ class PricingService:
             if not rows:
                 break
             for r in rows:
-                est = self.estimate_item(r, mods)
+                est = self.estimate_item(r)
                 if est["total"] is None:
                     unpriced += 1
                     continue

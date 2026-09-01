@@ -6,7 +6,7 @@ network, and no guessing which printing a variant maps to.
 """
 import pytest
 
-from tombot.config import DEFAULT_MODIFIERS, Config
+from tombot.config import Config
 from tombot.services.pricing import PricingService
 from tombot.services.repository import PokemonRepo
 
@@ -14,7 +14,7 @@ from tombot.services.repository import PokemonRepo
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "p.db")
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     r.upsert_official_set({"id": "ju", "name": "Jungle", "series": "Base",
                            "printed_total": 64, "total": 64,
                            "release_date": "1999/06/16", "ptcgo_code": "JU",

@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from tombot.config import Config, DEFAULT_MODIFIERS
+from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
@@ -27,7 +27,7 @@ def app(tmp_path, monkeypatch):
                         ("THUMB_DIR", tmp_path / "m" / "t")):
         monkeypatch.setattr(Config, attr, value)
     r = PokemonRepo(Config.DB_PATH)
-    r.init_db(DEFAULT_MODIFIERS)
+    r.init_db()
     r.upsert_official_set({"id": "ng", "name": "Neo Genesis", "series": "Neo",
                            "printed_total": 4, "total": 4,
                            "release_date": "2000/12/16", "ptcgo_code": "NG",

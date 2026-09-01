@@ -45,7 +45,6 @@ export const api = {
   refreshAsync: ()            => req('POST', '/api/prices/refresh-async', {}),
   syncCatalog:  ()            => req('POST', '/api/maintenance/sync-catalog', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
-  modifiers:    ()            => req('GET', '/api/prices/modifiers'),
   getSetMode:   (setId)        => req('GET', `/api/sets/${setId}/mode`),
   setSetMode:   (setId, mode)  => req('PUT', `/api/sets/${setId}/mode`, { mode }),
   setCardInSet:  (setId, cardId, action) =>
@@ -74,8 +73,6 @@ export const api = {
   },
   exportTargetsUrl: (setId) =>
     '/api/maintenance/targets/export' + (setId ? `?set_id=${encodeURIComponent(setId)}` : ''),
-  setModifier:  (kind, key, multiplier) =>
-                                 req('PUT', `/api/prices/modifiers/${kind}/${key}`, { multiplier }),
   setManualPrice: (cardId, variant, price) =>
                                  req('PUT', `/api/prices/manual/${cardId}/${variant}`, { price }),
 };
