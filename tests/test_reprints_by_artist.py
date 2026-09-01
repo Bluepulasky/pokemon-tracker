@@ -89,6 +89,44 @@ def test_the_picker_lists_only_real_reprints(repo):
     assert {r["set_id"] for r in got} == {"fo", "lc"}
 
 
+def _fossil_goal_strict(repo):
+    repo.upsert_collection_set({"id": "fossil", "name": "Fossil",
+                               "rules_json": '{"include_sets": ["fo"]}'})
+    SetBuilder(repo).build("fossil")
+
+
+# -------- issue #47 point 2: the modal reflects loose ownership --------------
+def test_modal_shows_owned_reprints_when_loose(repo):
+    """Opening the Fossil Magneton, with Fossil loose, shows the owned LC one."""
+    _fossil_goal(repo)                                   # loose on
+    repo.upsert_collection_item({"card_id": "lc-28"})    # own the reprint
+    rows = repo.items_by_card("fo-26")
+    assert len(rows) == 1
+    assert rows[0]["card_id"] == "lc-28" and rows[0]["is_reprint"] is True
+
+
+def test_modal_stays_strict_without_loose(repo):
+    """Without loose, the modal for a card you don't own shows nothing."""
+    _fossil_goal_strict(repo)                            # loose off
+    repo.upsert_collection_item({"card_id": "lc-28"})
+    assert repo.items_by_card("fo-26") == []
+
+
+# -------- issue #47 point 3: the Cartas set-filter reflects loose ------------
+def test_cartas_filter_includes_reprints_when_loose(repo):
+    _fossil_goal(repo)                                   # loose on
+    repo.upsert_collection_item({"card_id": "lc-28"})
+    rows, total = repo.list_collection(set_id="fossil")
+    assert total == 1 and rows[0]["card_id"] == "lc-28"
+
+
+def test_cartas_filter_stays_strict_without_loose(repo):
+    _fossil_goal_strict(repo)                            # loose off
+    repo.upsert_collection_item({"card_id": "lc-28"})
+    _, total = repo.list_collection(set_id="fossil")
+    assert total == 0
+
+
 def test_backfill_scan_reads_artist_from_cache(tmp_path, monkeypatch):
     """The backfill recovers illustrators from cached tcggo responses, no network."""
     import json

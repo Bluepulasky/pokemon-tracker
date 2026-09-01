@@ -683,19 +683,34 @@ class PokemonRepo:
         return files
 
     def items_by_card(self, card_id: str) -> list[dict]:
+        """Owned copies of this card. When the card is collected by a loose set,
+        this also returns the owned reprints — same name and illustrator, in
+        other sets — so the modal shows what the loose set grid already counts
+        (issue #47). Reprint rows are flagged `is_reprint` and sorted after the
+        card's own copies."""
+        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
+        name = ref["name"] if ref else None
+        artist = ref["artist"] if ref else None
         rows = self._all(
             "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
-            "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating "
+            "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating, "
+            "(i.card_id <> ?) AS is_reprint "
             "FROM collection_items i JOIN cards c ON c.id = i.card_id "
             "JOIN official_sets os ON os.id = c.official_set_id "
             "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id "
-            "WHERE i.card_id=? "
-            "ORDER BY CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1 "
+            "WHERE i.card_id = ? "
+            "   OR (EXISTS (SELECT 1 FROM set_slot_cards ssc "
+            "                JOIN set_loose_completion lc ON lc.set_id = ssc.set_id "
+            "               WHERE ssc.card_id = ?) "
+            "       AND c.name = ? AND IFNULL(c.artist,'') = IFNULL(?,'')) "
+            "ORDER BY is_reprint, "
+            "CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1 "
             "WHEN 'GD' THEN 2 WHEN 'PL' THEN 3 ELSE 4 END, i.variant",
-            (card_id,),
+            (card_id, card_id, card_id, name, artist),
         )
         for r in rows:
+            r["is_reprint"] = bool(r["is_reprint"])
             r["photos"] = self.get_photos(r["id"])
         return rows
 
@@ -712,9 +727,18 @@ class PokemonRepo:
             where.append("(c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)")
             params += [f"%{q}%", f"{q}%", f"%{q}%"]
         if set_id:
-            where.append("EXISTS (SELECT 1 FROM set_slot_cards m WHERE m.card_id=i.card_id "
-                         "AND m.set_id=?)")
-            params.append(set_id)
+            # An owned card belongs to a set filter when it is a slot member, or
+            # — when the set has loose completion on — when it is a reprint (same
+            # name and illustrator) of one. Without the loose arm a Base Set 2
+            # Snorlax held for the Jungle set drops out of a Jungle filter even
+            # though the set counts it (issue #47).
+            where.append(
+                "EXISTS (SELECT 1 FROM set_slot_cards m JOIN cards mc ON mc.id=m.card_id "
+                " WHERE m.set_id=? AND (mc.id = i.card_id "
+                "   OR (EXISTS (SELECT 1 FROM set_loose_completion lc WHERE lc.set_id=?) "
+                "       AND mc.name = c.name "
+                "       AND IFNULL(mc.artist,'') = IFNULL(c.artist,''))))")
+            params += [set_id, set_id]
         for col, val in (("condition", condition), ("variant", variant),
                          ("language", language)):
             if val:
