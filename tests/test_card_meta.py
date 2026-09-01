@@ -81,6 +81,14 @@ def test_apply_is_idempotent(repo):
 
 
 # ------------------------------------------------------------------ bundled
+def test_meta_export_query_runs(repo):
+    """`set` is a SQL keyword: the export query must quote it, or it 500s
+    (regression — this crashed 'Descargar CSV actual')."""
+    rows = repo.cards_meta_rows()
+    assert rows and set(rows[0]) >= {"card_id", "name", "set", "supertype", "artist"}
+    assert any(r["card_id"] == "bs-4" for r in rows)
+
+
 def test_the_bundled_fix_file_exists_and_parses():
     text = card_meta.bundled_text()
     assert text is not None

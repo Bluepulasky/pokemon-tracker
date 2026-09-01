@@ -1368,9 +1368,13 @@ class PokemonRepo:
         return filled
 
     def cards_meta_rows(self) -> list[dict]:
-        """Every card's fixable metadata, for the CSV export."""
+        """Every card's fixable metadata, for the CSV export.
+
+        `set` is a SQL keyword, so the alias must be quoted — an unquoted
+        `AS set` is a syntax error that 500s the export.
+        """
         return self._all(
-            "SELECT id AS card_id, name, official_set_id AS set, supertype, artist "
+            'SELECT id AS card_id, name, official_set_id AS "set", supertype, artist '
             "FROM cards ORDER BY official_set_id, number_sort")
 
     def market_products_for_card(self, card_id: str) -> list[dict]:
