@@ -8,7 +8,7 @@ both name and illustrator (Ken Sugimori) — those are real reprints.
 """
 import pytest
 
-from tombot.services.artist_backfill import scan_cache_for_artists
+from tombot.services.catalog_backfill import scan_cache_for_card_meta
 from tombot.services.repository import PokemonRepo
 from tombot.services.setbuilder import SetBuilder
 
@@ -126,8 +126,8 @@ def test_cartas_filter_stays_strict_without_loose(repo):
     assert total == 0
 
 
-def test_backfill_scan_reads_artist_from_cache(tmp_path, monkeypatch):
-    """The backfill recovers illustrators from cached tcggo responses, no network."""
+def test_backfill_scan_reads_meta_from_cache(tmp_path, monkeypatch):
+    """The backfill recovers artist + supertype from cached tcggo responses."""
     import json
     # Run from an empty cwd so the scan's cwd-relative fallback dirs (which would
     # otherwise resolve to the repo's own cache) find nothing but this fixture.
@@ -135,9 +135,11 @@ def test_backfill_scan_reads_artist_from_cache(tmp_path, monkeypatch):
     cache = tmp_path / ".cache-tcggo"
     cache.mkdir()
     (cache / "a.json").write_text(json.dumps({"data": [
-        {"cardmarket_id": 101, "name": "Magneton",
+        {"cardmarket_id": 101, "name": "Magneton", "supertype": "Pokémon",
          "artist": {"id": 605, "name": "Keiji Kinebuchi"}},
-        {"cardmarket_id": 102, "name": "Magneton", "artist": "Ken Sugimori"},
+        {"cardmarket_id": 102, "name": "Magneton", "supertype": "Pokémon",
+         "artist": "Ken Sugimori"},
     ]}))
-    got = scan_cache_for_artists(tmp_path)
-    assert got == {101: "Keiji Kinebuchi", 102: "Ken Sugimori"}
+    got = scan_cache_for_card_meta(tmp_path)
+    assert got == {101: {"artist": "Keiji Kinebuchi", "supertype": "Pokémon"},
+                   102: {"artist": "Ken Sugimori", "supertype": "Pokémon"}}

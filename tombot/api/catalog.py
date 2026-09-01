@@ -30,7 +30,7 @@ def meta():
         "languages": [{"key": k, "label": LANGUAGE_LABELS[k]} for k in LANGUAGES],
         "variants": [{"key": k, "label": VARIANT_LABELS[k]} for k in VARIANTS],
         "rarities": r.rarities(),
-        "types": r.card_types(),
+        "types": r.card_supertypes(),
         "editions": [{"key": "first_edition", "label": "1st Edition"},
                      {"key": "unlimited", "label": "Unlimited"}],
         "ratings": [{"value": v, "label": lbl} for v, lbl in

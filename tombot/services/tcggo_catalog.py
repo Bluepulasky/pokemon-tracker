@@ -133,6 +133,10 @@ class TcggoCatalog:
                 # The illustrator, used as the reprint-group key: a reprint reuses
                 # the artwork, so same name + same artist is the same logical card.
                 "artist": best.get("artist"),
+                # Pokémon / Trainer / Energy — the only card-type tcggo gives us
+                # (its `type` field is the product kind, "singles"), and what the
+                # Cartas "Tipo" filter runs on.
+                "supertype": best.get("supertype"),
             })
         self.repo.upsert_cards(cards)
 

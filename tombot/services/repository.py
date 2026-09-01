@@ -743,12 +743,11 @@ class PokemonRepo:
         if rarity:
             where.append("c.rarity = ?")
             params.append(rarity)
-        # Type comes from the catalog's JSON list. LIKE on the quoted value is
-        # exact enough here: types are single words and cannot be substrings of
-        # one another ("Fire" never appears inside another type name).
+        # The "Tipo" filter is the card supertype (Pokémon / Trainer / Energy) —
+        # the only card type tcggo carries.
         if card_type:
-            where.append("c.types_json LIKE ?")
-            params.append(f'%"{card_type}"%')
+            where.append("c.supertype = ?")
+            params.append(card_type)
         # Edition maps onto the physical variant. Unlimited is "neither of the
         # early-run markings" rather than a stored value, because that is what it
         # means: an ordinary copy from the open print run.
@@ -843,8 +842,8 @@ class PokemonRepo:
                 where.append(f"i.{col} = ?")
                 params.append(val)
         if card_type:
-            where.append("c.types_json LIKE ?")
-            params.append(f'%"{card_type}"%')
+            where.append("c.supertype = ?")
+            params.append(card_type)
         # Edition describes a copy in hand, so it drops placeholders — unlike the
         # rank below, which belongs to the card.
         if edition == "first_edition":
@@ -1219,21 +1218,22 @@ class PokemonRepo:
         if not rows:
             return 0
         with self.tx() as c:
-            # A database created before market_products.artist existed does not
-            # gain the column on init_db (that only adds new tables), so add it
-            # here — the same self-heal link_products_to_cards uses for card_id.
+            # A database created before these columns existed does not gain them
+            # on init_db (that only adds new tables), so add them here — the same
+            # self-heal link_products_to_cards uses for card_id.
             cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
-            if "artist" not in cols:
-                c.execute("ALTER TABLE market_products ADD COLUMN artist TEXT")
+            for col in ("artist", "supertype"):
+                if col not in cols:
+                    c.execute(f"ALTER TABLE market_products ADD COLUMN {col} TEXT")
             c.executemany(
                 """INSERT INTO market_products(product_id, episode_id, card_id, code,
                        number, name, version, rarity, currency, price, price_low,
                        price_avg30, price_avg7, available, image, market_url,
-                       artist, updated_at)
+                       artist, supertype, updated_at)
                    VALUES(:product_id,:episode_id,:card_id,:code,:number,:name,
                           :version,:rarity,:currency,:price,:price_low,
                           :price_avg30,:price_avg7,:available,:image,
-                          :market_url,:artist,datetime('now'))
+                          :market_url,:artist,:supertype,datetime('now'))
                    ON CONFLICT(product_id) DO UPDATE SET
                      episode_id=excluded.episode_id, card_id=excluded.card_id,
                      code=excluded.code,
@@ -1243,9 +1243,9 @@ class PokemonRepo:
                      price_low=excluded.price_low, price_avg30=excluded.price_avg30,
                      price_avg7=excluded.price_avg7, available=excluded.available,
                      image=excluded.image, market_url=excluded.market_url,
-                     artist=excluded.artist,
+                     artist=excluded.artist, supertype=excluded.supertype,
                      updated_at=datetime('now')""",
-                [{"artist": None, **r} for r in rows])
+                [{"artist": None, "supertype": None, **r} for r in rows])
         return len(rows)
 
     def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
@@ -1261,33 +1261,42 @@ class PokemonRepo:
                 (episode_code.lower(), episode_code))
             return cur.rowcount
 
-    def backfill_artists(self, product_artist: dict[int, str]) -> dict:
-        """Fill in the illustrator on already-imported data, no network.
+    def backfill_card_meta(self, product_meta: dict[int, dict]) -> dict:
+        """Fill catalog metadata (artist, supertype) on already-imported data.
 
-        Writes the artist onto each market_product by its Cardmarket id, then
-        carries it up to the card. Existing imports predate the column, and
-        re-importing to fill it would spend the metered allowance; this reads the
-        illustrator out of the on-disk request cache instead.
+        Writes each field onto the market_product by its Cardmarket id, then
+        carries it up to the card. Existing imports predate these columns, and
+        re-importing to fill them would spend the metered allowance; this reads
+        them out of the on-disk request cache instead. No network.
         """
-        if not product_artist:
+        if not product_meta:
             return {"products": 0, "cards": 0}
+        fields = ("artist", "supertype")
         with self.tx() as c:
             cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
-            if "artist" not in cols:
-                c.execute("ALTER TABLE market_products ADD COLUMN artist TEXT")
-            c.executemany(
-                "UPDATE market_products SET artist=? WHERE product_id=?",
-                [(a, pid) for pid, a in product_artist.items()])
+            for f in fields:
+                if f not in cols:
+                    c.execute(f"ALTER TABLE market_products ADD COLUMN {f} TEXT")
+            for f in fields:
+                pairs = [(m[f], pid) for pid, m in product_meta.items() if m.get(f)]
+                if pairs:
+                    c.executemany(
+                        f"UPDATE market_products SET {f}=? WHERE product_id=?", pairs)
             products = c.execute(
                 "SELECT COUNT(*) FROM market_products "
                 "WHERE artist IS NOT NULL AND artist <> ''").fetchone()[0]
-            # One card, several products; take any product that named an artist.
-            cards = c.execute(
-                """UPDATE cards SET artist = (
-                       SELECT mp.artist FROM market_products mp
-                        WHERE mp.card_id = cards.id AND mp.artist IS NOT NULL
-                        LIMIT 1)
-                    WHERE artist IS NULL OR artist = ''""").rowcount
+            cards = 0
+            # One card, several products; take any product that named the field.
+            for f in fields:
+                cards = c.execute(
+                    f"""UPDATE cards SET {f} = (
+                            SELECT mp.{f} FROM market_products mp
+                             WHERE mp.card_id = cards.id AND mp.{f} IS NOT NULL
+                             LIMIT 1)
+                         WHERE ({f} IS NULL OR {f} = '')
+                           AND EXISTS (SELECT 1 FROM market_products mp
+                                        WHERE mp.card_id = cards.id
+                                          AND mp.{f} IS NOT NULL)""").rowcount
         return {"products": products, "cards": cards}
 
     def market_products_for_card(self, card_id: str) -> list[dict]:
@@ -1608,16 +1617,16 @@ class PokemonRepo:
         )
 
     # ------------------------------------------------------------ dashboards
-    def card_types(self) -> list[str]:
-        """Distinct energy types present in the catalog, for the type filter."""
-        seen: set[str] = set()
-        for row in self._all("SELECT DISTINCT types_json FROM cards "
-                             "WHERE types_json IS NOT NULL AND types_json <> '[]'"):
-            try:
-                seen.update(json.loads(row["types_json"]))
-            except (TypeError, ValueError):
-                continue
-        return sorted(seen)
+    def card_supertypes(self) -> list[str]:
+        """Distinct supertypes in the catalog (Pokémon / Trainer / Energy).
+
+        This is the card-type filter. The finer energy type (Fire, Water, …) is
+        not available: tcggo, the only source, does not carry it — its `type`
+        field is the product kind ("singles"), and it exposes supertype only.
+        """
+        return [r["supertype"] for r in self._all(
+            "SELECT DISTINCT supertype FROM cards "
+            "WHERE supertype IS NOT NULL AND supertype <> '' ORDER BY supertype")]
 
     def rarities(self) -> list[str]:
         return [r["rarity"] for r in self._all(

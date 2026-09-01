@@ -1,9 +1,10 @@
-"""Read illustrators back out of the cached tcggo responses.
+"""Recover catalog metadata from the cached tcggo responses.
 
-The reprint-group key is name + artist, and tcggo names the artist on every card
-record. Sets imported before the column existed have it blank; re-importing to
-fill it would spend the metered allowance, so this recovers it from the request
-cache that those imports already wrote — no network, no cost.
+Some fields tcggo returns on every card record are not stored by the importer
+that first ran — the illustrator (the reprint-group key) and the supertype
+(Pokémon / Trainer / Energy, the card-type filter). Re-importing to fill them
+would spend the metered allowance, so this reads them back out of the request
+cache those imports already wrote — no network, no cost.
 """
 from __future__ import annotations
 
@@ -46,9 +47,13 @@ def _cache_dirs(data_dir) -> list[Path]:
     return [d for d in dict.fromkeys(candidates) if d.is_dir()]
 
 
-def scan_cache_for_artists(data_dir=None) -> dict[int, str]:
-    """{cardmarket product id -> illustrator name} from every cached response."""
-    out: dict[int, str] = {}
+def scan_cache_for_card_meta(data_dir=None) -> dict[int, dict]:
+    """{cardmarket product id -> {artist, supertype}} from every cached response.
+
+    A field is only recorded when present, so a record missing one does not
+    blank a value another record supplied for the same product.
+    """
+    out: dict[int, dict] = {}
     for directory in _cache_dirs(data_dir):
         for f in directory.glob("*.json"):
             try:
@@ -56,7 +61,12 @@ def scan_cache_for_artists(data_dir=None) -> dict[int, str]:
             except (OSError, ValueError):
                 continue
             for rec in _iter_card_records(payload):
-                name = _artist_name(rec.get("artist"))
-                if name:
-                    out.setdefault(int(rec["cardmarket_id"]), name)
+                pid = int(rec["cardmarket_id"])
+                meta = out.setdefault(pid, {})
+                artist = _artist_name(rec.get("artist"))
+                if artist and "artist" not in meta:
+                    meta["artist"] = artist
+                supertype = rec.get("supertype")
+                if supertype and "supertype" not in meta:
+                    meta["supertype"] = supertype
     return out

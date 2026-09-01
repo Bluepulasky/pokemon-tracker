@@ -19,40 +19,35 @@ def repo():
                            "logo_url": None, "symbol_url": None})
     r.upsert_cards([
         {"id": "base1-4", "official_set_id": "base1", "name": "Charizard",
-         "number": "4", "types": ["Fire"]},
+         "number": "4", "supertype": "Pokémon"},
         {"id": "base1-2", "official_set_id": "base1", "name": "Blastoise",
-         "number": "2", "types": ["Water"]},
+         "number": "2", "supertype": "Pokémon"},
         {"id": "base1-9", "official_set_id": "base1", "name": "Magneton",
-         "number": "9", "types": ["Lightning", "Metal"]},
+         "number": "9", "supertype": "Pokémon"},
+        {"id": "base1-88", "official_set_id": "base1", "name": "Professor Oak",
+         "number": "88", "supertype": "Trainer"},
+        {"id": "base1-98", "official_set_id": "base1", "name": "Fire Energy",
+         "number": "98", "supertype": "Energy"},
     ])
     yield r
     os.unlink(path)
 
 
-def test_card_types_are_discovered_from_the_catalog(repo):
-    assert repo.card_types() == ["Fire", "Lightning", "Metal", "Water"]
+def test_card_supertypes_are_discovered_from_the_catalog(repo):
+    """The "Tipo" filter is the supertype — the only card type tcggo carries."""
+    assert repo.card_supertypes() == ["Energy", "Pokémon", "Trainer"]
 
 
-def test_type_filter_matches_one_of_several_types(repo):
-    """types_json is a list; a card can be both Lightning and Metal."""
-    for cid in ("base1-4", "base1-2", "base1-9"):
+def test_type_filter_matches_the_supertype(repo):
+    for cid in ("base1-4", "base1-88", "base1-98"):
         repo.upsert_collection_item({"card_id": cid})
 
-    fire, _ = repo.list_collection(card_type="Fire")
-    assert [i["card_id"] for i in fire] == ["base1-4"]
-    metal, _ = repo.list_collection(card_type="Metal")
-    assert [i["card_id"] for i in metal] == ["base1-9"]
-
-
-def test_type_filter_does_not_match_substrings(repo):
-    """Matching on the quoted value stops 'Fire' matching a hypothetical
-    'Firestorm' — the reason the LIKE pattern includes the quotes."""
-    repo.upsert_cards([{"id": "base1-99", "official_set_id": "base1",
-                        "name": "Test", "number": "99", "types": ["Firestorm"]}])
-    repo.upsert_collection_item({"card_id": "base1-99"})
-    repo.upsert_collection_item({"card_id": "base1-4"})
-    fire, _ = repo.list_collection(card_type="Fire")
-    assert [i["card_id"] for i in fire] == ["base1-4"]
+    trainers, _ = repo.list_collection(card_type="Trainer")
+    assert [i["card_id"] for i in trainers] == ["base1-88"]
+    energy, _ = repo.list_collection(card_type="Energy")
+    assert [i["card_id"] for i in energy] == ["base1-98"]
+    pokemon, _ = repo.list_collection(card_type="Pokémon")
+    assert [i["card_id"] for i in pokemon] == ["base1-4"]
 
 
 def test_edition_filter_separates_first_edition_from_unlimited(repo):
@@ -88,8 +83,9 @@ def test_quantity_filter_counts_the_card_not_the_row(repo):
 
 def test_filters_compose(repo):
     repo.upsert_collection_item({"card_id": "base1-4", "variant": "first_edition",
-                                 "quantity": 1})
-    repo.upsert_collection_item({"card_id": "base1-2", "variant": "first_edition",
-                                 "quantity": 5})
-    got, _ = repo.list_collection(edition="first_edition", min_quantity=1, card_type="Fire")
+                                 "quantity": 1})                       # Pokémon
+    repo.upsert_collection_item({"card_id": "base1-88", "variant": "first_edition",
+                                 "quantity": 5})                       # Trainer
+    got, _ = repo.list_collection(edition="first_edition", min_quantity=1,
+                                  card_type="Pokémon")
     assert [i["card_id"] for i in got] == ["base1-4"]
