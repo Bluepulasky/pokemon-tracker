@@ -68,13 +68,7 @@ def get_card(card_id):
     # era rules for a card that has no printing row of its own.
     for pr in printings:
         pr["variants"] = json.loads(pr.get("variants_json") or "[]")
-    # What print runs this card exists in is a fact we imported, not something
-    # to infer from a hardcoded list of set ids. Those ids were pokemontcg.io's
-    # ("base1"), so under any other catalogue they match nothing and the app
-    # concludes a set had no 1st Edition — while the products sitting in the
-    # database say otherwise.
     products = repo().market_products_for_card(card_id)
-    card["editions"] = sorted({p["version"] for p in products if p["version"]})
     # The Cardmarket link is the card's direct product match (or a resolved
     # direct URL if one was ever stored). No redirector fallback: a card with no
     # product gets no link rather than the dead prices.pokemontcg.io one (#27).

@@ -1261,6 +1261,10 @@ class PokemonRepo:
                 ORDER BY os.release_date, mp.code, mp.version""",
             (name,))
 
+    def get_market_product(self, product_id: int) -> dict | None:
+        return self._one("SELECT * FROM market_products WHERE product_id=?",
+                         (product_id,))
+
     def market_products_by_ids(self, ids: list[int]) -> dict:
         if not ids:
             return {}

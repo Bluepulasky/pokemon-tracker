@@ -5,6 +5,7 @@ from .. import ApiError
 from ..config import CONDITIONS, LANGUAGES, MAX_RATING, VARIANTS
 from ..services.images import ImageError, delete_files, process_upload
 from ..services.market import market_url
+from ..services.printing_variants import variant_from_product
 
 bp = Blueprint("collection", __name__, url_prefix="/api/collection")
 
@@ -27,6 +28,23 @@ def _validate(body: dict) -> None:
         if body.get("card_id") and body["card_id"] != printing["card_id"]:
             raise ApiError("la edición no corresponde a esta carta", "invalid_printing")
         body["card_id"] = printing["card_id"]
+    # The version picker is the single selector: a chosen product decides which
+    # card the row is and which variant it represents. Deriving the variant here
+    # (rather than trusting a client field) keeps it authoritative and is what
+    # lets two products of one card — e.g. Unlimited vs 1st Edition Shadowless —
+    # sit in distinct rows under the (card_id, variant, condition, language) key.
+    if body.get("market_product_id") is not None:
+        product = repo().get_market_product(int(body["market_product_id"]))
+        if not product:
+            raise ApiError("producto de Cardmarket no encontrado",
+                           "invalid_product", 404)
+        if product.get("card_id"):
+            if body.get("card_id") and body["card_id"] != product["card_id"]:
+                raise ApiError("el producto no corresponde a esta carta",
+                               "invalid_product")
+            body["card_id"] = product["card_id"]
+        body["variant"] = variant_from_product(product.get("version"),
+                                               product.get("rarity"))
     if body.get("rating") is not None:
         try:
             rating = int(body["rating"])
