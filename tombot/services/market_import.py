@@ -53,9 +53,13 @@ class MarketImporter:
                 break
             page += 1
 
+        from .tcggo_catalog import resolve_collisions
         code = (rows[0].get("card_code_number") or "").rsplit(" ", 1)[0] if rows else ""
-        stored = self.repo.upsert_market_products(
-            [self._row(r, episode_id, code) for r in self._dedupe(rows)])
+        product_rows = [self._row(r, episode_id, code) for r in self._dedupe(rows)]
+        # Split any different cards that upstream gave the same code+number onto
+        # distinct card_ids before storing, so their products never merge.
+        resolve_collisions(product_rows)
+        stored = self.repo.upsert_market_products(product_rows)
         return {"episode_id": episode_id, "fetched": len(rows), "stored": stored,
                 "requests": self._used() - spent_before}
 
