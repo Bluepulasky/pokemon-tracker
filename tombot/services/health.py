@@ -3,8 +3,8 @@
 Five bugs so far came from the same shape, none of them raised, and none of
 them failed a test:
 
-  * a condition grade was renamed, leaving cards stored under a grade the app
-    no longer offers — invisible in filters, sorted to the bottom silently
+  * a condition grade was renamed and the multiplier lookup fell back to 1.00,
+    valuing played cards as mint
   * the source spells one rarity three ways, so a rule excluding "Rare Holo"
     kept three holos and built a 51-card set called 48
   * a card number arrives as "BS 4" on some rows and 4 on others, so one card
@@ -14,9 +14,10 @@ them failed a test:
   * the same list decided the era, so every Base Set common was offered as a
     reverse holo — a variant that did not exist until 2002
 
-The common thread is a lookup that misses and returns something plausible. An
-unlisted grade sorts last. An unknown set id is "modern". Each answer is
-reasonable in isolation and wrong in fact, and nothing anywhere says so.
+The common thread is a lookup that misses and returns something plausible. A
+missing multiplier is 1.00. An unlisted grade sorts last. An unknown set id is
+"modern". Each answer is reasonable in isolation and wrong in fact, and nothing
+anywhere says so.
 
 These checks look for the mismatch itself rather than its consequences, so the
 next rename is a warning on a page instead of a wrong price nobody questions.
@@ -38,11 +39,8 @@ def _finding(level: str, check: str, message: str, detail=None) -> dict:
 
 
 def check_conditions(repo, conditions) -> list[dict]:
-    """Every stored grade must be one the app still offers.
-
-    A card left on a renamed grade drops out of the condition filter and sorts
-    to the bottom without a word, so a stale grade is worth flagging.
-    """
+    """Every stored grade must be one the app still offers, and must have a
+    price multiplier — a grade with neither is valued as mint in silence."""
     out = []
     rows = repo._all(
         "SELECT DISTINCT condition FROM collection_items WHERE condition IS NOT NULL")
@@ -50,9 +48,24 @@ def check_conditions(repo, conditions) -> list[dict]:
     if unknown:
         out.append(_finding(
             "error", "conditions",
-            f"{len(unknown)} condición(es) de tus cartas ya no están en el "
-            f"vocabulario actual.",
+            f"{len(unknown)} condición(es) de tus cartas ya no existen. "
+            f"No tienen multiplicador, así que esas cartas se valúan como mint.",
             unknown))
+
+    rows = repo._all("SELECT key FROM price_modifiers WHERE kind='condition'")
+    stale = sorted({r["key"] for r in rows} - set(conditions))
+    if stale:
+        out.append(_finding(
+            "warning", "conditions",
+            f"{len(stale)} multiplicador(es) son de condiciones que ya no existen.",
+            stale))
+
+    missing = sorted(set(conditions) - {r["key"] for r in rows})
+    if missing:
+        out.append(_finding(
+            "error", "conditions",
+            f"{len(missing)} condición(es) no tienen multiplicador y caen a 1,00.",
+            missing))
     return out
 
 

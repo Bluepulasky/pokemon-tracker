@@ -78,6 +78,7 @@ def _rating_arg(name: str) -> int | None:
 
 def _priced(rows):
     pricing = svc("pricing")
+    mods = repo().get_modifiers()
     locale = cfg().CARDMARKET_LOCALE
     # Grid art comes from the best-conditioned copy of the card, which may live
     # on a different row than the one being rendered.
@@ -90,7 +91,7 @@ def _priced(rows):
         r["display_photo"] = best.get(r["card_id"]) if r.get("owned", True) else None
         # A placeholder has no physical copy, so it has no estimated value —
         # pricing it would invent a number for a card that is not owned.
-        r["value"] = (pricing.estimate_item(r) if r.get("owned", True)
+        r["value"] = (pricing.estimate_item(r, mods) if r.get("owned", True)
                       else {"unit": None, "total": None, "currency": "EUR",
                             "basis": "not_owned", "updated_at": None})
         r["market_url"] = market_url(r, locale=locale) or by_card.get(r.get("card_id"))

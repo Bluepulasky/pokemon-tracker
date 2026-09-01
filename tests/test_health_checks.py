@@ -37,7 +37,7 @@ def test_clean_data_reports_nothing(repo):
 
 
 def test_a_renamed_grade_left_on_a_card_is_reported(repo):
-    """A card stored on a grade the app no longer offers, reported not silent."""
+    """The condition rename valued played cards as mint, in silence."""
     with repo.tx() as c:
         c.execute("""INSERT INTO collection_items(card_id, variant, condition,
                         language, quantity) VALUES('bs-4','holo','LP','en',1)""")
@@ -47,7 +47,22 @@ def test_a_renamed_grade_left_on_a_card_is_reported(repo):
     found = _levels(result, "conditions")
     assert found and found[0]["level"] == "error"
     assert "LP" in found[0]["detail"]
+    assert "mint" in found[0]["message"]
     assert not result["ok"]
+
+
+def test_a_missing_multiplier_is_reported(repo):
+    """Nothing raises when a grade has no multiplier; it becomes 1.00."""
+    with repo.tx() as c:
+        c.execute("DELETE FROM price_modifiers WHERE kind='condition' AND key=?",
+                  (CONDITIONS[1],))
+
+    result = run_checks(repo, CONDITIONS)
+
+    found = [f for f in _levels(result, "conditions") if f["level"] == "error"]
+    assert found
+    assert CONDITIONS[1] in found[0]["detail"]
+    assert "1,00" in found[0]["message"]
 
 
 def test_two_spellings_of_one_rarity_are_reported(repo):

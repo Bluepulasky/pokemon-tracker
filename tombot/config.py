@@ -149,3 +149,11 @@ VARIANT_LABELS = {
     "normal": "Normal", "holo": "Holo", "reverse": "Reverse Holo",
     "first_edition": "1st Edition", "shadowless": "Shadowless", "other": "Otra",
 }
+
+# Condition price multipliers, seeded once. No source prices by condition, so a
+# played card is valued as the near-mint price scaled by these editable factors.
+# Only 'condition' is used; language and variant are priced per-product now.
+DEFAULT_MODIFIERS = [
+    ("condition", "M/NM", 1.00), ("condition", "EX", 0.85), ("condition", "GD", 0.70),
+    ("condition", "PL", 0.50), ("condition", "PO", 0.35),
+]

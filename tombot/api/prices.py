@@ -2,7 +2,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from . import cfg, repo, svc
 from .. import ApiError
-from ..config import VARIANTS
+from ..config import CONDITIONS, VARIANTS
 
 bp = Blueprint("prices", __name__, url_prefix="/api/prices")
 
@@ -88,6 +88,36 @@ def set_manual(card_id, variant):
         raise ApiError("el precio no puede ser negativo", "invalid_price")
     repo().set_manual_price(card_id, variant, price)
     return jsonify({"card_id": card_id, "variant": variant, "price": price})
+
+
+@bp.get("/modifiers")
+def modifiers():
+    """The condition price multipliers, for the Mantenimiento editor."""
+    return jsonify(repo().get_modifiers())
+
+
+@bp.put("/modifiers/<kind>/<key>")
+def set_modifier(kind, key):
+    """Edit a condition price multiplier.
+
+    Only condition is adjustable: no source prices by condition, so a played
+    card's value is the near-mint price scaled by this local factor.
+    """
+    if kind != "condition":
+        raise ApiError(f"tipo de multiplicador desconocido: {kind}", "invalid_modifier")
+    # Reject a typo'd grade: an unlisted key would write a row nothing reads and
+    # nothing removes — which is how a stray "N/NM" once sat next to the real ones.
+    if key not in CONDITIONS:
+        raise ApiError(f"condición desconocida: {key}", "invalid_modifier")
+    body = request.get_json(silent=True) or {}
+    try:
+        value = float(body.get("multiplier"))
+    except (TypeError, ValueError):
+        raise ApiError("el multiplicador debe ser un número", "invalid_modifier") from None
+    if not 0 < value <= 100:
+        raise ApiError("el multiplicador debe estar entre 0 y 100", "invalid_modifier")
+    repo().set_modifier(kind, key, value)
+    return jsonify({"kind": kind, "key": key, "multiplier": value})
 
 
 @bp.get("/versions")

@@ -45,6 +45,9 @@ export const api = {
   refreshAsync: ()            => req('POST', '/api/prices/refresh-async', {}),
   syncCatalog:  ()            => req('POST', '/api/maintenance/sync-catalog', {}),
   jobStatus:    ()            => req('GET', '/api/maintenance/status'),
+  modifiers:    ()            => req('GET', '/api/prices/modifiers'),
+  setModifier:  (kind, key, multiplier) =>
+                                 req('PUT', `/api/prices/modifiers/${kind}/${key}`, { multiplier }),
   getSetMode:   (setId)        => req('GET', `/api/sets/${setId}/mode`),
   setSetMode:   (setId, mode)  => req('PUT', `/api/sets/${setId}/mode`, { mode }),
   setCardInSet:  (setId, cardId, action) =>
