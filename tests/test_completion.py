@@ -131,13 +131,14 @@ def test_rebuild_preserves_manual_slots(repo):
 
 
 def test_market_url_prefers_resolved_direct_link(repo):
-    """PLAN.md §2.17: the payload's cardmarket.url is a redirector, not a
-    Cardmarket address. Once resolved, the direct URL must win."""
+    """A card with no resolved direct URL yields no link (issue #27): the old
+    prices.pokemontcg.io redirector was removed because it only 404s. Once a
+    direct Cardmarket URL is stored, it must win."""
     from tombot.services.market import market_url
 
     card = repo.get_card("base1-4")
-    assert market_url(card) == "https://prices.pokemontcg.io/cardmarket/base1-4", \
-        "unresolved cards must still yield a working link"
+    assert market_url(card) is None, \
+        "no redirector fallback: an unresolved card has no card-level direct link"
 
     repo.set_card_market_url(
         "base1-4",

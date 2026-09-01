@@ -37,6 +37,15 @@ def app(tmp_path, monkeypatch):
         {"id": "base1-58", "official_set_id": "base1", "name": "Pikachu",
          "number": "58", "rarity": "Common"},
     ])
+    # The card's direct Cardmarket product — the link resolves from this now that
+    # the pokemontcg.io redirector is gone (issue #27).
+    repo.upsert_market_products([
+        {"product_id": 273699, "episode_id": 1, "card_id": "base1-4",
+         "code": "BS 4", "number": "4", "name": "Charizard", "version": "Unlimited",
+         "rarity": "Holo", "currency": "EUR", "price": 200.0, "price_low": None,
+         "price_avg30": None, "price_avg7": None, "available": 1, "image": None,
+         "market_url": "https://cardmarket.com/en/Pokemon/Products/Singles/Base-Set/Charizard-V2-BS4"},
+    ])
     repo.upsert_collection_set({"id": "mine", "name": "Mi Base Set"})
     repo.replace_rule_slots("mine", [
         {"position": 0, "label": "Blastoise", "cards": ["base1-2"],
@@ -70,7 +79,8 @@ def test_card_detail_assembles_catalog_collection_and_printings(client, app):
     assert card["rating"] == 7
     assert [i["variant"] for i in card["items"]] == ["holo"]
     assert card["available_printings"][0]["variants"], "variant list must be parsed"
-    assert card["market_url"].endswith("base1-4") or "cardmarket.com" in card["market_url"]
+    assert "cardmarket.com" in card["market_url"], \
+        "the link resolves from the card's direct Cardmarket product (#27)"
 
 
 def test_collection_rows_carry_a_computed_value(client, app):

@@ -50,7 +50,8 @@ def list_cards():
         rarity=request.args.get("rarity", ""),
         page=page, page_size=size,
     )
-    return page_response(attach(rows, locale=cfg().CARDMARKET_LOCALE), total, page, size)
+    return page_response(attach(rows, locale=cfg().CARDMARKET_LOCALE, repo=repo()),
+                         total, page, size)
 
 
 @bp.get("/cards/<card_id>")
@@ -60,7 +61,6 @@ def get_card(card_id):
         raise ApiError("carta no encontrada", "not_found", 404)
     card["items"] = repo().items_by_card(card_id)
     card["prices"] = repo().get_prices_for_card(card_id)
-    card["market_url"] = market_url(card, locale=cfg().CARDMARKET_LOCALE)
     # Empty when the card has no sibling printings, so the UI can skip the
     # edition selector rather than showing a one-option dropdown.
     printings = repo().printings_for_card(card_id)
@@ -75,6 +75,12 @@ def get_card(card_id):
     # database say otherwise.
     products = repo().market_products_for_card(card_id)
     card["editions"] = sorted({p["version"] for p in products if p["version"]})
+    # The Cardmarket link is the card's direct product match (or a resolved
+    # direct URL if one was ever stored). No redirector fallback: a card with no
+    # product gets no link rather than the dead prices.pokemontcg.io one (#27).
+    card["market_url"] = (
+        market_url(card, locale=cfg().CARDMARKET_LOCALE)
+        or next((p["market_url"] for p in products if p.get("market_url")), None))
 
     if not printings:
         from ..services.printing_variants import variants_for
@@ -156,7 +162,7 @@ def search():
     items, _ = repo().list_collection(
         q=q, rating=rating, rating_min=rating_min, rating_max=rating_max,
         page=1, page_size=25)
-    return jsonify({"cards": attach(cards, locale=cfg().CARDMARKET_LOCALE),
+    return jsonify({"cards": attach(cards, locale=cfg().CARDMARKET_LOCALE, repo=repo()),
                     "collection": items})
 
 

@@ -1,25 +1,22 @@
 """Cardmarket (MKM) product links.
 
-`cardmarket.url` in the pokemontcg.io payload is a prices.pokemontcg.io
-redirector, not a Cardmarket address. The real product slug is Cardmarket
-internal and not derivable from the card data:
+The link for a card is the Cardmarket product it maps to. Every imported card
+carries its products in `market_products` (the direct tcggo <-> MKM match), each
+with its own working `market_url`, so a link is a lookup, not a guess:
 
     base1-4  -> .../Singles/Base-Set/Charizard-V2-BS4
     gym1-2   -> .../Singles/Gym-Heroes/Brocks-Rhydon-GH2
     ex7-95   -> .../Singles/EX-Team-Rocket-Returns/R-Energy-TRR95
 
-The 'V2' disambiguator and the slug rules are Cardmarket's, so guessing produces
-broken links. `flask resolve-links` reads each one from the redirector's Location
-header once and stores it; this module just formats what was stored.
-
-The redirector still works as a live fallback for anything unresolved, so a card
-always has a usable link.
+A collection row that pinned an exact version uses that product's URL; anything
+else falls back to the card's direct match (`repo.market_urls_for_cards`). There
+is deliberately no card-level guess: the old prices.pokemontcg.io redirector was
+a leftover from the removed pokemontcg.io source and now only 404s (issue #27),
+so a card with no product gets no link rather than a broken one.
 """
 from __future__ import annotations
 
 import json
-
-REDIRECTOR = "https://prices.pokemontcg.io/cardmarket/{card_id}"
 
 # Verified against the live site: minCondition=2 selects "Near Mint" in the
 # product page's filter panel. Cardmarket's condition ladder, best first.
@@ -38,10 +35,12 @@ LANGUAGE_PARAM: dict[str, int] = {}
 
 
 def market_url(card: dict, *, locale: str = "en", condition: str | None = None) -> str | None:
-    """Build the Cardmarket product URL for a catalog card.
+    """The resolved direct Cardmarket URL stored on the card, or None.
 
-    Falls back to the redirector when the direct URL has not been resolved yet,
-    so the UI never has to deal with a missing link.
+    Returns a link only when the card carries a `cardmarket_direct` URL; there
+    is no redirector fallback any more (see the module docstring). Callers that
+    want the card's product-level link resolve it through
+    `repo.market_urls_for_cards` — see `attach`.
     """
     if not card:
         return None
@@ -56,8 +55,7 @@ def market_url(card: dict, *, locale: str = "en", condition: str | None = None) 
 
     url = ext.get("cardmarket_direct")
     if not url:
-        card_id = card.get("id") or card.get("card_id")
-        return REDIRECTOR.format(card_id=card_id) if card_id else None
+        return None
 
     if locale and locale != "en":
         url = url.replace("/en/", f"/{locale}/", 1)
@@ -70,8 +68,20 @@ def market_url(card: dict, *, locale: str = "en", condition: str | None = None) 
     return url
 
 
-def attach(rows: list[dict], *, locale: str = "en") -> list[dict]:
-    """Add `market_url` to catalog cards or collection rows in place."""
+def attach(rows: list[dict], *, locale: str = "en", repo=None) -> list[dict]:
+    """Add `market_url` to catalog cards or collection rows in place.
+
+    Prefers a card's resolved `cardmarket_direct`; otherwise, when a `repo` is
+    given, uses the card's direct Cardmarket product match. A card with neither
+    is left with `market_url=None` — no link beats a link to the dead redirector.
+    """
+    by_card: dict[str, str] = {}
+    if repo is not None:
+        by_card = repo.market_urls_for_cards(
+            [r.get("id") or r.get("card_id") for r in rows])
     for r in rows:
-        r["market_url"] = market_url(r, locale=locale)
+        url = market_url(r, locale=locale)
+        if not url:
+            url = by_card.get(r.get("id") or r.get("card_id"))
+        r["market_url"] = url
     return rows
