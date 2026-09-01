@@ -135,6 +135,7 @@ class MarketImporter:
             "image": raw.get("image"),
             "market_url": (raw.get("links") or {}).get("cardmarket"),
             "artist": _artist_name(raw.get("artist")),
+            "supertype": raw.get("supertype"),
         }
 
 

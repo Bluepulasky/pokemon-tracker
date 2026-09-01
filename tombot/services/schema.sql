@@ -295,6 +295,7 @@ CREATE TABLE IF NOT EXISTS market_products (
     image       TEXT,
     market_url  TEXT,
     artist      TEXT,                    -- illustrator; part of the reprint key
+    supertype   TEXT,                    -- Pokémon / Trainer / Energy (the type filter)
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
