@@ -89,6 +89,27 @@ def test_the_condition_multiplier_scales_the_value(client, app):
     assert svc.estimate_item(item)["total"] == 105.0         # x3
 
 
+def test_first_edition_doubles_the_price_on_every_read_path(client, app):
+    """The x2 first-edition factor must show up wherever a price is read, not
+    only on a single-item fetch: the card modal (items_by_card) and the Cartas
+    grid (list_collection) each carry first_edition into estimate_item."""
+    from tombot.services.pricing import PricingService
+    app.repo.upsert_price("base1-4", "holo", "cardmarket", "EUR", 100.0,
+                          None, None, None, None, variant_key="holo:unlimited")
+    svc = PricingService(app.repo, Config)
+
+    item_id = app.repo.items_by_card("base1-4")[0]["id"]
+    app.repo.update_collection_item(item_id, {"first_edition": True})   # the edit toggle
+
+    modal = app.repo.items_by_card("base1-4")[0]
+    grid = next(i for i in app.repo.list_collection(q="")[0] if i["card_id"] == "base1-4")
+    single = app.repo.get_collection_item(modal["id"])
+    for row in (modal, grid, single):
+        assert row["first_edition"] == 1
+        assert svc.estimate_item(row)["unit"] == 200.0
+        assert svc.estimate_item(row)["first_edition_multiplier"] == 2.0
+
+
 def test_the_condition_multiplier_is_editable(client, app):
     assert app.repo.get_modifiers()["condition"]["EX"] == 0.85
     assert client.put("/api/prices/modifiers/condition/EX",
