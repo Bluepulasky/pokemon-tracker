@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from ..config import DEFAULT_CONDITION
+from ..config import DEFAULT_CONDITION, LANGUAGE_MULTIPLIERS
 
 log = logging.getLogger(__name__)
 
@@ -112,12 +112,15 @@ class PricingService:
                         "is not in config.CONDITIONS.", condition)
             cond_m = 1.0
         first_ed_m = 2.0 if item.get("first_edition") else 1.0
-        unit = round(row["price"] * cond_m * first_ed_m, 2)
+        lang = item.get("language") or "es"
+        lang_m = LANGUAGE_MULTIPLIERS.get(lang, LANGUAGE_MULTIPLIERS["other"])
+        unit = round(row["price"] * cond_m * first_ed_m * lang_m, 2)
         qty = int(item.get("quantity", 1))
         return {
             "unit": unit,
             "total": round(unit * qty, 2),
             "first_edition_multiplier": first_ed_m,
+            "language_multiplier": lang_m,
             "currency": row.get("currency", "EUR"),
             "basis": basis,
             "priced_variant": row.get("variant"),

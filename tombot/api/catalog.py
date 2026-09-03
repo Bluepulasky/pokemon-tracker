@@ -23,11 +23,12 @@ def healthz():
 def meta():
     """Vocabularies the UI needs, so the front end never hardcodes them."""
     from ..config import (CONDITIONS, CONDITION_LABELS, LANGUAGES, LANGUAGE_LABELS,
-                          RATING_LABELS, VARIANTS, VARIANT_LABELS)
+                          LANGUAGE_MULTIPLIERS, RATING_LABELS, VARIANTS, VARIANT_LABELS)
     r = repo()
     return jsonify({
         "conditions": [{"key": k, "label": CONDITION_LABELS[k]} for k in CONDITIONS],
-        "languages": [{"key": k, "label": LANGUAGE_LABELS[k]} for k in LANGUAGES],
+        "languages": [{"key": k, "label": LANGUAGE_LABELS[k],
+                       "multiplier": LANGUAGE_MULTIPLIERS[k]} for k in LANGUAGES],
         "variants": [{"key": k, "label": VARIANT_LABELS[k]} for k in VARIANTS],
         "rarities": r.rarities(),
         "types": r.card_supertypes(),
