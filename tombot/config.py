@@ -147,6 +147,10 @@ RETIRED_CONDITIONS = {
 LANGUAGES = ["es", "en", "pt", "other"]
 LANGUAGE_LABELS = {"es": "Español", "en": "Inglés", "pt": "Portugués", "other": "Otro"}
 
+# Price multiplier by card language. Cardmarket prices track the English printing;
+# other languages sell for less, so they are scaled by a flat factor.
+LANGUAGE_MULTIPLIERS = {"en": 1.00, "es": 0.85, "pt": 0.85, "other": 0.85}
+
 VARIANTS = ["normal", "holo", "reverse", "first_edition", "shadowless", "other"]
 VARIANT_LABELS = {
     "normal": "Normal", "holo": "Holo", "reverse": "Reverse Holo",
@@ -155,7 +159,8 @@ VARIANT_LABELS = {
 
 # Condition price multipliers, seeded once. No source prices by condition, so a
 # played card is valued as the near-mint price scaled by these editable factors.
-# Only 'condition' is used; language and variant are priced per-product now.
+# Only 'condition' lives here (editable, per-grade). Language is a flat factor in
+# LANGUAGE_MULTIPLIERS above; variant is priced per-product.
 DEFAULT_MODIFIERS = [
     ("condition", "M/NM", 1.00), ("condition", "EX", 0.85), ("condition", "GD", 0.70),
     ("condition", "PL", 0.50), ("condition", "PO", 0.35),

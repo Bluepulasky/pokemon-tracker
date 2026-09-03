@@ -7,11 +7,14 @@ import { cardArt, el, esc, eur, hofBadge, photoUrl, toast } from './ui.js';
 
 let META = null;
 let COND_MULTIPLIERS = {};
+let LANG_MULTIPLIERS = {};
 let onChange = () => {};
 
 export function initModal(meta, changeHandler) {
   META = meta;
   onChange = changeHandler;
+  LANG_MULTIPLIERS = Object.fromEntries(
+    (meta.languages || []).map((l) => [l.key, l.multiplier ?? 1]));
   api.modifiers().then((m) => { COND_MULTIPLIERS = m.condition || {}; }).catch(() => {});
   document.getElementById('modal-root').addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
@@ -93,8 +96,9 @@ function variantCard(item) {
   // Precio base sin el multiplicador de primera edición, para que el preview
   // pueda recalcular limpio en ambas direcciones.
   const condMult = v.condition_multiplier || 1;
+  const langMult = v.language_multiplier || 1;
   const priceRaw = v.unit != null
-    ? (v.unit / condMult / (item.first_edition ? 2 : 1)).toFixed(4)
+    ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
   return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}"
      data-first-ed="${item.first_edition ? '1' : '0'}"
@@ -360,19 +364,24 @@ function editVariant(vc, id, cardId) {
     const factor   = sel.value === '1' ? 2.0 : 1.0;
     const condKey  = vc.querySelector('[name=condition]').value;
     const condMult = COND_MULTIPLIERS[condKey] ?? 1.0;
-    const newUnit  = priceRaw * condMult * factor;
-    const newTotal = newUnit * qty;
+    const langKey  = vc.querySelector('[name=language]').value;
+    const langMult = LANG_MULTIPLIERS[langKey] ?? 1.0;
+    const liveQty  = Number(vc.querySelector('[name=quantity]').value) || 1;
+    const newUnit  = priceRaw * condMult * langMult * factor;
+    const newTotal = newUnit * liveQty;
     const suffix   = factor > 1 ? ' · ×2 1ª ed.' : '';
     const small    = basis === 'no_data'
       ? 'sin datos para esta impresión'
       : basis === 'printing_level'
-        ? `${eur(newUnit)} × ${qty} · precio de la impresión${suffix}`
-        : `${eur(newUnit)} × ${qty}${suffix}`;
+        ? `${eur(newUnit)} × ${liveQty} · precio de la impresión${suffix}`
+        : `${eur(newUnit)} × ${liveQty}${suffix}`;
     preview.innerHTML = `<div class="price">${esc(eur(newTotal))}<small>${small}</small></div>`;
   }
 
   sel.onchange = updatePreview;
   vc.querySelector('[name=condition]').onchange = updatePreview;
+  vc.querySelector('[name=language]').onchange = updatePreview;
+  vc.querySelector('[name=quantity]').oninput = updatePreview;
   updatePreview();   // render inmediato al abrir el formulario
 
   vc.querySelector('.cancel').onclick = () => openCard(cardId);

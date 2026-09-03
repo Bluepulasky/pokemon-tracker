@@ -23,7 +23,10 @@ def app(tmp_path, monkeypatch):
                               "logo_url": None, "symbol_url": None})
     repo.upsert_cards([{"id": "base1-4", "official_set_id": "base1",
                         "name": "Charizard", "number": "4"}])
-    repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo"})
+    # English so the language multiplier is 1.0 — tests that isolate another
+    # dimension (condition, first edition, manual price) read the raw factor.
+    repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
+                                 "language": "en"})
 
     from tombot import create_app
     a = create_app(Config)
@@ -79,7 +82,8 @@ def test_the_condition_multiplier_scales_the_value(client, app):
     scaled by an editable factor (PO defaults to 0.35)."""
     from tombot.services.pricing import PricingService
     app.repo.upsert_collection_item({"card_id": "base1-4", "variant": "holo",
-                                     "condition": "PO", "quantity": 3}, mode="set")
+                                     "condition": "PO", "quantity": 3,
+                                     "language": "en"}, mode="set")
     app.repo.upsert_price("base1-4", "holo", "cardmarket", "EUR", 100.0,
                           None, None, None, None, variant_key="holo:unlimited")
     svc = PricingService(app.repo, Config)
@@ -87,6 +91,23 @@ def test_the_condition_multiplier_scales_the_value(client, app):
                 if i["variant"] == "holo" and i["condition"] == "PO")
     assert svc.estimate_item(item)["unit"] == 35.0           # 100 * 0.35
     assert svc.estimate_item(item)["total"] == 105.0         # x3
+
+
+def test_the_language_multiplier_scales_the_value(client, app):
+    """Cardmarket prices track the English printing; other languages sell for
+    less, scaled by a flat factor (English ×1.00, the rest ×0.85)."""
+    from tombot.services.pricing import PricingService
+    app.repo.upsert_price("base1-4", "holo", "cardmarket", "EUR", 100.0,
+                          None, None, None, None, variant_key="holo:unlimited")
+    svc = PricingService(app.repo, Config)
+    item = app.repo.items_by_card("base1-4")[0]
+
+    en = svc.estimate_item({**item, "language": "en"})
+    es = svc.estimate_item({**item, "language": "es"})
+    other = svc.estimate_item({**item, "language": "other"})
+    assert en["unit"] == 100.0 and en["language_multiplier"] == 1.0
+    assert es["unit"] == 85.0 and es["language_multiplier"] == 0.85
+    assert other["unit"] == 85.0
 
 
 def test_first_edition_doubles_the_price_on_every_read_path(client, app):
