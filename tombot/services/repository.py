@@ -630,9 +630,9 @@ class PokemonRepo:
             c.execute(
                 f"""INSERT INTO collection_items
                       (card_id,variant,condition,language,quantity,printing_id,
-                       market_product_id,notes)
+                       market_product_id,notes,first_edition)
                     VALUES (:card_id,:variant,:condition,:language,:quantity,
-                            :printing_id,:market_product_id,:notes)
+                            :printing_id,:market_product_id,:notes,:first_edition)
                     ON CONFLICT(card_id,variant,condition,language) DO UPDATE SET
                       {conflict}, notes=COALESCE(excluded.notes, collection_items.notes),
                       printing_id=COALESCE(excluded.printing_id,
@@ -699,7 +699,7 @@ class PokemonRepo:
         name = ref["name"] if ref else None
         artist = ref["artist"] if ref else None
         rows = self._all(
-            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
+            "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
             "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating, "
             "(i.card_id <> ?) AS is_reprint "
@@ -800,7 +800,7 @@ class PokemonRepo:
             params,
         ) or 0
         rows = self._all(
-            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
+            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
                        c.image_small_url, c.image_local, c.external_ids_json,
                        os.name AS set_name, os.name AS printing_name,
                        COALESCE(cr.rating, 0) AS rating
