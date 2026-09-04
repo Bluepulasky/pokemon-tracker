@@ -77,3 +77,37 @@ def test_build_set_makes_distinct_cards_and_clean_products(repo):
     # Each card's products are its own — the picker/pricing no longer cross over.
     assert [p["name"] for p in repo.market_products_for_card("cel-2")] == ["Reshiram"]
     assert [p["name"] for p in repo.market_products_for_card("cel-2-blastoise")] == ["Blastoise"]
+
+
+def test_reimport_rebuilds_an_existing_goals_slots(repo, monkeypatch):
+    """#63: reimport that de-collides a card adds it to the catalogue, but the
+    goal already covered the set, so its rule slots must be rebuilt to pick the
+    new card up. Before the fix _ensure_collection_set returned early without
+    rebuilding, leaving the goal one slot short of the catalogue."""
+    from tombot import create_app
+    from tombot.api.catalog import _ensure_collection_set
+
+    # First import: the collided episode gives one card (Reshiram) at CEL 2.
+    collided = [_prod_row(576747, "cel-2", "CEL 2", "Reshiram", "rare")]
+    repo.upsert_market_products(collided)
+    TcggoCatalog(repo).build_set({"id": 35, "code": "CEL", "name": "Celebrations",
+                                  "released_at": "2021-10-08", "cards_total": 25})
+
+    app = create_app(Config)
+    app.extensions["repo"] = repo
+    with app.app_context():
+        first = _ensure_collection_set("cel", "Celebrations")
+        assert first["created"] is True
+        assert len(repo.get_set_slots("cel-completo")) == 1
+
+        # Reimport de-collides: Blastoise now lands on its own id in the catalogue.
+        deco = [_prod_row(576747, "cel-2", "CEL 2", "Reshiram", "rare"),
+                _prod_row(576771, "cel-2-blastoise", "CEL 2", "Blastoise", "Classic Collection")]
+        repo.upsert_market_products(deco)
+        TcggoCatalog(repo).build_set({"id": 35, "code": "CEL", "name": "Celebrations",
+                                      "released_at": "2021-10-08", "cards_total": 25})
+
+        again = _ensure_collection_set("cel", "Celebrations")
+        assert again["created"] is False
+        assert len(repo.get_set_slots("cel-completo")) == 2, \
+            "reimport must rebuild the goal so the de-collided card gets a slot"
