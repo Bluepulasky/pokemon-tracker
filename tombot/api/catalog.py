@@ -399,11 +399,20 @@ def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
         return None
     import json as _json
 
+    matched = None
     for existing in repo().list_collection_sets():
         rules = _json.loads(existing.get("rules_json") or "{}")
         if set_id in (rules.get("include_sets") or []):
-            return {"id": existing["id"], "name": existing["name"],
-                    "created": False}
+            # Reimport can add cards to the catalogue that no slot yet covers — a
+            # de-collided printing split onto its own id. Rebuild the goal's rule
+            # slots so they pick those up (manual slots and owned copies survive).
+            built = svc("setbuilder").build(existing["id"])
+            if matched is None:
+                matched = {"id": existing["id"], "name": existing["name"],
+                           "created": False,
+                           "slots": built.get("slots") if isinstance(built, dict) else built}
+    if matched:
+        return matched
 
     # No group is assigned here: the Sets view groups by the catalogue set's
     # series and orders by its release date, so an imported set files itself
