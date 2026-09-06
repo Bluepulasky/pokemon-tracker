@@ -32,6 +32,7 @@ def meta():
         "variants": [{"key": k, "label": VARIANT_LABELS[k]} for k in VARIANTS],
         "rarities": r.rarities(),
         "types": r.card_supertypes(),
+        "energy_types": r.card_energy_types(),
         "editions": [{"key": "first_edition", "label": "1st Edition"},
                      {"key": "unlimited", "label": "Unlimited"}],
         "ratings": [{"value": v, "label": lbl} for v, lbl in
@@ -269,7 +270,7 @@ def _card_meta_result(text):
         return jsonify({"changed": {}, "errors": errors, "unknown": 0}), 400
     result = card_meta.apply_fixes(repo(), rows, overwrite=_overwrite_flag())
     return jsonify({
-        "changed": result["changed"],               # {'artist': n, 'supertype': n}
+        "changed": result["changed"],               # {'artist': n, 'supertype': n, 'types': n}
         "overwrite": result["overwrite"],
         "cards_in_file": result["cards_in_file"],
         "unknown": len(result["missing"]),
@@ -281,8 +282,9 @@ def _card_meta_result(text):
 def apply_bundled_card_meta():
     """Apply the fix file shipped with the app — the one-click self-heal.
 
-    Fills blank illustrators/supertypes from data bundled in the image, so an
-    older install gets them without re-importing (which would cost the cap).
+    Fills blank illustrators/supertypes/energy types from data bundled in the
+    image, so an older install gets them without re-importing (which would cost
+    the cap) — and the energy type has no other way in, tcggo does not send it.
     `?overwrite=1` replaces existing values too."""
     from ..services import card_meta
     text = card_meta.bundled_text()
@@ -311,12 +313,13 @@ def export_card_meta():
     """Current card metadata as CSV, so gaps are visible and easy to fill by hand."""
     import csv
     import io
+    from ..services.card_meta import join_list
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
-    writer.writerow(["card_id", "name", "set", "supertype", "artist"])
+    writer.writerow(["card_id", "name", "set", "supertype", "types", "artist"])
     for r in repo().cards_meta_rows():
         writer.writerow([r["card_id"], r["name"] or "", r["set"] or "",
-                         r["supertype"] or "", r["artist"] or ""])
+                         r["supertype"] or "", join_list(r["types"]), r["artist"] or ""])
     return Response(
         "﻿" + buf.getvalue(),
         mimetype="text/csv; charset=utf-8",

@@ -385,6 +385,7 @@ async function collection(r) {
     rating: r.params.get('rating') || '',
     rating_min: r.params.get('rating_min') || '',
     type: r.params.get('type') || '',
+    color: r.params.get('color') || '',
     edition: r.params.get('edition') || '',
     min_quantity: r.params.get('min_quantity') || '',
     sort: r.params.get('sort') || 'set',
@@ -432,7 +433,8 @@ async function collection(r) {
       ${sel('f-rating', 'Hall of Fame',
         [{ key: '0', label: 'Sin rating' }].concat(META.ratings.filter((x) => x.value > 0)
           .map((x) => ({ key: String(x.value), label: `★ ${x.value}` }))), f.rating)}
-      ${sel('f-type', 'Tipo', META.types.map((t) => ({ key: t, label: t })), f.type)}
+      ${sel('f-type', 'Supertipo', META.types.map((t) => ({ key: t, label: t })), f.type)}
+      ${sel('f-color', 'Color', (META.energy_types || []).map((t) => ({ key: t, label: t })), f.color)}
       ${sel('f-edition', 'Edición', META.editions, f.edition)}
       ${sel('f-min_quantity', 'Cantidad',
         [1, 2, 3, 4, 5].map((n) => ({ key: String(n), label: `${n} o más` })), f.min_quantity)}
@@ -452,7 +454,7 @@ async function collection(r) {
   const apply = (overrides = {}) => {
     const p = new URLSearchParams();
     for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
-                     'rating', 'type', 'edition', 'min_quantity', 'sort']) {
+                     'rating', 'type', 'color', 'edition', 'min_quantity', 'sort']) {
       const v = view().querySelector(`#f-${k}`).value;
       if (v) p.set(k, v);
     }
@@ -564,7 +566,11 @@ async function mantenimiento() {
       <div class="note" style="margin-top:8px">«Aplicar correcciones incluidas» usa el
         archivo que viene con la app; «Subir CSV propio» aplica el tuyo al instante.
         Columnas: <code>card_id</code> + <code>artist</code>, <code>supertype</code>
-        (celda vacía = no toca ese campo). Ambas acciones respetan la casilla de arriba.</div>
+        (Pokémon / Trainer / Energy), <code>types</code> (el color: Fire, Water…;
+        dos tipos separados por <code>|</code>). Celda vacía = no toca ese campo.
+        Ambas acciones respetan la casilla de arriba. El color solo llega por acá:
+        tcggo no lo trae, así que un set recién importado no tiene color hasta
+        aplicar el archivo.</div>
       <div id="meta-result"></div>
     </div>
 

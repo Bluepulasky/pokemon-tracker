@@ -47,7 +47,12 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
 ## Data model
 
 - **`official_sets` + `cards`** — the catalogue, from a tcggo import. Card ids are
-  `{setcode}-{number}` (e.g. `bs-4`). Always the whole set.
+  `{setcode}-{number}` (e.g. `bs-4`). Always the whole set. `supertype`
+  (Pokémon / Trainer / Energy) comes from tcggo; `types_json` (the energy type /
+  colour: Fire, Water, …) does **not** — tcggo has no such field, bulk or detail —
+  so it is filled only by the card-meta CSV (`tombot/data/card_meta.csv`, applied
+  from Mantenimiento or `flask fix-card-meta`), and a reimport must not blank it.
+  The Cartas view filters on both axes independently (`type` and `color`).
 - **`market_products`** — every Cardmarket product for an imported set: one row per
   printing/version, with its price and its own Cardmarket URL. A card's versions
   are its products.

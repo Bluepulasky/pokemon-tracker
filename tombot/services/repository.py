@@ -177,7 +177,10 @@ class PokemonRepo:
 
     def upsert_cards(self, cards: Iterable[dict]) -> int:
         """Bulk upsert. Never clears image_local — a re-import must not throw away
-        the cached image files (external data must not overwrite local state)."""
+        the cached image files (external data must not overwrite local state).
+        The same goes for types_json: tcggo never sends an energy type, so it is
+        filled locally (the card-meta CSV) and an import carrying an empty list
+        must leave the filled one in place."""
         rows = []
         for c in cards:
             rows.append({
@@ -211,7 +214,9 @@ class PokemonRepo:
                      official_set_id=excluded.official_set_id, name=excluded.name,
                      number=excluded.number, number_sort=excluded.number_sort,
                      rarity=excluded.rarity, supertype=excluded.supertype,
-                     subtypes_json=excluded.subtypes_json, types_json=excluded.types_json,
+                     subtypes_json=excluded.subtypes_json,
+                     types_json=CASE WHEN excluded.types_json IN ('', '[]')
+                                     THEN cards.types_json ELSE excluded.types_json END,
                      artist=excluded.artist, image_small_url=excluded.image_small_url,
                      image_large_url=excluded.image_large_url,
                      external_ids_json=excluded.external_ids_json,
@@ -723,8 +728,8 @@ class PokemonRepo:
 
     def list_collection(self, *, q: str = "", set_id: str = "", condition: str = "",
                         variant: str = "", language: str = "", rarity: str = "",
-                        card_type: str = "", edition: str = "",
-                        min_quantity: int | None = None,
+                        card_type: str = "", energy_type: str = "",
+                        edition: str = "", min_quantity: int | None = None,
                         rating: int | None = None, rating_min: int | None = None,
                         rating_max: int | None = None,
                         sort: str = "set", page: int = 1, page_size: int = 60
@@ -754,11 +759,15 @@ class PokemonRepo:
         if rarity:
             where.append("c.rarity = ?")
             params.append(rarity)
-        # The "Tipo" filter is the card supertype (Pokémon / Trainer / Energy) —
-        # the only card type tcggo carries.
+        # Two independent axes: the supertype (Pokémon / Trainer / Energy), which
+        # tcggo carries, and the energy type / colour (Fire, Water, …), which it
+        # does not — that one is filled from the card-meta CSV into types_json.
         if card_type:
             where.append("c.supertype = ?")
             params.append(card_type)
+        if energy_type:
+            where.append(self._ENERGY_TYPE_MATCH)
+            params.append(energy_type)
         # Edition maps onto the physical variant. Unlimited is "neither of the
         # early-run markings" rather than a stored value, because that is what it
         # means: an ordinary copy from the open print run.
@@ -818,7 +827,7 @@ class PokemonRepo:
     def list_slots_with_ownership(
             self, *, q: str = "", set_id: str = "", condition: str = "",
             variant: str = "", language: str = "", rarity: str = "",
-            card_type: str = "", edition: str = "",
+            card_type: str = "", energy_type: str = "", edition: str = "",
             min_quantity: int | None = None,
             rating: int | None = None, rating_min: int | None = None,
             rating_max: int | None = None,
@@ -855,6 +864,9 @@ class PokemonRepo:
         if card_type:
             where.append("c.supertype = ?")
             params.append(card_type)
+        if energy_type:
+            where.append(self._ENERGY_TYPE_MATCH)
+            params.append(energy_type)
         # Edition describes a copy in hand, so it drops placeholders — unlike the
         # rank below, which belongs to the card.
         if edition == "first_edition":
@@ -1343,15 +1355,20 @@ class PokemonRepo:
 
     # The only card columns a CSV fix may write. A hard whitelist: the field name
     # is interpolated into SQL, so it must never come from the file.
-    _FIXABLE_COLUMNS = ("artist", "supertype")
+    _FIXABLE_COLUMNS = ("artist", "supertype", "types_json")
+
+    # A card matches an energy type when its types_json list contains it. A
+    # dual-type card (modern) lists two, so this is a membership test, not `=`.
+    _ENERGY_TYPE_MATCH = ("EXISTS (SELECT 1 FROM json_each(c.types_json) "
+                          "WHERE json_each.value = ?)")
 
     def fill_card_fields(self, updates: dict[str, list],
                          overwrite: bool = False) -> dict[str, int]:
         """Write card columns from (value, card_id) pairs, per field.
 
         Default is fill-only: a value is written only where the column is blank
-        (NULL or ''), so it never touches data already there and is safe to
-        re-run. With overwrite=True it replaces an existing value too — for
+        (NULL, '' — or '[]' for a JSON list column), so it never touches data
+        already there and is safe to re-run. With overwrite=True it replaces an existing value too — for
         deliberately correcting a wrong one. Either way the count is rows
         actually changed (a no-op equal value is not counted), so re-running or
         overwriting with the same value reports 0.
@@ -1373,7 +1390,8 @@ class PokemonRepo:
                 else:
                     cur = c.executemany(
                         f"UPDATE cards SET {field}=?, updated_at=datetime('now') "
-                        f"WHERE id=? AND ({field} IS NULL OR {field}='')", pairs)
+                        f"WHERE id=? AND ({field} IS NULL OR {field} IN ('', '[]'))",
+                        pairs)
                 # sqlite3 sums the per-statement counts into rowcount for
                 # executemany, which SELECT changes() (last statement only) does not.
                 counts[field] = cur.rowcount
@@ -1385,9 +1403,12 @@ class PokemonRepo:
         `set` is a SQL keyword, so the alias must be quoted — an unquoted
         `AS set` is a syntax error that 500s the export.
         """
-        return self._all(
-            'SELECT id AS card_id, name, official_set_id AS "set", supertype, artist '
-            "FROM cards ORDER BY official_set_id, number_sort")
+        rows = self._all(
+            'SELECT id AS card_id, name, official_set_id AS "set", supertype, artist, '
+            "types_json FROM cards ORDER BY official_set_id, number_sort")
+        for r in rows:
+            r["types"] = json.loads(r.pop("types_json") or "[]")
+        return rows
 
     def market_products_for_card(self, card_id: str) -> list[dict]:
         return self._all(
@@ -1732,13 +1753,23 @@ class PokemonRepo:
     def card_supertypes(self) -> list[str]:
         """Distinct supertypes in the catalog (Pokémon / Trainer / Energy).
 
-        This is the card-type filter. The finer energy type (Fire, Water, …) is
-        not available: tcggo, the only source, does not carry it — its `type`
-        field is the product kind ("singles"), and it exposes supertype only.
+        This is the "Tipo" filter. tcggo, the only source, carries the supertype
+        and nothing finer — its `type` field is the product kind ("singles").
         """
         return [r["supertype"] for r in self._all(
             "SELECT DISTINCT supertype FROM cards "
             "WHERE supertype IS NOT NULL AND supertype <> '' ORDER BY supertype")]
+
+    def card_energy_types(self) -> list[str]:
+        """Distinct energy types / colours in the catalog (Fire, Water, …).
+
+        This is the "Color" filter. tcggo never sends it, so types_json is only
+        ever filled locally, by the card-meta CSV; an empty list here means the
+        fix file has not been applied.
+        """
+        return [r["value"] for r in self._all(
+            "SELECT DISTINCT json_each.value AS value "
+            "FROM cards, json_each(cards.types_json) ORDER BY value")]
 
     def rarities(self) -> list[str]:
         return [r["rarity"] for r in self._all(

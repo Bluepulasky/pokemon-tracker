@@ -2,23 +2,32 @@
 
 Some catalog fields tcggo returns — the illustrator (the reprint-group key) and
 the supertype (the card-type filter) — were not stored by imports that predate
-those columns, so cards from older imports have them blank. This fills the gaps
-from a CSV keyed by `card_id`, which the app also ships pre-baked
-(`tombot/data/card_meta.csv`) so an install can self-heal with no re-import.
+those columns, so cards from older imports have them blank. And one field tcggo
+does not return at all — the energy type / colour (Fire, Water, Psychic…) — can
+only ever arrive this way. This fills the gaps from a CSV keyed by `card_id`,
+which the app also ships pre-baked (`tombot/data/card_meta.csv`) so an install
+can self-heal with no re-import.
 
 Only blank fields are filled — an existing value is never overwritten, so a fix
-file can be applied repeatedly and safely. The fixable columns are `artist` and
-`supertype` today; more can be added without touching the format.
+file can be applied repeatedly and safely. The fixable columns are `artist`,
+`supertype` and `types` today; more can be added without touching the format.
 """
 from __future__ import annotations
 
 import csv
 import io
+import json
+import re
 from pathlib import Path
 
 # The columns this tool can write onto a card. Add here to fix a new field; the
 # CSV simply grows a column, and old files (without it) keep working.
-FIXABLE = ("artist", "supertype")
+FIXABLE = ("artist", "supertype", "types")
+
+# CSV columns that hold a list, and the card column each is stored in as JSON.
+# `types` is "Fire" or "Fire|Water" in the file and '["Fire","Water"]' on the card.
+LIST_FIELDS = {"types": "types_json"}
+LIST_SEPARATORS = re.compile(r"\s*[|/+]\s*")
 
 ID_KEYS = ("card_id", "id", "cardid")
 
@@ -27,6 +36,17 @@ BUNDLED = Path(__file__).resolve().parent.parent / "data" / "card_meta.csv"
 
 def _norm(header: str) -> str:
     return (header or "").strip().lower().replace(" ", "_").replace("﻿", "")
+
+
+def split_list(value: str) -> list[str]:
+    """'Fire|Water' -> ['Fire', 'Water']. Also accepts '/' and '+', so a hand-made
+    file need not know the canonical separator. Order kept, blanks dropped."""
+    return [v for v in (p.strip() for p in LIST_SEPARATORS.split(value or "")) if v]
+
+
+def join_list(values) -> str:
+    """The inverse of split_list, for the export."""
+    return "|".join(values or [])
 
 
 def bundled_text() -> str | None:
@@ -38,7 +58,9 @@ def bundled_text() -> str | None:
 
 
 def parse_csv(text: str) -> tuple[list[dict], list[dict]]:
-    """(rows, errors). A row is {card_id, artist?, supertype?, line}.
+    """(rows, errors). A row is {card_id, artist?, supertype?, types?, line}.
+
+    A list column (`types`) is returned already split: `types: ['Fire']`.
 
     Forgiving about what a spreadsheet emits (Excel's `;` and BOM), strict about
     what it means. Never raises: every problem is collected for one report.
@@ -72,7 +94,11 @@ def parse_csv(text: str) -> tuple[list[dict], list[dict]]:
         row = {"card_id": cid, "line": i}
         for field, col in fix_cols.items():
             val = (raw.get(col) or "").strip()
-            if val:
+            if field in LIST_FIELDS:
+                parsed = split_list(val)
+                if parsed:
+                    row[field] = parsed
+            elif val:
                 row[field] = val
         if len(row) > 2:                               # more than card_id + line
             rows.append(row)
@@ -85,15 +111,25 @@ def apply_fixes(repo, rows: list[dict], overwrite: bool = False) -> dict:
     Fills blanks only by default; overwrite=True also replaces existing values.
     """
     known = repo.existing_card_ids({r["card_id"] for r in rows})
-    updates: dict[str, list[tuple[str, str]]] = {f: [] for f in FIXABLE}
+    # Keyed by the card column, which for a list field is its *_json column.
+    updates: dict[str, list[tuple[str, str]]] = {
+        LIST_FIELDS.get(f, f): [] for f in FIXABLE}
     missing = []
     for r in rows:
         if r["card_id"] not in known:
             missing.append({"card_id": r["card_id"], "line": r.get("line")})
             continue
         for f in FIXABLE:
-            if r.get(f):
+            if not r.get(f):
+                continue
+            if f in LIST_FIELDS:
+                updates[LIST_FIELDS[f]].append(
+                    (json.dumps(r[f], ensure_ascii=False), r["card_id"]))
+            else:
                 updates[f].append((r[f], r["card_id"]))
-    changed = repo.fill_card_fields(updates, overwrite=overwrite)
+    counts = repo.fill_card_fields(updates, overwrite=overwrite)
+    # Report under the CSV column name, which is what the user sees.
+    col_for = {v: k for k, v in LIST_FIELDS.items()}
+    changed = {col_for.get(k, k): n for k, n in counts.items()}
     return {"changed": changed, "overwrite": overwrite, "missing": missing,
             "cards_in_file": len(rows)}

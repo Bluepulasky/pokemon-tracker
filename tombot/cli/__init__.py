@@ -55,11 +55,12 @@ def backfill_card_meta():
               help="Replace existing values too, not just fill blanks")
 @with_appcontext
 def fix_card_meta(path, overwrite):
-    """Apply card-metadata fixes (artist, supertype) from a CSV.
+    """Apply card-metadata fixes (artist, supertype, types) from a CSV.
 
     With no --file it applies the pre-baked file shipped with the app, so an
-    install self-heals missing illustrators/supertypes with no network. Fills
-    blanks only unless --overwrite is given; safe to run repeatedly."""
+    install self-heals missing illustrators/supertypes with no network — and
+    gets the energy type (Fire, Water, …), which tcggo does not send at all.
+    Fills blanks only unless --overwrite is given; safe to run repeatedly."""
     from ..services import card_meta
 
     if path:
