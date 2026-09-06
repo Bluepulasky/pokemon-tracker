@@ -89,3 +89,68 @@ def test_filters_compose(repo):
     got, _ = repo.list_collection(edition="first_edition", min_quantity=1,
                                   card_type="Pokémon")
     assert [i["card_id"] for i in got] == ["base1-4"]
+
+
+# ------------------------------------------------------------- energy type
+def _with_types(repo):
+    """The colour is not something tcggo sends, so it arrives the way it does in
+    production: filled onto already-imported cards."""
+    repo.fill_card_fields({"types_json": [('["Fire"]', "base1-4"),
+                                          ('["Water"]', "base1-2"),
+                                          ('["Lightning","Metal"]', "base1-9")]})
+
+
+def test_energy_types_are_discovered_from_the_catalog(repo):
+    assert repo.card_energy_types() == []            # nothing filled yet
+    _with_types(repo)
+    assert repo.card_energy_types() == ["Fire", "Lightning", "Metal", "Water"]
+
+
+def test_color_filter_is_independent_of_the_supertype(repo):
+    """Supertype (Pokémon/Trainer/Energy) and colour (Fire/Water/…) are two
+    axes: a Fire filter must not care that a Fire Energy is not a Pokémon, and a
+    Pokémon filter must not care about colour. Both together narrow further."""
+    _with_types(repo)
+    repo.fill_card_fields({"types_json": [('["Fire"]', "base1-98")]})   # Fire Energy
+    for cid in ("base1-4", "base1-2", "base1-9", "base1-88", "base1-98"):
+        repo.upsert_collection_item({"card_id": cid})
+
+    fire, _ = repo.list_collection(energy_type="Fire")
+    assert {i["card_id"] for i in fire} == {"base1-4", "base1-98"}
+    fire_pokemon, _ = repo.list_collection(energy_type="Fire", card_type="Pokémon")
+    assert [i["card_id"] for i in fire_pokemon] == ["base1-4"]
+    pokemon, _ = repo.list_collection(card_type="Pokémon")
+    assert {i["card_id"] for i in pokemon} == {"base1-4", "base1-2", "base1-9"}
+
+
+def test_color_filter_matches_either_type_of_a_dual_type_card(repo):
+    _with_types(repo)
+    repo.upsert_collection_item({"card_id": "base1-9"})
+    for colour in ("Lightning", "Metal"):
+        got, _ = repo.list_collection(energy_type=colour)
+        assert [i["card_id"] for i in got] == ["base1-9"], colour
+    none, _ = repo.list_collection(energy_type="Grass")
+    assert none == []
+
+
+def test_color_filter_applies_to_the_all_cards_view(repo):
+    _with_types(repo)
+    repo.upsert_collection_set({"id": "mine", "name": "Mi Base Set"})
+    repo.replace_rule_slots("mine", [
+        {"position": i, "label": cid, "cards": [cid], "display_card_id": cid}
+        for i, cid in enumerate(("base1-4", "base1-2", "base1-9"))])
+    rows, total = repo.list_slots_with_ownership(energy_type="Water", page_size=100)
+    assert total == 1 and rows[0]["card_id"] == "base1-2" and rows[0]["owned"] is False
+
+
+def test_reimport_keeps_a_locally_filled_energy_type(repo):
+    """tcggo never sends a type, so every import carries an empty list; a
+    re-import (which refreshes prices) must not wipe the CSV-filled colour.
+    A non-empty incoming list still wins, as any other imported field does."""
+    _with_types(repo)
+    repo.upsert_cards([{"id": "base1-4", "official_set_id": "base1",
+                        "name": "Charizard", "number": "4", "supertype": "Pokémon"}])
+    assert repo.get_card("base1-4")["types_json"] == '["Fire"]'
+    repo.upsert_cards([{"id": "base1-4", "official_set_id": "base1",
+                        "name": "Charizard", "number": "4", "types": ["Dragon"]}])
+    assert repo.get_card("base1-4")["types_json"] == '["Dragon"]'

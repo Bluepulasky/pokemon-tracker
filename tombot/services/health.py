@@ -151,13 +151,36 @@ def check_products(repo) -> list[dict]:
         [f"{r['id']} {r['name']}" for r in rows])]
 
 
+def check_card_types(repo) -> list[dict]:
+    """A Pokémon card with no energy type is invisible to the Color filter.
+
+    tcggo never sends the type, so it only arrives via the card-meta CSV; a blank
+    here means the fix file was not applied (or does not cover the set)."""
+    rows = repo._all(
+        """SELECT official_set_id AS set_id, COUNT(*) AS n FROM cards
+            WHERE supertype = 'Pokémon'
+              AND (types_json IS NULL OR types_json IN ('', '[]'))
+            GROUP BY official_set_id ORDER BY official_set_id""")
+    if not rows:
+        return []
+    total = sum(r["n"] for r in rows)
+    return [_finding(
+        "info", "card_types",
+        f"{total} carta(s) Pokémon sin color (Fuego, Agua…), así que el filtro "
+        f"«Color» no las encuentra. Aplicá las correcciones incluidas en "
+        f"Mantenimiento; si el set no está en el archivo, subí un CSV con la "
+        f"columna types.",
+        [f"{r['set_id']}: {r['n']}" for r in rows])]
+
+
 def run_checks(repo, conditions) -> dict:
     findings: list[dict] = []
     for fn, args in ((check_conditions, (repo, conditions)),
                      (check_rarities, (repo,)),
                      (check_set_dates, (repo,)),
                      (check_card_numbers, (repo,)),
-                     (check_products, (repo,))):
+                     (check_products, (repo,)),
+                     (check_card_types, (repo,))):
         try:
             findings.extend(fn(*args))
         except Exception:                                    # noqa: BLE001

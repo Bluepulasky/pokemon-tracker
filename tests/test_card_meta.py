@@ -110,3 +110,52 @@ def test_the_bundled_fix_file_exists_and_parses():
     rows, errors = card_meta.parse_csv(text)
     assert not errors and len(rows) > 100
     assert any(r["card_id"] == "bs-2" and r.get("artist") for r in rows)
+
+
+# ------------------------------------------------------------- energy type
+def test_parse_splits_the_types_column_into_a_list():
+    rows, errors = card_meta.parse_csv(
+        "card_id,types\nbs-2,Water\nbs-4,Fire|Water\nbs-9,Lightning / Metal\nbs-1,\n")
+    assert not errors
+    assert {r["card_id"]: r.get("types") for r in rows} == {
+        "bs-2": ["Water"], "bs-4": ["Fire", "Water"], "bs-9": ["Lightning", "Metal"]}
+
+
+def test_apply_fills_the_energy_type_and_reports_it_by_csv_column(repo):
+    """The colour is stored as JSON in types_json but the user only ever sees the
+    CSV column, so the count comes back under `types`. An empty list counts as
+    blank — every tcggo import writes '[]', and that must be fillable."""
+    assert repo.get_card("bs-2")["types_json"] == "[]"
+    rows, _ = card_meta.parse_csv("card_id,types\nbs-2,Water\nbs-4,Fire\n")
+    result = card_meta.apply_fixes(repo, rows)
+    assert result["changed"]["types"] == 2
+    assert repo.get_card("bs-2")["types_json"] == '["Water"]'
+    assert repo.card_energy_types() == ["Fire", "Water"]
+
+    again = card_meta.apply_fixes(repo, rows)
+    assert again["changed"]["types"] == 0                         # filled, not overwritten
+    rows, _ = card_meta.parse_csv("card_id,types\nbs-2,Psychic\n")
+    assert card_meta.apply_fixes(repo, rows)["changed"]["types"] == 0
+    assert card_meta.apply_fixes(repo, rows, overwrite=True)["changed"]["types"] == 1
+    assert repo.get_card("bs-2")["types_json"] == '["Psychic"]'
+
+
+def test_meta_export_carries_the_types_as_a_list(repo):
+    rows, _ = card_meta.parse_csv("card_id,types\nbs-4,Fire|Water\n")
+    card_meta.apply_fixes(repo, rows)
+    by_id = {r["card_id"]: r for r in repo.cards_meta_rows()}
+    assert by_id["bs-4"]["types"] == ["Fire", "Water"]
+    assert by_id["bs-2"]["types"] == []
+    assert card_meta.join_list(by_id["bs-4"]["types"]) == "Fire|Water"
+
+
+def test_the_bundled_fix_file_carries_supertype_and_colour_separately():
+    """Issue #14: both fields, not one replacing the other."""
+    rows, errors = card_meta.parse_csv(card_meta.bundled_text())
+    assert not errors
+    by_id = {r["card_id"]: r for r in rows}
+    assert by_id["bs-4"]["supertype"] == "Pokémon" and by_id["bs-4"]["types"] == ["Fire"]
+    assert by_id["bs-2"]["types"] == ["Water"]
+    pokemon = [r for r in rows if r.get("supertype") == "Pokémon"]
+    typed = [r for r in pokemon if r.get("types")]
+    assert len(typed) >= 0.99 * len(pokemon), "nearly every Pokémon has its colour"

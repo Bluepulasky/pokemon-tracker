@@ -107,3 +107,15 @@ def test_cards_with_no_rarity_are_reported(repo):
     found = [f for f in _levels(run_checks(repo, CONDITIONS), "rarities")
              if "rareza" in f["message"]]
     assert found
+
+
+def test_a_pokemon_with_no_colour_is_reported(repo):
+    """tcggo never sends the energy type, so a freshly imported set has none and
+    the Color filter silently skips it. The check says so, per set."""
+    repo.fill_card_fields({"supertype": [("Pokémon", "bs-4"), ("Pokémon", "bs-7")]})
+    found = _levels(run_checks(repo, CONDITIONS), "card_types")
+    assert found and found[0]["level"] == "info" and "2 carta" in found[0]["message"]
+    assert found[0]["detail"] == ["bs: 2"]
+
+    repo.fill_card_fields({"types_json": [('["Fire"]', "bs-4"), ('["Fighting"]', "bs-7")]})
+    assert _levels(run_checks(repo, CONDITIONS), "card_types") == []
