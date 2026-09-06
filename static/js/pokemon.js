@@ -32,7 +32,6 @@ function stampVersion() {
   el.className = 'build-stamp';
   el.textContent = META.version;
   el.title = 'Build en ejecución';
-  document.querySelector('.topbar')?.appendChild(el);
 }
 
 function route() {

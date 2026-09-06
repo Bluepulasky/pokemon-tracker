@@ -10,9 +10,12 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="#/dashboard"><span class="dot"></span>TomBot<em>Tracker</em></a>
+  <a class="brand" href="#/dashboard">
+    <img src="{{ url_for('static', filename='favicon_ios.png') }}" width="45" height="45" alt="">
+    TomBot<em>Tracker</em>
+  </a>
   <nav class="tabs">
-    <a href="#/dashboard" data-tab="dashboard">Dashboard</a>
+    <a href="#/dashboard" data-tab="dashboard">Dash</a>
     <a href="#/sets" data-tab="sets">Sets</a>
     <a href="#/cartas" data-tab="cartas">Cartas</a>
     <a href="#/missing" data-tab="missing">Faltantes</a>

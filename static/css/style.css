@@ -16,7 +16,7 @@
   --radius: 12px;
   --radius-sm: 8px;
   --shadow: 0 8px 30px rgba(0,0,0,.45);
-  --header-h: 56px;
+  --header-h: 64px;
 }
 
 * { box-sizing: border-box; }
@@ -41,6 +41,9 @@ button, input, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -.02em; }
+.brand img {
+  border-radius: 4px;
+}
 .brand em { font-style: normal; color: var(--fg-dim); font-weight: 500; }
 .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
               box-shadow: 0 0 0 3px rgba(255,203,5,.18); }
