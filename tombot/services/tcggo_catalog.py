@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,21 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
 
 
+def normalized_name(text: str) -> str:
+    """A card name reduced to what two spellings of it agree on.
+
+    tcggo does not spell a card the same way on every print run. The Base Set
+    unlimited product says "Pokemon Center" where the shadowless one says
+    "Pokémon Center", and "Nidoran M" where the other says "Nidoran ♂". Compared
+    literally those read as two different cards; compared through here they do
+    not. Gender signs first, because they carry no accent to strip.
+    """
+    s = (text or "").replace("♂", "m").replace("♀", "f")
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
 def resolve_collisions(rows: list[dict]) -> list[dict]:
     """Give genuinely different cards distinct card_ids, in place.
 
@@ -50,13 +66,28 @@ def resolve_collisions(rows: list[dict]) -> list[dict]:
     within an episode. Some episodes break that: the tcggo "Celebrations" episode
     bundles the Classic Collection under the same CEL code, so its Blastoise
     ("CEL 2") lands on the same id as the base Reshiram ("CEL 2"), and five cards
-    share "CEL 15". Products of one printing share a name (Base Set Blastoise's
-    four printings are all "Blastoise"), so a single id carrying two names is a
-    collision, not a card with variants.
+    share "CEL 15".
 
-    When it happens the lowest Cardmarket product id keeps the plain id — the base
-    card, added to Cardmarket first — and the others take `{id}-{name-slug}`, so
-    every logical card ends up with its own id and its own products.
+    **The illustrator is what tells the two cases apart** (#69). Splitting on the
+    name instead said that Base Set had 106 cards: tcggo spells four of them
+    differently on the shadowless products than on the unlimited ones — "Nidoran
+    ♂"/"Nidoran M", "Pokemon Center"/"Pokémon Center", "Pokémon Flute"/"Pokemon
+    Flute", "Imposter Professor Oak"/"Impostor Professor Oak" — and each spelling
+    became its own card. A reprint reuses the artwork, so two products of one
+    card share an illustrator (all four pairs are Ken Sugimori or Keiji
+    Kinebuchi) while two different cards under one code do not (every one of the
+    twelve Celebrations collisions has a different artist). Note the last pair:
+    "Imposter" vs "Impostor" is a real letter apart, so no amount of normalising
+    the name would have merged it. The artist would.
+
+    The artist is only used when every product in the group has one; a group
+    where any of them is blank falls back to comparing normalised names, which
+    is the weaker signal but still better than the raw string.
+
+    When a split does happen the lowest Cardmarket product id keeps the plain id
+    — the base card, added to Cardmarket first — and the others take
+    `{id}-{name-slug}`, so every logical card ends up with its own id and its own
+    products.
     """
     from collections import defaultdict
     by_id: dict[str, list[dict]] = defaultdict(list)
@@ -64,18 +95,31 @@ def resolve_collisions(rows: list[dict]) -> list[dict]:
         by_id[r["card_id"]].append(r)
 
     for cid, group in by_id.items():
-        by_name: dict[str, list[dict]] = defaultdict(list)
-        for r in group:
-            by_name[r.get("name") or ""].append(r)
-        if len(by_name) <= 1:
+        artists = [(r.get("artist") or "").strip().lower() for r in group]
+        buckets: dict[str, list[dict]] = defaultdict(list)
+        if all(artists):
+            for r, artist in zip(group, artists):
+                buckets[artist].append(r)
+        else:
+            # No illustrator on at least one product: fall back to the name,
+            # compared through normalized_name so an accent is not a new card.
+            for r in group:
+                buckets[normalized_name(r.get("name"))].append(r)
+        if len(buckets) <= 1:
             continue                                   # one card, its printings
-        # The name whose cheapest product id is lowest keeps the plain id.
-        ordered = sorted(by_name.items(),
-                         key=lambda kv: min(x["product_id"] for x in kv[1]))
-        for i, (name, sub) in enumerate(ordered):
-            if i == 0:
-                continue
-            new_id = f"{cid}-{_slug(name)}"
+        # The bucket whose cheapest product id is lowest keeps the plain id.
+        ordered = sorted(buckets.values(),
+                         key=lambda sub: min(x["product_id"] for x in sub))
+        used = {cid}
+        for sub in ordered[1:]:
+            name = min(sub, key=lambda x: x["product_id"]).get("name") or ""
+            base = f"{cid}-{_slug(name)}" if _slug(name) else cid
+            # Two different illustrators can still print under one name; the
+            # suffix has to stay unique or the split would undo itself.
+            new_id, n = base, 2
+            while new_id in used:
+                new_id, n = f"{base}-{n}", n + 1
+            used.add(new_id)
             for r in sub:
                 r["card_id"] = new_id
     return rows
