@@ -278,14 +278,35 @@ CREATE TABLE IF NOT EXISTS market_episodes (
     seen_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One row per PRINTING, not per Cardmarket product (#68).
+--
+-- This was keyed on Cardmarket's own product id, which cannot hold the data:
+-- tcggo returns the same cardmarket_id for genuinely different print runs
+-- (Base Set Charizard comes back as "1st Edition Shadowless" at 50,000 EUR and
+-- "Shadowless" at 2,000 EUR, both stamped 660224), and sends no id at all on
+-- others (31 Base Set printings, and the 11 Base Set 2 cards that were missing
+-- from the catalogue entirely). Keyed that way, Base Set stored 193 of the 307
+-- printings tcggo sends and there was nowhere to put the rest.
+--
+-- The identity of a printing is where it sits: which set, which card, which
+-- print run. Note the key is card_id and not `code`: an episode can file two
+-- different cards under one code — Celebrations has Reshiram and Blastoise both
+-- at "CEL 2", both with no version — and resolve_collisions is what has already
+-- given those their own card ids. Cardmarket's id is kept as an attribute,
+-- nullable, because it is what the buy link and the price lookup need; it is
+-- not what the row IS.
 CREATE TABLE IF NOT EXISTS market_products (
-    product_id  INTEGER PRIMARY KEY,     -- Cardmarket's own id
-    episode_id  INTEGER NOT NULL,
-    card_id     TEXT,                    -- the card these are versions of
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,  -- our own printing id
+    cardmarket_id INTEGER,                -- Cardmarket's id: nullable, NOT unique
+    episode_id    INTEGER NOT NULL,
+    card_id     TEXT NOT NULL DEFAULT '', -- the card these are versions of; half the
+                                          -- key, so never NULL (see version below)
     code        TEXT,                    -- "BS 4"
     number      TEXT,
     name        TEXT,
-    version     TEXT,                    -- "Unlimited", "Shadowless", ...
+    version     TEXT NOT NULL DEFAULT '', -- "Unlimited", "Shadowless", ... ('' when absent,
+                                          -- never NULL: SQLite treats NULLs as distinct and
+                                          -- the uniqueness below would stop holding)
     rarity      TEXT,
     currency    TEXT NOT NULL DEFAULT 'EUR',
     price       REAL,
@@ -297,11 +318,15 @@ CREATE TABLE IF NOT EXISTS market_products (
     market_url  TEXT,
     artist      TEXT,                    -- illustrator; part of the reprint key
     supertype   TEXT,                    -- Pokémon / Trainer / Energy (the type filter)
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    -- What a printing IS. Re-importing a set updates these rows in place.
+    UNIQUE (episode_id, card_id, version)
 );
 
 CREATE INDEX IF NOT EXISTS idx_market_products_episode
     ON market_products(episode_id, code);
+CREATE INDEX IF NOT EXISTS idx_market_products_cardmarket
+    ON market_products(cardmarket_id);
 
 CREATE TABLE IF NOT EXISTS set_episodes (
     official_set_id TEXT PRIMARY KEY REFERENCES official_sets(id) ON DELETE CASCADE,

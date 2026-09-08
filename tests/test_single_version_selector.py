@@ -45,12 +45,12 @@ def app(tmp_path, monkeypatch):
                         "number": "3", "rarity": "Rare Holo"}])
     # Two real products of the SAME card: Unlimited and 1st Edition Shadowless.
     repo.upsert_market_products([
-        {"product_id": 273698, "episode_id": 1, "card_id": "bs-3", "code": "BS 3",
+        {"cardmarket_id": 273698, "episode_id": 1, "card_id": "bs-3", "code": "BS 3",
          "number": "3", "name": "Chansey", "version": "Unlimited",
          "rarity": "Rare Holo", "currency": "EUR", "price": 5.0, "price_low": None,
          "price_avg30": None, "price_avg7": None, "available": 1, "image": None,
          "market_url": "https://cardmarket.com/…/Chansey-BS3"},
-        {"product_id": 19394, "episode_id": 1, "card_id": "bs-3", "code": "BS 3",
+        {"cardmarket_id": 19394, "episode_id": 1, "card_id": "bs-3", "code": "BS 3",
          "number": "3", "name": "Chansey", "version": "1st Edition Shadowless",
          "rarity": "Rare Holo", "currency": "EUR", "price": 22.0, "price_low": None,
          "price_avg30": None, "price_avg7": None, "available": 1, "image": None,
@@ -59,6 +59,10 @@ def app(tmp_path, monkeypatch):
     from tombot import create_app
     a = create_app(Config)
     a.config["TESTING"] = True
+    # The id of a printing is assigned on import, so the test looks it up the
+    # same way the modal does instead of hardcoding Cardmarket's number.
+    a.printing = {p["version"]: p["id"]
+                  for p in repo.market_products_for_card("bs-3")}
     return a
 
 
@@ -66,7 +70,8 @@ def test_add_derives_variant_from_the_chosen_product(app):
     """The client sends only the product; the row's variant comes from it."""
     client = app.test_client()
     r = client.post("/api/collection", json={
-        "card_id": "bs-3", "market_product_id": 19394,
+        "card_id": "bs-3",
+        "market_product_id": app.printing["1st Edition Shadowless"],
         "condition": "M/NM", "language": "es", "quantity": 1})
     assert r.status_code == 201
     assert r.get_json()["variant"] == "shadowless"
@@ -77,9 +82,12 @@ def test_two_products_of_one_card_are_distinct_rows(app):
     collapse into a single row — the derived variant keeps them apart."""
     client = app.test_client()
     client.post("/api/collection", json={
-        "card_id": "bs-3", "market_product_id": 273698, "quantity": 1})
+        "card_id": "bs-3", "market_product_id": app.printing["Unlimited"],
+        "quantity": 1})
     client.post("/api/collection", json={
-        "card_id": "bs-3", "market_product_id": 19394, "quantity": 1})
+        "card_id": "bs-3",
+        "market_product_id": app.printing["1st Edition Shadowless"],
+        "quantity": 1})
 
     rows = client.get("/api/collection/by-card/bs-3").get_json()["data"]
     variants = sorted(r["variant"] for r in rows)

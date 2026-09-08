@@ -11,6 +11,15 @@ from tombot.services.pricing import PricingService
 from tombot.services.repository import PokemonRepo
 
 
+def _printing(repo, card_id, version=None):
+    """The id of a card's printing. Assigned on import, so it is looked up
+    rather than hardcoded — Cardmarket's number is an attribute now (#68)."""
+    rows = repo.market_products_for_card(card_id)
+    if version is not None:
+        rows = [r for r in rows if r["version"] == version]
+    return rows[0]["id"]
+
+
 @pytest.fixture()
 def repo(tmp_path):
     r = PokemonRepo(tmp_path / "p.db")
@@ -22,7 +31,7 @@ def repo(tmp_path):
     r.upsert_cards([{"id": "ju-19", "official_set_id": "ju", "name": "Flareon",
                      "number": "19", "rarity": "rare"}])
     r.upsert_market_products([{
-        "product_id": 273816, "episode_id": 170, "card_id": "ju-19",
+        "cardmarket_id": 273816, "episode_id": 170, "card_id": "ju-19",
         "code": "JU 19", "number": "19", "name": "Flareon", "version": "Unlimited",
         "rarity": "rare", "currency": "EUR", "price": 12.24, "price_low": 1.49,
         "price_avg30": 10.72, "price_avg7": 9.79, "available": 503,
@@ -33,7 +42,7 @@ def repo(tmp_path):
 def test_a_row_with_a_product_is_priced_from_it(repo):
     repo.upsert_collection_item({"card_id": "ju-19", "variant": "normal",
                                  "condition": "M/NM", "language": "es",
-                                 "market_product_id": 273816})
+                                 "market_product_id": _printing(repo, "ju-19")})
 
     result = PricingService(repo, Config).refresh()
 
@@ -57,7 +66,7 @@ def test_a_row_without_a_product_is_left_unpriced(repo):
 def test_a_manual_price_is_never_overwritten(repo):
     repo.upsert_collection_item({"card_id": "ju-19", "variant": "normal",
                                  "condition": "M/NM", "language": "es",
-                                 "market_product_id": 273816})
+                                 "market_product_id": _printing(repo, "ju-19")})
     repo.set_manual_price("ju-19", "normal", 99.0)
 
     result = PricingService(repo, Config).refresh()
@@ -74,7 +83,7 @@ def test_refresh_needs_no_network(repo, monkeypatch):
     monkeypatch.setattr(pricing_mod, "log", pricing_mod.log)
     repo.upsert_collection_item({"card_id": "ju-19", "variant": "normal",
                                  "condition": "M/NM", "language": "es",
-                                 "market_product_id": 273816})
+                                 "market_product_id": _printing(repo, "ju-19")})
     svc = PricingService(repo, Config)
     assert not hasattr(svc, "source")
     assert svc.refresh()["updated"] == 1

@@ -11,6 +11,15 @@ from tombot.config import Config
 from tombot.services.repository import PokemonRepo
 
 
+def _printing(repo, card_id, version=None):
+    """The id of a card's printing — assigned on import, so it is looked up
+    rather than hardcoded (Cardmarket's number is an attribute now, #68)."""
+    rows = repo.market_products_for_card(card_id)
+    if version is not None:
+        rows = [r for r in rows if r["version"] == version]
+    return rows[0]["id"]
+
+
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     for attr, value in (("DB_PATH", tmp_path / "c.db"), ("DATA_DIR", tmp_path),
@@ -30,12 +39,12 @@ def app(tmp_path, monkeypatch):
                         "number": "19", "rarity": "Rare"}])
     # Two real Cardmarket products for Flareon: the holo (V1) and the non-holo (V2).
     repo.upsert_market_products([
-        {"product_id": 273800, "episode_id": 170, "card_id": "ju-3", "code": "JU 3",
+        {"cardmarket_id": 273800, "episode_id": 170, "card_id": "ju-3", "code": "JU 3",
          "number": "3", "name": "Flareon", "version": "Unlimited", "rarity": "Holo",
          "currency": "EUR", "price": 49.0, "price_low": None, "price_avg30": None,
          "price_avg7": None, "available": 1,
          "image": None, "market_url": "https://cardmarket.com/…/Flareon-V1-JU3"},
-        {"product_id": 273816, "episode_id": 170, "card_id": "ju-19", "code": "JU 19",
+        {"cardmarket_id": 273816, "episode_id": 170, "card_id": "ju-19", "code": "JU 19",
          "number": "19", "name": "Flareon", "version": "Unlimited", "rarity": "rare",
          "currency": "EUR", "price": 12.0, "price_low": None, "price_avg30": None,
          "price_avg7": None, "available": 1,
@@ -52,7 +61,7 @@ def test_the_row_links_to_its_chosen_product(app):
     repo = app.extensions["repo"]
     repo.upsert_collection_item({"card_id": "ju-19", "variant": "normal",
                                  "condition": "M/NM", "language": "es",
-                                 "market_product_id": 273816})
+                                 "market_product_id": _printing(repo, "ju-19")})
 
     rows = app.test_client().get("/api/collection/by-card/ju-19").get_json()["data"]
 

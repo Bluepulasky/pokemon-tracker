@@ -88,25 +88,44 @@ class MarketImporter:
         return self.budget.used() if self.budget is not None else 0
 
     def _dedupe(self, rows: list[dict]) -> list[dict]:
-        """One row per Cardmarket product.
+        """One row per PRINTING — per card and print run, not per product id.
 
-        The source returns a third version for nearly every Base Set card that
-        Cardmarket does not sell — 307 rows where Cardmarket lists 211. The
-        phantom shares its product id and has no near-mint offer behind it.
+        This used to key on `cardmarket_id` and skip any row without one, on the
+        theory that the extra rows were phantoms Cardmarket does not sell. They
+        are not. For Base Set tcggo sends 307 rows — 102 "1st Edition
+        Shadowless", 100 "Shadowless", 101 "Unlimited" — which is one row per
+        real print run of all 102 cards, and only 193 survived:
+
+          * 83 lost because tcggo stamps two different print runs with one
+            cardmarket_id (Charizard's 1st Edition Shadowless at 50,000 EUR and
+            its Shadowless at 2,000 EUR both come back as 660224), so whichever
+            arrived second overwrote the first;
+          * 31 lost because tcggo sent no cardmarket_id at all — 28 of them
+            carrying a real price. In Base Set 2 that is what removed 11 cards
+            from the catalogue outright: a card whose only row has no product id
+            has no products, and cards are built from products.
+
+        So the key is (code, version): the card and its print run. Rows without
+        a product id are kept — a printing with a price and no buy link is worth
+        more than no printing. A genuine repeat of one printing keeps whichever
+        row has an offer behind it.
         """
-        best: dict[int, dict] = {}
+        best: dict[tuple, dict] = {}
         for raw in rows:
-            pid = raw.get("cardmarket_id")
-            if not pid:
+            key = ((raw.get("card_code_number") or "").strip(),
+                   (raw.get("version") or "").strip())
+            kept = best.get(key)
+            if kept is None:
+                best[key] = raw
                 continue
             cm = ((raw.get("prices") or {}).get("cardmarket") or {})
-            kept = best.get(pid)
-            if kept is None:
-                best[pid] = raw
-                continue
-            kept_nm = ((kept.get("prices") or {}).get("cardmarket") or {}).get("lowest_near_mint")
-            if kept_nm is None and cm.get("lowest_near_mint") is not None:
-                best[pid] = raw
+            kept_cm = ((kept.get("prices") or {}).get("cardmarket") or {})
+            # Prefer the row that can actually be bought, then the one that at
+            # least carries a product id.
+            if ((kept_cm.get("lowest_near_mint") is None
+                 and cm.get("lowest_near_mint") is not None)
+                    or (not kept.get("cardmarket_id") and raw.get("cardmarket_id"))):
+                best[key] = raw
         return list(best.values())
 
     @staticmethod
@@ -122,13 +141,16 @@ class MarketImporter:
         price = next((cm.get(f) for f in ("30d_average", "7d_average", "lowest_near_mint")
                       if cm.get(f)), None)
         return {
-            "product_id": raw.get("cardmarket_id"),
+            # Cardmarket's id is an attribute of the printing, not its identity:
+            # it repeats across print runs and is absent on some (#68).
+            "cardmarket_id": raw.get("cardmarket_id"),
             "episode_id": episode_id,
             "code": code,
             "number": number,
             "card_id": card_id_for(episode_code or prefix, number),
             "name": raw.get("name"),
-            "version": raw.get("version"),
+            # Never NULL — it is half the key, and SQLite counts NULLs as distinct.
+            "version": (raw.get("version") or "").strip(),
             "rarity": raw.get("rarity"),
             "currency": cm.get("currency") or "EUR",
             "price": float(price) if price else None,

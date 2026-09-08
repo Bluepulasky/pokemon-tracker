@@ -254,12 +254,13 @@ class TcggoSource:
                         episode_id: int | None = None) -> list[dict]:
         """Versions of a card that can actually be bought, ready to show.
 
-        Keyed on the Cardmarket product, because that is the thing with a price.
-        Two records claiming one product are the same product — Base Set
-        Charizard comes back as both "Shadowless" and "1st Edition Shadowless"
-        on product 660224, and only one of those is real. The one with an actual
-        near-mint offer behind it wins; the phantom has none, and carries a
-        price to match (10.46 for a card that sells in the hundreds).
+        Keyed on the printing — the card's code and its print run — not on the
+        Cardmarket product id. Two records claiming one product id are usually
+        two real print runs that tcggo stamped alike: Base Set Charizard comes
+        back as "Shadowless" and "1st Edition Shadowless" both on product
+        660224, and both are genuine (2,000 EUR and 50,000 EUR). Keying on the
+        product id dropped one of them, which is how a card offered only its
+        dearest printing (#68).
         """
         params: dict = {"name": name, "sort": "episode_oldest"}
         if number:
@@ -275,16 +276,16 @@ class TcggoSource:
         if isinstance(rows, dict):
             rows = [rows]
 
-        best: dict[int, dict] = {}
+        best: dict[tuple, dict] = {}
         for row in rows:
             v = self.as_version(row)
-            pid = v["market_product_id"]
-            if not pid:
-                continue
-            kept = best.get(pid)
+            # A printing with no product id still has a price and a print run,
+            # so it is a version you can own — it just has no buy link.
+            key = ((v["code"] or "").strip(), (v["version"] or "").strip())
+            kept = best.get(key)
             if kept is None or (kept["lowest_near_mint"] is None
                                 and v["lowest_near_mint"] is not None):
-                best[pid] = v
+                best[key] = v
         return sorted(best.values(),
                       key=lambda v: (v["set"] or "", v["version"] or ""))
 
@@ -317,8 +318,10 @@ class TcggoSource:
                 v = self.as_version(row)
                 pid = v["market_product_id"]
                 kept = out.get(pid)
-                # Same dedupe as the picker: a phantom sharing a product id has
-                # no near-mint offer behind it.
+                # Keyed by product id because that is what the caller asked for.
+                # Note two print runs can share one id (#68), so this collapses
+                # them — fine for "price this product", wrong for "list the
+                # versions". Use search_versions for the latter.
                 if pid and (kept is None or (kept["lowest_near_mint"] is None
                                              and v["lowest_near_mint"] is not None)):
                     out[pid] = v

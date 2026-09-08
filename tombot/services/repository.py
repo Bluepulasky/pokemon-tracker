@@ -131,6 +131,7 @@ class PokemonRepo:
         from before it is recreated (the app is rebuilt from set imports, so
         there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
+            self._retire_product_keyed_market_products(c)
             c.executescript(SCHEMA_PATH.read_text())
             cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
             if "first_edition" not in cols:
@@ -145,6 +146,29 @@ class PokemonRepo:
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
                 "updated_at=datetime('now')", (SCHEMA_VERSION,))
+
+    @staticmethod
+    def _retire_product_keyed_market_products(c) -> None:
+        """Drop a market_products still keyed on Cardmarket's product id (#68).
+
+        `schema.sql` is CREATE ... IF NOT EXISTS, so a changed table is the one
+        thing init_db cannot deliver on its own — the old shape would survive
+        untouched and every insert would still collapse two print runs into one.
+
+        Dropping it is safe in a way dropping most tables is not: market_products
+        holds nothing the user typed. It is rebuilt in full by re-importing a
+        set, which is the same action that created it. What the user owns lives
+        in collection_items, which is left alone — `relink_collection_products`
+        reattaches those rows after the re-import.
+        """
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(market_products)")}
+        if not cols or "id" in cols:
+            return                       # absent, or already the printing-keyed shape
+        n = c.execute("SELECT COUNT(*) FROM market_products").fetchone()[0]
+        log.warning("market_products is keyed on the Cardmarket product id; "
+                    "dropping %d row(s) so the printing-keyed table can be "
+                    "created. Re-import your sets to refill it (#68).", n)
+        c.execute("DROP TABLE market_products")
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         v = self._scalar("SELECT value FROM app_meta WHERE key = ?", (key,))
@@ -1270,26 +1294,31 @@ class PokemonRepo:
                 if col not in cols:
                     c.execute(f"ALTER TABLE market_products ADD COLUMN {col} TEXT")
             c.executemany(
-                """INSERT INTO market_products(product_id, episode_id, card_id, code,
+                """INSERT INTO market_products(cardmarket_id, episode_id, card_id, code,
                        number, name, version, rarity, currency, price, price_low,
                        price_avg30, price_avg7, available, image, market_url,
                        artist, supertype, updated_at)
-                   VALUES(:product_id,:episode_id,:card_id,:code,:number,:name,
+                   VALUES(:cardmarket_id,:episode_id,:card_id,:code,:number,:name,
                           :version,:rarity,:currency,:price,:price_low,
                           :price_avg30,:price_avg7,:available,:image,
                           :market_url,:artist,:supertype,datetime('now'))
-                   ON CONFLICT(product_id) DO UPDATE SET
-                     episode_id=excluded.episode_id, card_id=excluded.card_id,
+                   ON CONFLICT(episode_id, card_id, version) DO UPDATE SET
+                     cardmarket_id=excluded.cardmarket_id,
                      code=excluded.code,
                      number=excluded.number, name=excluded.name,
-                     version=excluded.version, rarity=excluded.rarity,
+                     rarity=excluded.rarity,
                      currency=excluded.currency, price=excluded.price,
                      price_low=excluded.price_low, price_avg30=excluded.price_avg30,
                      price_avg7=excluded.price_avg7, available=excluded.available,
                      image=excluded.image, market_url=excluded.market_url,
                      artist=excluded.artist, supertype=excluded.supertype,
                      updated_at=datetime('now')""",
-                [{"artist": None, "supertype": None, **r} for r in rows])
+                # version is half the key: a NULL there would make SQLite treat
+                # every row as distinct and the uniqueness would stop holding,
+                # which is the bug this table was rebuilt to fix.
+                [{"artist": None, "supertype": None, **r,
+                  "card_id": r.get("card_id") or "",
+                  "version": (r.get("version") or "").strip()} for r in rows])
         return len(rows)
 
     def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
@@ -1325,7 +1354,8 @@ class PokemonRepo:
                 pairs = [(m[f], pid) for pid, m in product_meta.items() if m.get(f)]
                 if pairs:
                     c.executemany(
-                        f"UPDATE market_products SET {f}=? WHERE product_id=?", pairs)
+                        f"UPDATE market_products SET {f}=? WHERE cardmarket_id=?",
+                        pairs)
             products = c.execute(
                 "SELECT COUNT(*) FROM market_products "
                 "WHERE artist IS NOT NULL AND artist <> ''").fetchone()[0]
@@ -1467,7 +1497,8 @@ class PokemonRepo:
             (name,))
 
     def get_market_product(self, product_id: int) -> dict | None:
-        return self._one("SELECT * FROM market_products WHERE product_id=?",
+        """One printing, by our own id (not Cardmarket's — see schema.sql)."""
+        return self._one("SELECT * FROM market_products WHERE id=?",
                          (product_id,))
 
     def market_products_by_ids(self, ids: list[int]) -> dict:
@@ -1475,9 +1506,65 @@ class PokemonRepo:
             return {}
         marks = ",".join("?" * len(ids))
         rows = self._all(
-            f"SELECT * FROM market_products WHERE product_id IN ({marks})",
+            f"SELECT * FROM market_products WHERE id IN ({marks})",
             tuple(ids))
-        return {r["product_id"]: r for r in rows}
+        return {r["id"]: r for r in rows}
+
+    def relink_collection_products(self) -> dict:
+        """Reattach owned rows to their printing after the #68 re-import.
+
+        `collection_items.market_product_id` used to hold Cardmarket's product
+        id, because that was the key. It is now our own printing id, so every
+        row written before the change points at nothing and prices as unpriced.
+
+        The old value is still Cardmarket's id, so it can be matched — but one
+        Cardmarket id can now name several printings (that is the whole bug), so
+        matching on it alone would pick a print run at random. The row already
+        records which one it is: `variant`. So a candidate only wins if the
+        variant its version implies is the variant the row was saved as, and an
+        id that stays ambiguous is left alone rather than guessed at — a wrong
+        printing is a wrong price, which is worse than none.
+        """
+        from .printing_variants import variant_from_product
+
+        rows = self._all(
+            """SELECT i.id, i.variant, i.market_product_id
+                 FROM collection_items i
+                WHERE i.market_product_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM market_products mp
+                                   WHERE mp.id = i.market_product_id)""")
+        if not rows:
+            return {"relinked": 0, "ambiguous": 0, "unmatched": 0}
+
+        relinked = ambiguous = unmatched = 0
+        pairs: list[tuple[int, int]] = []
+        for row in rows:
+            cands = self._all(
+                "SELECT id, version, rarity FROM market_products WHERE cardmarket_id=?",
+                (row["market_product_id"],))
+            if not cands:
+                unmatched += 1
+                continue
+            fits = [c for c in cands
+                    if variant_from_product(c["version"], c["rarity"]) == row["variant"]]
+            if len(fits) == 1:
+                pairs.append((fits[0]["id"], row["id"]))
+                relinked += 1
+            elif len(cands) == 1 and not fits:
+                # One printing carries that id and the variant disagrees: the
+                # printing is still the right row, the variant was the guess.
+                pairs.append((cands[0]["id"], row["id"]))
+                relinked += 1
+            else:
+                ambiguous += 1
+        if pairs:
+            with self.tx() as c:
+                c.executemany(
+                    "UPDATE collection_items SET market_product_id=?, "
+                    "updated_at=datetime('now') WHERE id=?", pairs)
+        log.info("relinked %d owned row(s); %d ambiguous, %d unmatched",
+                 relinked, ambiguous, unmatched)
+        return {"relinked": relinked, "ambiguous": ambiguous, "unmatched": unmatched}
 
     def market_urls_for_cards(self, card_ids: Sequence[str]) -> dict[str, str]:
         """One representative Cardmarket URL per card, from the imported products.

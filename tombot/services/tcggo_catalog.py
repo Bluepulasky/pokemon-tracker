@@ -59,6 +59,12 @@ def normalized_name(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", s.lower())
 
 
+def _id_order(row: dict) -> tuple:
+    """Sort key over Cardmarket ids where a missing one sorts last."""
+    pid = row.get("cardmarket_id")
+    return (pid is None, pid or 0, row.get("name") or "")
+
+
 def resolve_collisions(rows: list[dict]) -> list[dict]:
     """Give genuinely different cards distinct card_ids, in place.
 
@@ -107,12 +113,14 @@ def resolve_collisions(rows: list[dict]) -> list[dict]:
                 buckets[normalized_name(r.get("name"))].append(r)
         if len(buckets) <= 1:
             continue                                   # one card, its printings
-        # The bucket whose cheapest product id is lowest keeps the plain id.
-        ordered = sorted(buckets.values(),
-                         key=lambda sub: min(x["product_id"] for x in sub))
+        # The bucket whose cheapest Cardmarket id is lowest keeps the plain id —
+        # the base card, listed on Cardmarket first. A printing can have no id at
+        # all (#68), so those sort last rather than blowing up, and the name is
+        # the tie-break so the outcome does not depend on row order.
+        ordered = sorted(buckets.values(), key=lambda sub: min(_id_order(x) for x in sub))
         used = {cid}
         for sub in ordered[1:]:
-            name = min(sub, key=lambda x: x["product_id"]).get("name") or ""
+            name = min(sub, key=_id_order).get("name") or ""
             base = f"{cid}-{_slug(name)}" if _slug(name) else cid
             # Two different illustrators can still print under one name; the
             # suffix has to stay unique or the split would undo itself.
@@ -206,8 +214,10 @@ class TcggoCatalog:
         cards = []
         for card_id, group in by_card.items():
             _, number = split_code(group[0]["code"])
-            # Prefer a row with a real offer behind it for the display data:
-            # the phantom versions carry the emptier records.
+            # Every printing of a card shows the same picture and rarity, so any
+            # of them can supply the display data — but a print run with nothing
+            # for sale tends to carry the emptier record, so prefer one with a
+            # real offer behind it.
             best = max(group, key=lambda r: (r["price_low"] is not None,
                                              r["available"] or 0))
             cards.append({

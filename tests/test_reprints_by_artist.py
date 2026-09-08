@@ -14,7 +14,7 @@ from tombot.services.setbuilder import SetBuilder
 
 
 def _prod(pid, card_id, code, number, artist):
-    return {"product_id": pid, "episode_id": 1, "card_id": card_id, "code": code,
+    return {"cardmarket_id": pid, "episode_id": 1, "card_id": card_id, "code": code,
             "number": number, "name": "Magneton", "version": "Unlimited",
             "rarity": "Rare", "currency": "EUR", "price": 5.0, "price_low": None,
             "price_avg30": None, "price_avg7": None, "available": 1, "image": None,
