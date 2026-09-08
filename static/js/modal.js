@@ -45,43 +45,90 @@ export async function openCard(cardId) {
 
   root.innerHTML = '';
   root.appendChild(el(`
-    <div class="modal">
-      <div class="modal-head">
-        <div class="art"><img src="${esc(cardArt(card))}" alt="${esc(card.name)}" loading="lazy"></div>
-        <div>
-          <h3>${esc(card.name)}</h3>
-          <div class="meta">${esc(card.set_name)} #${esc(card.number)}${card.rarity ? ' · ' + esc(card.rarity) : ''}</div>
-          <div class="meta">${esc(card.artist || '')}</div>
-          <div class="meta" style="margin-top:8px">
-            ${items.length
-              ? `<span class="tag" style="color:var(--good)">En colección · ${items.reduce((a, i) => a + i.quantity, 0)} física(s)</span>`
-              : '<span class="tag">No poseída</span>'}
+  <div class="modal">
+    <div class="modal-layout">
+
+      <div class="modal-card-art">
+        <img src="${esc(cardArt(card))}"
+            alt="${esc(card.name)}"
+            loading="lazy">
+      </div>
+
+      <div class="modal-content">
+
+        <div class="modal-head">
+          <div>
+            <h3>${esc(card.name)}</h3>
+            <div class="meta">
+              ${esc(card.set_name)} #${esc(card.number)}${card.rarity ? ' · ' + esc(card.rarity) : ''}
+            </div>
+            <div class="meta">${esc(card.artist || '')}</div>
+
+            <div class="modal-status">
+              ${items.length
+                ? `<span class="tag" style="color:var(--good)">
+                    En colección · ${items.reduce((a, i) => a + i.quantity, 0)} física(s)
+                  </span>`
+                : '<span class="tag">No poseída</span>'}
+
+              ${card.market_url ? `
+                <a class="mkm"
+                  href="${esc(card.market_url)}"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  Ver en Cardmarket ↗
+                </a>` : ''}
+            </div>
+
+            <div class="field card-rank">
+              <label>Hall of Fame</label>
+              ${rankRow(card.rating || 0)}
+            </div>
+
+            <div class="field card-target">
+              <label>Objetivo de copias</label>
+              <input type="number"
+                    min="1"
+                    inputmode="numeric"
+                    value="${Number(card.target) || 1}">
+            </div>
           </div>
-          ${card.market_url ? `<a class="mkm" href="${esc(card.market_url)}"
-             target="_blank" rel="noopener noreferrer">Ver en Cardmarket ↗</a>` : ''}
-          <div class="field card-rank">
-            <label>Hall of Fame</label>
-            ${rankRow(card.rating || 0)}
-          </div>
-          <div class="field card-target">
-            <label>Objetivo de copias</label>
-            <input type="number" min="1" inputmode="numeric"
-                   value="${Number(card.target) || 1}">
-            <div class="note">La carta cuenta como conseguida al llegar a este número.</div>
-          </div>
+
+          <button class="close"
+                  aria-label="Cerrar">&times;</button>
         </div>
-        <button class="close" aria-label="Cerrar">&times;</button>
+
+        <details class="modal-section variants-section" ${items.length ? 'open' : ''}>
+          <summary>
+            <span class="section-chevron">⌄</span>
+            Variantes en colección
+          </summary>
+
+          <div class="section-content">
+            <div class="variants">
+              ${items.map(variantCard).join('')}
+            </div>
+          </div>
+        </details>
+
+        <details class="modal-section add-section" ${items.length ? '' : 'open'}>
+          <summary>
+            <span class="section-chevron">⌄</span>
+            ${items.length ? 'Añadir otra' : 'Registrar carta'}
+          </summary>
+
+          <div class="section-content">
+            ${addForm(card)}
+          </div>
+        </details>
+        </div>
+
       </div>
-      <div class="modal-body">
-        ${items.length ? `<h2>Variantes en colección</h2>
-          <div class="variants">${items.map(variantCard).join('')}</div>
-          <div class="hr"></div>` : ''}
-        <h2>${items.length ? 'Añadir otra' : 'Registrar carta'}</h2>
-        ${addForm(card)}
-      </div>
-    </div>`));
+    </div>
+  </div>`));
 
   root.querySelector('.close').onclick = closeModal;
+  wireModalSections(root);
   wireCardRank(root, card);
   wireCardTarget(root, card);
   wireForm(root, card);
@@ -109,8 +156,6 @@ function variantCard(item) {
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
-      <span class="tag">×${item.quantity}</span>
-      ${item.printing_name ? `<span class="tag ed">${esc(item.printing_name)}</span>` : ''}
     </div>
     <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
@@ -134,9 +179,6 @@ function variantCard(item) {
       <label>Precio manual</label>
       <input type="number" step="0.01" min="0" placeholder="usar el del feed"
              value="${item.value?.manual ? item.value.unit : ''}">
-      <div class="note">${item.value?.manual
-        ? 'Fijado a mano; el refresco no lo toca.'
-        : 'Vacío = precio de la fuente.'}</div>
     </div>
     <div class="btn-row compact">
       <button class="btn xs act-photo">Foto</button>
@@ -164,8 +206,6 @@ function addForm(card) {
       <div class="version-list" data-versions-for="${esc(card.id)}">
         <div class="note">Buscando versiones…</div>
       </div>
-      <div class="note">Elegí el producto que tenés — su edición y variante salen
-        de ahí. La imagen, el stock y el precio son para reconocer cuál es.</div>
       <div class="version-picked" hidden></div>
     </div>
     <div class="form-row">
@@ -183,8 +223,21 @@ function addForm(card) {
       <button type="submit" class="btn primary">Guardar</button>
       <button type="button" class="btn ghost cancel">Cancelar</button>
     </div>
-    <div class="note">La foto se añade después de guardar, desde la variante.</div>
   </form>`;
+}
+
+function wireModalSections(root) {
+  const sections = root.querySelectorAll('.modal-section');
+
+  sections.forEach((section) => {
+    section.addEventListener('toggle', () => {
+      if (!section.open) return;
+
+      sections.forEach((other) => {
+        if (other !== section) other.open = false;
+      });
+    });
+  });
 }
 
 /* The rank belongs to the card, so there is one picker for the whole modal.
@@ -323,17 +376,20 @@ function wireVariants(root, cardId) {
 // CAMBIO 2: editVariant — reemplaza el select de variante por ¿Primera edición?
 // y añade un preview de precio en tiempo real.
 function editVariant(vc, id, cardId) {
-  // Leer precio base y metadatos del DOM (puestos por variantCard arriba).
+  // Leer precio base y metadatos del DOM
   const priceRaw  = parseFloat(vc.dataset.priceRaw);
-  const qty       = Number(vc.dataset.priceQty);
+  // CAMBIO: Usar el dataset directamente en lugar de intentar leerlo de las tags
+  const qty       = Number(vc.dataset.priceQty) || 1; 
   const basis     = vc.dataset.priceBasis || '';
   const firstEdOn = vc.dataset.firstEd === '1';
 
   const tags = vc.querySelectorAll('.tag');
+  
+  // Extraer valores actuales con seguridad
   const cur = {
-    condition: tags[1].textContent.trim(),
-    language:  META.languages.find((l) => l.label === tags[2].textContent)?.key || 'es',
-    quantity:  Number(tags[3].textContent.replace('×', '')) || 1,
+    condition: tags[1] ? tags[1].textContent.trim() : '',
+    language:  tags[2] ? (META.languages.find((l) => l.label === tags[2].textContent)?.key || 'es') : 'es',
+    quantity:  qty, // Usamos la variable qty definida arriba
   };
 
   vc.innerHTML = `
@@ -355,7 +411,6 @@ function editVariant(vc, id, cardId) {
       <button class="btn ghost cancel">Cancelar</button>
     </div>`;
 
-  // Preview en tiempo real — solo si tenemos datos de precio.
   const sel     = vc.querySelector('[name=first_edition]');
   const preview = vc.querySelector('.price-preview');
 
@@ -382,11 +437,10 @@ function editVariant(vc, id, cardId) {
   vc.querySelector('[name=condition]').onchange = updatePreview;
   vc.querySelector('[name=language]').onchange = updatePreview;
   vc.querySelector('[name=quantity]').oninput = updatePreview;
-  updatePreview();   // render inmediato al abrir el formulario
+  updatePreview();
 
   vc.querySelector('.cancel').onclick = () => openCard(cardId);
 
-  // CAMBIO 3: save manda first_edition en lugar de variant.
   vc.querySelector('.save').onclick = async () => {
     try {
       await api.updateItem(id, {

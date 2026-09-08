@@ -87,6 +87,8 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
      text-transform: uppercase; font-weight: 600; font-size: 12px; letter-spacing: .08em; }
 .sub { color: var(--fg-dim); font-size: 14px;}
 
+details { padding: 8px 20px; }
+
 /* ------------------------------------------------------------------ stats */
 .stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .stat {
@@ -215,32 +217,177 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 
 /* ---------------------------------------------------------------- modal */
 .modal-root {
-  position: fixed; inset: 0; z-index: 100; display: flex;
-  align-items: center; justify-content: center; padding: 20px;
-  background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(4px);
 }
-/* An explicit display value beats the [hidden] attribute's UA display:none, so
-   without this the overlay stays on top of the page and eats every click. */
-.modal-root[hidden] { display: none; }
+
+.modal-root[hidden] {
+  display: none;
+}
+
 .modal {
-  width: min(760px, 100%); max-height: 90vh; overflow-y: auto;
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: 16px; box-shadow: var(--shadow);
+  width: min(90%, 1400px);
+  height: 90vh;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
-.modal-head { display: flex; gap: 16px; padding: 20px; border-bottom: 1px solid var(--line); }
-/* align-self keeps the art at its own aspect ratio. The header is a flex row,
-   so the default `stretch` makes this box as tall as whatever is beside it, and
-   object-fit: cover then crops the card's sides — which is what happened when
-   the target field made the right column taller. */
-.modal-head .art { width: 130px; flex: none; align-self: flex-start;
-                   border-radius: var(--radius-sm); overflow: hidden;
-                   aspect-ratio: 245/342; background: var(--bg-3); }
-.modal-head .art img { width: 100%; height: 100%; object-fit: cover; }
-.modal-head h3 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.02em; }
-.modal-head .meta { color: var(--fg-dim); font-size: 13px; }
-.modal-head .close { margin-left: auto; align-self: start; background: none; border: 0;
-                     color: var(--fg-dim); font-size: 22px; cursor: pointer; line-height: 1; }
-.modal-body { padding: 20px; }
+
+/* Main two-column layout */
+.modal-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(400px, 1fr);
+  height: 100%;
+}
+
+/* ----------------------------------------------------------- card artwork */
+
+.modal-card-art {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+
+.modal-card-art img {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 90%;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
+/* ----------------------------------------------------------- right column */
+
+.modal-content {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Header / card information */
+.modal-head {
+  position: relative;
+  display: block;
+  padding: 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-head h3 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  letter-spacing: -.025em;
+  line-height: 1.2;
+}
+
+.modal-head .meta {
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+.modal-head .close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: 0;
+  color: var(--fg-dim);
+  font-size: 26px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 6px;
+}
+
+.modal-head .close:hover {
+  color: var(--fg);
+  background: var(--bg-3);
+}
+
+/* Push the content slightly away from the close button */
+.modal-head > div:first-child {
+  padding-right: 42px;
+}
+
+/* ------------------------------------------------------------- modal body */
+
+.modal-body {
+  padding: 24px 28px 32px;
+}
+
+/* Give the form/sections some breathing room */
+.modal-body h2 {
+  margin-top: 0;
+}
+
+.modal-body .hr {
+  margin: 24px 0;
+}
+
+.modal-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.modal-section {
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-section summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0;
+  font-size: 16px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.modal-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.modal-section summary:hover {
+  color: var(--accent);
+}
+
+.section-chevron {
+  color: var(--fg-dim);
+  font-size: 18px;
+  transition: transform .2s ease;
+}
+
+.modal-section[open] .section-chevron {
+  transform: rotate(180deg);
+}
+
+.section-content {
+  padding: 0 0 22px;
+}
+
+.modal-section:not([open]) .section-content {
+  display: none;
+}
 
 /* Variants strip: horizontally swipeable on mobile.
    The photo is the point of this panel — you are comparing copies — so it gets
@@ -281,7 +428,6 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 .variant-card .price small { color: var(--fg-faint); font-weight: 400; }
 
 .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.field { flex: 1 1 140px; }
 .field label { display: block; font-size: 11px; text-transform: uppercase;
                letter-spacing: .06em; color: var(--fg-faint); margin-bottom: 5px; }
 .field select, .field input {
@@ -315,6 +461,117 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 .chip { padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
         background: var(--bg-3); cursor: pointer; font-size: 13px; }
 .chip.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
+
+@media (max-width: 700px) {
+
+  .modal-root {
+    padding: 10px;
+    align-items: center;
+  }
+
+  .modal {
+    width: 100%;
+    height: min(96vh, 900px);
+    max-height: 96vh;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .modal-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  /* =========================
+     CARTA
+     ========================= */
+
+  .modal-card-art {
+    flex: 0 0 auto;
+    min-height: 0;
+    height: min(46vh, 440px);
+    padding: 20px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .modal-card-art img {
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: var(--radius);
+  }
+
+  /* =========================
+     CONTENIDO
+     ========================= */
+
+  .modal-content {
+    min-height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-head {
+    padding: 22px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .modal-head > div:first-child {
+    padding-right: 38px;
+  }
+
+  .modal-head h3 {
+    font-size: 21px;
+  }
+
+  .modal-head .meta {
+    font-size: 12px;
+  }
+
+  .modal-head .close {
+    top: 14px;
+    right: 14px;
+  }
+
+  /* Estado + Cardmarket */
+  .modal-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .modal-status .mkm {
+    margin-top: 0;
+  }
+
+  /* =========================
+     BODY
+     ========================= */
+
+  .modal-body {
+    padding: 20px 18px 28px;
+  }
+
+  /* Idioma / cantidad / condición */
+  .form-row.card-details {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Evita que cualquier fila del formulario
+     intente mantenerse demasiado ancha */
+  .form-row {
+    min-width: 0;
+  }
+
+}
+
 
 /* Quick-select: bulk-applies the collecting star to the whole set. It is an
    action row, not a filter — it changes what you collect, so it sits above the
@@ -391,7 +648,7 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 /* The variant card is narrow, so the full-size row would wrap to three lines.
    Smaller targets give a tidy two rows without shrinking the primary picker in
    the add form. */
-.variant-card { width: 230px; }
+.variant-card { width: 200px; }
 .variant-card .rank { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
 .variant-card .rank.zero { padding: 0 8px; }
 .variant-card .rank-row { gap: 4px; }
