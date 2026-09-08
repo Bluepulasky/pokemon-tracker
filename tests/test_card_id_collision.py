@@ -10,11 +10,13 @@ import pytest
 
 from tombot.config import Config
 from tombot.services.repository import PokemonRepo
-from tombot.services.tcggo_catalog import TcggoCatalog, resolve_collisions
+from tombot.services.tcggo_catalog import (TcggoCatalog, normalized_name,
+                                           resolve_collisions)
 
 
-def _p(pid, card_id, name):
-    return {"product_id": pid, "card_id": card_id, "name": name}
+def _p(pid, card_id, name, artist=None):
+    return {"product_id": pid, "card_id": card_id, "name": name,
+            "artist": artist}
 
 
 def test_different_cards_are_split_lowest_product_id_keeps_the_id():
@@ -30,6 +32,86 @@ def test_five_way_collision_all_distinct():
     resolve_collisions(rows)
     ids = [r["card_id"] for r in rows]
     assert len(set(ids)) == 4 and ids[0] == "cel-15"
+
+
+def test_celebrations_collisions_split_on_the_artist():
+    """The real CEL 15 pile-up: one code, five cards, five illustrators."""
+    rows = [_p(1, "cel-15", "Lunala", "kirisAki"),
+            _p(2, "cel-15", "Venusaur", "Mitsuhiro Arita"),
+            _p(3, "cel-15", "Claydol", "Midori Harada"),
+            _p(4, "cel-15", "Rocket's Zapdos", "Shin-ichi Yoshida"),
+            _p(5, "cel-15", "Here Comes Team Rocket!", "Ken Sugimori")]
+    resolve_collisions(rows)
+    ids = [r["card_id"] for r in rows]
+    assert len(set(ids)) == 5 and ids[0] == "cel-15"
+
+
+# Issue #69: Base Set came out at 106 cards instead of 102, because tcggo spells
+# four of them differently on the shadowless products than on the unlimited
+# ones. The product ids, names and artists below are the ones actually stored on
+# the live instance. Every pair is one card by two names — same illustrator.
+BASE_SET_SPELLING_PAIRS = [
+    ("bs-55", 273750, "Nidoran \u2642", 660173, "Nidoran M", "Ken Sugimori"),
+    ("bs-73", 273768, "Imposter Professor Oak", 660146,
+     "Impostor Professor Oak", "Ken Sugimori"),
+    ("bs-85", 273780, "Pokemon Center", 660121, "Pok\u00e9mon Center",
+     "Keiji Kinebuchi"),
+    ("bs-86", 273781, "Pok\u00e9mon Flute", 660120, "Pokemon Flute",
+     "Keiji Kinebuchi"),
+]
+
+
+@pytest.mark.parametrize("card_id,pid_a,name_a,pid_b,name_b,artist",
+                         BASE_SET_SPELLING_PAIRS)
+def test_one_card_spelled_two_ways_stays_one_card(card_id, pid_a, name_a,
+                                                  pid_b, name_b, artist):
+    rows = [_p(pid_a, card_id, name_a, artist), _p(pid_b, card_id, name_b, artist)]
+    resolve_collisions(rows)
+    assert {r["card_id"] for r in rows} == {card_id}
+
+
+def test_imposter_vs_impostor_needs_the_artist_not_the_name():
+    """A real letter apart. Normalising the name cannot merge these; the
+    illustrator can, which is why the artist is the primary signal."""
+    assert normalized_name("Imposter Professor Oak") != \
+        normalized_name("Impostor Professor Oak")
+
+
+def test_normalized_name_folds_accents_and_gender_signs():
+    assert normalized_name("Pok\u00e9mon Center") == normalized_name("Pokemon Center")
+    assert normalized_name("Nidoran \u2642") == normalized_name("Nidoran M")
+    assert normalized_name("Nidoran \u2640") == normalized_name("Nidoran F")
+    assert normalized_name("Rocket's Zapdos") != normalized_name("Lunala")
+
+
+def test_without_artists_it_falls_back_to_the_normalized_name():
+    """A set where tcggo sends no illustrator still must not split on an accent,
+    and still must split two genuinely different cards."""
+    rows = [_p(1, "bs-85", "Pokemon Center"), _p(2, "bs-85", "Pok\u00e9mon Center")]
+    resolve_collisions(rows)
+    assert {r["card_id"] for r in rows} == {"bs-85"}
+
+    rows = [_p(1, "cel-2", "Reshiram"), _p(2, "cel-2", "Blastoise")]
+    resolve_collisions(rows)
+    assert len({r["card_id"] for r in rows}) == 2
+
+
+def test_a_blank_artist_on_one_product_does_not_split_the_card():
+    """All-or-nothing: a group is judged by artist only when every product has
+    one, so a missing illustrator cannot invent a card on its own."""
+    rows = [_p(10, "bs-2", "Blastoise", "Ken Sugimori"),
+            _p(20, "bs-2", "Blastoise", None)]
+    resolve_collisions(rows)
+    assert {r["card_id"] for r in rows} == {"bs-2"}
+
+
+def test_two_artists_sharing_a_name_get_distinct_ids():
+    """The suffix is the name, so a name collision inside one code must still
+    come out unique or the split would undo itself."""
+    rows = [_p(1, "x-1", "Base", "Artist A"), _p(2, "x-1", "Same", "Artist B"),
+            _p(3, "x-1", "Same", "Artist C")]
+    resolve_collisions(rows)
+    assert len({r["card_id"] for r in rows}) == 3
 
 
 def test_printings_of_one_card_are_not_split():
