@@ -15,7 +15,7 @@ from tombot.services.tcggo_catalog import (TcggoCatalog, normalized_name,
 
 
 def _p(pid, card_id, name, artist=None):
-    return {"product_id": pid, "card_id": card_id, "name": name,
+    return {"cardmarket_id": pid, "card_id": card_id, "name": name,
             "artist": artist}
 
 
@@ -136,7 +136,7 @@ def repo(tmp_path, monkeypatch):
 
 
 def _prod_row(pid, card_id, code, name, rarity):
-    return {"product_id": pid, "episode_id": 35, "card_id": card_id, "code": code,
+    return {"cardmarket_id": pid, "episode_id": 35, "card_id": card_id, "code": code,
             "number": code.split(" ")[-1], "name": name, "version": None,
             "rarity": rarity, "currency": "EUR", "price": 1.0, "price_low": 1.0,
             "price_avg30": None, "price_avg7": None, "available": 5, "image": None,

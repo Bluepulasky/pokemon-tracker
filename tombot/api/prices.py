@@ -229,7 +229,9 @@ def _versions_from_import(card_id: str | None, episode_id: int | None):
     current_set = card["official_set_id"]
     rows = repo().market_products_for_reprint(card_id)
     items = [{
-        "market_product_id": r["product_id"],
+        # Our own printing id. The name stays for the client; what it points at
+        # is the printing now, not the Cardmarket product (#68).
+        "market_product_id": r["id"],
         "card_id": r["card_id"],
         "name": r["name"], "set": r["set_name"], "set_id": r["set_id"],
         "code": r["code"], "number": r["number"],

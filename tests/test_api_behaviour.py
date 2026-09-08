@@ -40,7 +40,7 @@ def app(tmp_path, monkeypatch):
     # The card's direct Cardmarket product — the link resolves from this now that
     # the pokemontcg.io redirector is gone (issue #27).
     repo.upsert_market_products([
-        {"product_id": 273699, "episode_id": 1, "card_id": "base1-4",
+        {"cardmarket_id": 273699, "episode_id": 1, "card_id": "base1-4",
          "code": "BS 4", "number": "4", "name": "Charizard", "version": "Unlimited",
          "rarity": "Holo", "currency": "EUR", "price": 200.0, "price_low": None,
          "price_avg30": None, "price_avg7": None, "available": 1, "image": None,

@@ -53,9 +53,16 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
   so it is filled only by the card-meta CSV (`tombot/data/card_meta.csv`, applied
   from Mantenimiento or `flask fix-card-meta`), and a reimport must not blank it.
   The Cartas view filters on both axes independently (`type` and `color`).
-- **`market_products`** — every Cardmarket product for an imported set: one row per
-  printing/version, with its price and its own Cardmarket URL. A card's versions
-  are its products.
+- **`market_products`** — one row per **printing** of a card in an imported set,
+  with its price and its own Cardmarket URL. A card's versions are its printings.
+  Keyed `(episode_id, card_id, version)` on an id of our own; **Cardmarket's
+  `cardmarket_id` is an attribute, nullable and not unique**. It has to be: tcggo
+  stamps different print runs with one id (Base Set Charizard's 1st Edition
+  Shadowless and its Shadowless are both product 660224, at 50,000 and 2,000 EUR)
+  and sends no id at all on others. Keyed on that id, Base Set stored 193 of the
+  307 printings tcggo sends, and 11 Base Set 2 cards vanished from the catalogue
+  because a card with no product is not built (#68). Note the key is `card_id`,
+  not `code`: Celebrations files two different cards under "CEL 2".
 - **`collection_sets` + `set_slots` + `set_slot_cards`** — a *collecting goal*: a
   **rule** over one or more catalogue sets. A slot is one completion target,
   satisfied by owning any member card. Rules live in `collection_sets.rules_json`
@@ -65,8 +72,8 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
   bar on the set detail page both write these. A slot's `source` is `rule` or
   `manual`; a rebuild leaves manual ones alone.
 - **`collection_items`** — what you physically own: `(card_id, variant, condition,
-  language)` unique, plus `market_product_id` (the exact Cardmarket product chosen
-  in the add-card modal).
+  language)` unique, plus `market_product_id` — the exact **printing** chosen in
+  the add-card modal, i.e. a `market_products.id`, not a Cardmarket product id.
 - **`price_cache`** — the resolved price per owned printing.
 - **`price_modifiers`** — condition/language/variant multipliers, editable.
 - **`market_episodes`** — the tcggo set catalogue (all ~180 sets), filled by the
@@ -92,8 +99,8 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
 
 ## Pricing
 
-Prices are read **locally** from `market_products` by the product id on each owned
-row — no per-card network call, no guessing which printing a variant is. A row
+Prices are read **locally** from `market_products` by the printing id on each
+owned row — no per-card network call, no guessing which printing a variant is. A row
 with no chosen product is left unpriced (a wrong number is worse than none).
 Re-importing a set is what refreshes its prices. See `services/pricing.py`.
 
@@ -106,7 +113,11 @@ Re-importing a set is what refreshes its prices. See `services/pricing.py`.
   **column** on an existing table does **not**. To add per-set state that must
   survive without recreating the DB (e.g. `set_hidden`, `set_loose_completion`),
   use a small **new table**, not a column. A column is fine only when losing the
-  old DB is acceptable (it is rebuilt from imports).
+  old DB is acceptable (it is rebuilt from imports). A change to a table's **key**
+  is the one thing `init_db` cannot deliver at all — the old table simply
+  survives — so it needs an explicit drop, and `market_products` is the only
+  table where that is safe (it holds nothing the user typed and a re-import
+  rebuilds it in full; see `_retire_product_keyed_market_products`).
 - **After a schema.sql change, restart runs `init_db` only via the Docker
   entrypoint.** Running `waitress`/`flask run` directly does not — run
   `flask init-db` once yourself, or the new table is missing ("no such table").

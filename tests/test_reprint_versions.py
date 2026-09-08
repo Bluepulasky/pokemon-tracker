@@ -14,7 +14,7 @@ from tombot.services.repository import PokemonRepo
 
 
 def _pikachu_product(pid, episode, card_id, code, number, set_price, version=""):
-    return {"product_id": pid, "episode_id": episode, "card_id": card_id,
+    return {"cardmarket_id": pid, "episode_id": episode, "card_id": card_id,
             "code": code, "number": number, "name": "Pikachu", "version": version,
             "rarity": "Common", "currency": "EUR", "price": set_price,
             "price_low": None, "price_avg30": None, "price_avg7": None,
@@ -114,6 +114,6 @@ def test_a_card_with_no_reprints_lists_only_itself(app):
         _pikachu_product(9001, 170, "ju-1", "JU 1", "1", 5.0, "1st Edition")])
     # rename that product's name to Clefable so it is a distinct card
     app.extensions["repo"]._all(
-        "UPDATE market_products SET name='Clefable' WHERE product_id=9001")
+        "UPDATE market_products SET name='Clefable' WHERE cardmarket_id=9001")
     body = _versions(app, "ju-1")
     assert {v["set_id"] for v in body["versions"]} == {"ju"}

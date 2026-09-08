@@ -504,6 +504,10 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .version .v-code { font-weight: 600; font-size: .78rem; }
 .version .v-name { font-size: .72rem; color: var(--muted, #6b7280); }
+/* The print run. A Base Set card has three, and without this they are three
+   identical tiles reading "Base / BS 57" at different prices (#68). */
+.version .v-run { font-size: .7rem; color: var(--muted, #6b7280);
+                  line-height: 1.2; }
 .version .v-price { font-size: .82rem; font-variant-numeric: tabular-nums; }
 .version .v-stock { font-size: .7rem; color: var(--muted, #6b7280); }
 /* Reprints from other sets: same card, dimmed so the card's own set reads first. */
