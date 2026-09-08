@@ -323,3 +323,65 @@ def test_only_the_named_set_is_touched(repo):
 
     assert repo.drop_orphan_cards("bs") == ["bs-orphan"]
     assert repo.get_card("ju-1") is not None, "a set not being imported is untouched"
+
+
+# ------------------------- two different cards under one code, at import time
+
+# The real Celebrations rows: tcggo files the Classic Collection under the same
+# CEL code as the base card, and neither carries a version. Keying the importer's
+# dedupe on the code alone threw one of each pair away before resolve_collisions
+# — whose whole job is telling them apart — ever saw them, and the set imported
+# as 39 cards instead of 50.
+CEL_COLLISIONS = [
+    ("CEL 2", 576747, "Reshiram", "Aya Kusube", 576771, "Blastoise", "Ken Sugimori"),
+    ("CEL 4", 576749, "Palkia", "5ban Graphics", 576772, "Charizard",
+     "Mitsuhiro Arita"),
+    ("CEL 17", 576765, "Groudon", "Ryuta Fuse", 576781, "Umbreon ★",
+     "Masakazu Fukuda"),
+]
+
+
+@pytest.mark.parametrize("code,pid_a,name_a,artist_a,pid_b,name_b,artist_b",
+                         CEL_COLLISIONS)
+def test_two_cards_under_one_code_both_survive_the_import(
+        code, pid_a, name_a, artist_a, pid_b, name_b, artist_b):
+    rows = [_raw(pid_a, code, name_a, None, 1.0, artist_a),
+            _raw(pid_b, code, name_b, None, 2.0, artist_b)]
+    kept = MarketImporter._dedupe(None, rows)
+    assert len(kept) == 2, f"{name_a} and {name_b} are different cards"
+    assert {r["name"] for r in kept} == {name_a, name_b}
+
+
+def test_the_five_way_celebrations_pileup_survives_the_import():
+    rows = [_raw(576760, "CEL 15", "Lunala", None, 1.0, "kirisAki"),
+            _raw(576773, "CEL 15", "Venusaur", None, 2.0, "Mitsuhiro Arita"),
+            _raw(576776, "CEL 15", "Here Comes Team Rocket!", None, 3.0,
+                 "Ken Sugimori"),
+            _raw(576786, "CEL 15", "Claydol", None, 4.0, "Midori Harada"),
+            _raw(576777, "CEL 15", "Rocket's Zapdos", None, 5.0,
+                 "Shin-ichi Yoshida")]
+    kept = MarketImporter._dedupe(None, rows)
+    assert len(kept) == 5
+
+
+def test_the_import_still_collapses_one_card_listed_twice():
+    """Same code, same illustrator, same print run — that IS one printing."""
+    rows = [_raw(1, "CEL 4", "Palkia", None, None, "5ban Graphics"),
+            _raw(1, "CEL 4", "Palkia", None, 9.0, "5ban Graphics")]
+    kept = MarketImporter._dedupe(None, rows)
+    assert len(kept) == 1
+    assert kept[0]["prices"]["cardmarket"]["lowest_near_mint"] == 9.0
+
+
+def test_without_artists_the_name_still_separates_two_cards():
+    rows = [_raw(576747, "CEL 2", "Reshiram", None, 1.0, None),
+            _raw(576771, "CEL 2", "Blastoise", None, 2.0, None)]
+    assert len(MarketImporter._dedupe(None, rows)) == 2
+
+
+def test_an_accent_is_not_a_second_card_at_import_time():
+    """The #69 pairs must still collapse: one card spelled two ways, one print
+    run. Without an artist the normalised name is what decides."""
+    rows = [_raw(273780, "BS 85", "Pokemon Center", "Unlimited", 1.0, None),
+            _raw(273780, "BS 85", "Pokémon Center", "Unlimited", 1.0, None)]
+    assert len(MarketImporter._dedupe(None, rows)) == 1

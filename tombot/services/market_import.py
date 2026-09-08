@@ -105,14 +105,23 @@ class MarketImporter:
             from the catalogue outright: a card whose only row has no product id
             has no products, and cards are built from products.
 
-        So the key is (code, version): the card and its print run. Rows without
-        a product id are kept — a printing with a price and no buy link is worth
-        more than no printing. A genuine repeat of one printing keeps whichever
-        row has an offer behind it.
+        So the key is the card and its print run. Rows without a product id are
+        kept — a printing with a price and no buy link is worth more than no
+        printing. A genuine repeat of one printing keeps whichever row has an
+        offer behind it.
+
+        "The card" is deliberately not the code. An episode can file two
+        different cards under one code, and Celebrations does: Palkia and the
+        Classic Collection Charizard are both "CEL 4" with no version, so keying
+        on the code alone threw one of them away here — before
+        resolve_collisions, whose whole job is telling those apart, ever saw it.
+        That cost Celebrations its 11 Classic Collection cards. The illustrator
+        is the same signal resolve_collisions uses, for the same reason.
         """
         best: dict[tuple, dict] = {}
         for raw in rows:
             key = ((raw.get("card_code_number") or "").strip(),
+                   _card_identity(raw),
                    (raw.get("version") or "").strip())
             kept = best.get(key)
             if kept is None:
@@ -163,6 +172,19 @@ class MarketImporter:
             "artist": _artist_name(raw.get("artist")),
             "supertype": raw.get("supertype"),
         }
+
+
+def _card_identity(raw: dict) -> str:
+    """What makes two rows under one code the same card.
+
+    The illustrator where there is one — a reprint reuses the artwork, so two
+    printings of a card share it and two different cards do not (#69) — and the
+    name, normalised for accents and gender signs, where there is not.
+    """
+    from .tcggo_catalog import normalized_name
+
+    artist = (_artist_name(raw.get("artist")) or "").strip().lower()
+    return artist or normalized_name(raw.get("name"))
 
 
 def _artist_name(artist) -> str | None:
