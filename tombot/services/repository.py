@@ -1510,6 +1510,46 @@ class PokemonRepo:
             tuple(ids))
         return {r["id"]: r for r in rows}
 
+    def drop_orphan_cards(self, set_id: str) -> list[str]:
+        """Cards of a fully-imported set that no longer have a single printing.
+
+        A set is imported whole, so after an import every real card in it has at
+        least one printing. A card with none is a leftover from an earlier import
+        that grouped the set differently — the four Base Set cards that #69 split
+        on a misspelling, which stayed behind as empty rows and kept the set
+        reading 106 when it has 102. Importing only ever inserts and updates, so
+        nothing else ever removes them.
+
+        Only rows that are purely catalogue are dropped. Anything the user put
+        there keeps the card: a copy in the collection, a Hall of Fame rank, a
+        target. Those last two would go with it silently — the FK cascades — and
+        they are the user's intent, not catalogue data, so they are checked for
+        rather than relied on. A card in the collection could not be deleted
+        anyway (that FK restricts), but a failure here would abort the import,
+        so it is excluded rather than attempted.
+        """
+        rows = self._all(
+            """SELECT c.id FROM cards c
+                WHERE c.official_set_id = ?
+                  AND NOT EXISTS (SELECT 1 FROM market_products mp
+                                   WHERE mp.card_id = c.id)
+                  AND NOT EXISTS (SELECT 1 FROM collection_items i
+                                   WHERE i.card_id = c.id)
+                  AND NOT EXISTS (SELECT 1 FROM card_ratings r
+                                   WHERE r.card_id = c.id)
+                  AND NOT EXISTS (SELECT 1 FROM card_targets t
+                                   WHERE t.card_id = c.id)""",
+            (set_id,))
+        ids = [r["id"] for r in rows]
+        if not ids:
+            return []
+        marks = ",".join("?" * len(ids))
+        with self.tx() as c:
+            c.execute(f"DELETE FROM cards WHERE id IN ({marks})", tuple(ids))
+        log.info("dropped %d card(s) of %s with no printings: %s",
+                 len(ids), set_id, ", ".join(ids[:8]))
+        return ids
+
     def relink_collection_products(self) -> dict:
         """Reattach owned rows to their printing after the #68 re-import.
 

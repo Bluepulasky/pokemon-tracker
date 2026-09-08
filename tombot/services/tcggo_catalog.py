@@ -238,7 +238,12 @@ class TcggoCatalog:
                 "supertype": best.get("supertype"),
             })
         self.repo.upsert_cards(cards)
+        # The set is now in whole, so anything left in it without a printing is
+        # from an earlier import that grouped it differently — it would otherwise
+        # sit there forever inflating the count (#69).
+        dropped = self.repo.drop_orphan_cards(set_id)
 
         # Products already carry their card_id from the import, so pricing is a
         # join on our own key rather than a guess.
-        return {"set_id": set_id, "cards": len(cards), "products": len(products)}
+        return {"set_id": set_id, "cards": len(cards), "products": len(products),
+                "dropped": dropped}

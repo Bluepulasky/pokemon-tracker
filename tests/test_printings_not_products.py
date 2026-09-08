@@ -268,3 +268,58 @@ def test_an_already_migrated_database_is_left_alone(tmp_path, monkeypatch):
     r.upsert_market_products([_stored(660224, "bs-4", "Shadowless")])
     r.init_db()                                   # a restart must not wipe it
     assert len(r.market_products_for_card("bs-4")) == 1
+
+
+# ------------------------------------------- leftovers from an older import
+
+def _card(repo, card_id, name, number):
+    repo.upsert_cards([{"id": card_id, "official_set_id": "bs", "name": name,
+                        "number": number, "rarity": "Common"}])
+
+
+def test_a_card_left_with_no_printings_is_dropped(repo):
+    """#69's four splits survive a re-import as empty rows — the set kept
+    reading 106 when Base Set has 102, because importing never deletes."""
+    _card(repo, "bs-55", "Nidoran M", "55")
+    _card(repo, "bs-55-nidoran-m", "Nidoran M", "55")
+    repo.upsert_market_products([_stored(273750, "bs-55", "Unlimited",
+                                         name="Nidoran M", code="BS 55")])
+
+    assert repo.drop_orphan_cards("bs") == ["bs-55-nidoran-m"]
+    assert repo.get_card("bs-55") is not None
+    assert repo.get_card("bs-55-nidoran-m") is None
+
+
+def test_a_leftover_you_own_is_kept(repo):
+    """That FK restricts, so deleting it would abort the whole import."""
+    _card(repo, "bs-55-nidoran-m", "Nidoran M", "55")
+    repo.upsert_collection_item({"card_id": "bs-55-nidoran-m", "variant": "normal",
+                                 "condition": "M/NM", "language": "es"})
+    assert repo.drop_orphan_cards("bs") == []
+    assert repo.get_card("bs-55-nidoran-m") is not None
+
+
+def test_a_leftover_you_ranked_or_targeted_is_kept(repo):
+    """Both cascade, so they would vanish without a word. They are the user's
+    intent, not catalogue data."""
+    _card(repo, "bs-ranked", "Ranked", "900")
+    _card(repo, "bs-targeted", "Targeted", "901")
+    repo.set_card_rating("bs-ranked", 5)
+    repo.set_card_target("bs-targeted", 3)
+
+    assert repo.drop_orphan_cards("bs") == []
+    assert repo.get_card_rating("bs-ranked") == 5
+    assert repo.get_card_target("bs-targeted") == 3
+
+
+def test_only_the_named_set_is_touched(repo):
+    repo.upsert_official_set({"id": "ju", "name": "Jungle", "series": "",
+                              "total": 64, "printed_total": 64,
+                              "release_date": "1999/06/16", "ptcgo_code": "JU",
+                              "logo_url": None, "symbol_url": None})
+    repo.upsert_cards([{"id": "ju-1", "official_set_id": "ju", "name": "Clefable",
+                        "number": "1", "rarity": "Rare Holo"}])
+    _card(repo, "bs-orphan", "Orphan", "999")
+
+    assert repo.drop_orphan_cards("bs") == ["bs-orphan"]
+    assert repo.get_card("ju-1") is not None, "a set not being imported is untouched"
