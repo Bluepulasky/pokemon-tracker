@@ -391,9 +391,14 @@ def import_episode(episode_id):
     # are collecting. Adding one without the other means pressing "Añadir" and
     # seeing nothing happen, so a goal to collect the whole set comes with it.
     # It is a starting point — narrowing it later is what the rules are for.
+    # An owned row saved before #68 points at a Cardmarket id, which is not a
+    # printing id any more. Re-importing is what makes the printings exist, so
+    # it is also where those rows can be reattached.
+    relinked = repo().relink_collection_products()
+
     goal = _ensure_collection_set(built.get("set_id"), episode["name"])
     return jsonify({**result, **built, "name": episode["name"],
-                    "collection_set": goal})
+                    "collection_set": goal, "relinked": relinked})
 
 
 def _ensure_collection_set(set_id: str | None, name: str) -> dict | None:
