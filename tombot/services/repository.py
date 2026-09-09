@@ -146,6 +146,12 @@ class PokemonRepo:
                 "INSERT INTO app_meta(key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
                 "updated_at=datetime('now')", (SCHEMA_VERSION,))
+        # A new entry in RARITY_CANON otherwise only helps the next import, and
+        # a rarity stored two ways is a live error on the maintenance page — a
+        # rule excluding one spelling silently keeps the other. Cheap and
+        # idempotent: one DISTINCT over a column that has a handful of values.
+        from .tcggo_catalog import canonicalise_stored_rarities
+        canonicalise_stored_rarities(self)
 
     @staticmethod
     def _retire_product_keyed_market_products(c) -> None:
@@ -1244,19 +1250,28 @@ class PokemonRepo:
             "name": e.get("name") or "", "slug": e.get("slug"),
             "released_at": e.get("released_at"), "logo": e.get("logo"),
             "cards_total": e.get("cards_total"),
+            # What the import would actually fetch. See schema.sql (#75).
+            "products_total": (((e.get("prices") or {}).get("cardmarket") or {})
+                               .get("total")),
         } for e in episodes if e.get("id") and e.get("name")]
         if not rows:
             return 0
         with self.tx() as c:
+            # This column postdates the table, and init_db only adds new tables,
+            # so a database from before it does not gain it on its own.
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(market_episodes)")}
+            if "products_total" not in cols:
+                c.execute("ALTER TABLE market_episodes ADD COLUMN products_total INTEGER")
             c.executemany(
                 """INSERT INTO market_episodes(episode_id, code, name, slug,
-                       released_at, logo, cards_total, seen_at)
+                       released_at, logo, cards_total, products_total, seen_at)
                    VALUES(:episode_id,:code,:name,:slug,:released_at,:logo,
-                          :cards_total,datetime('now'))
+                          :cards_total,:products_total,datetime('now'))
                    ON CONFLICT(episode_id) DO UPDATE SET
                      code=excluded.code, name=excluded.name, slug=excluded.slug,
                      released_at=excluded.released_at, logo=excluded.logo,
-                     cards_total=excluded.cards_total""",
+                     cards_total=excluded.cards_total,
+                     products_total=excluded.products_total""",
                 rows)
         return len(rows)
 
@@ -1269,7 +1284,14 @@ class PokemonRepo:
         name is longer than the stored one, so a plain contains-search misses
         it. Code is matched the ordinary way.
         """
-        sql = """SELECT e.*,
+        # products_total may not exist on a database from before #75, and
+        # SELECT e.* would then simply not carry it; asking for it explicitly
+        # would be an error instead. So it is read through a guarded alias.
+        has_total = any(
+            r["name"] == "products_total"
+            for r in self.connect().execute("PRAGMA table_info(market_episodes)"))
+        total = "e.products_total" if has_total else "NULL"
+        sql = f"""SELECT e.*, {total} AS products_total,
                         (SELECT COUNT(*) FROM market_products m
                           WHERE m.episode_id = e.episode_id) AS products
                    FROM market_episodes e"""
