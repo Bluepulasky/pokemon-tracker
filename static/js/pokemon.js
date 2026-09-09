@@ -829,7 +829,10 @@ function renderBudgets(budgets) {
    because that is how anyone actually recognises a set. */
 function episodeCard(e) {
   const added = e.imported;
-  return `<div class="episode ${added ? 'added' : ''}">
+  // Still listed, so searching for it does not look broken — just not offered,
+  // because importing it would spend a request and fetch nothing (#75).
+  const empty = e.empty && !added;
+  return `<div class="episode ${added ? 'added' : ''}${empty ? ' empty' : ''}">
       ${e.logo ? `<img src="${esc(e.logo)}" alt="" loading="lazy">`
                 : '<div class="noimg"></div>'}
       <div class="e-name">${esc(e.name)}</div>
@@ -839,7 +842,10 @@ function episodeCard(e) {
         ? `<div class="e-added">${e.products} productos importados</div>
            <button class="btn xs ghost" data-reimport="${e.id}"
              title="Vuelve a traer el set — corrige datos y precios sin re-elegir cartas">Reimportar</button>`
-        : `<button class="btn xs" data-add="${e.id}">Añadir</button>`}
+        : empty
+          ? `<div class="e-empty">tcggo no tiene cartas para este set.
+               Si existen, están dentro de otro.</div>`
+          : `<button class="btn xs" data-add="${e.id}">Añadir</button>`}
     </div>`;
 }
 

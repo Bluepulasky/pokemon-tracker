@@ -763,6 +763,12 @@ details { padding: 8px 20px; }
 .version .v-name { font-size: .72rem; color: var(--muted, #6b7280); }
 /* The print run. A Base Set card has three, and without this they are three
    identical tiles reading "Base / BS 57" at different prices (#68). */
+/* A set tcggo lists but holds no cards for: shown so a search for it does not
+   look broken, dimmed so it does not look addable (#75). */
+.episode.empty { opacity: .55; }
+.episode.empty .e-empty { font-size: .72rem; color: var(--muted, #6b7280);
+                          line-height: 1.25; }
+
 .version .v-run { font-size: .7rem; color: var(--muted, #6b7280);
                   line-height: 1.2; }
 .version .v-price { font-size: .82rem; font-variant-numeric: tabular-nums; }

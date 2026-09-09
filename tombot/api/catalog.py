@@ -354,6 +354,12 @@ def list_episodes():
         "released_at": e["released_at"], "logo": e["logo"],
         "cards_total": e["cards_total"],
         "imported": bool(e["products"]), "products": e["products"],
+        # tcggo lists sets it holds no products for — "Celebrations: Classic
+        # Collection" says 25 cards and has none, because those cards are filed
+        # under Celebrations itself. Importing one fetches nothing and spends a
+        # request to discover that, so it is not offered (#75). Unknown is not
+        # empty: a set we were never told a total for stays addable.
+        "empty": e["products_total"] == 0,
     } for e in known]})
 
 
@@ -372,6 +378,13 @@ def import_episode(episode_id):
         "SELECT * FROM market_episodes WHERE episode_id=?", (episode_id,))
     if not episode:
         raise ApiError("set desconocido; buscalo primero", "not_found", 404)
+    # The button is hidden for these, but the endpoint is reachable without it,
+    # and spending a metered request to fetch nothing is the thing to avoid.
+    if "products_total" in episode.keys() and episode["products_total"] == 0:
+        raise ApiError(
+            f"tcggo no tiene cartas para «{episode['name']}», así que importarlo "
+            f"no traería nada. Si sus cartas existen, están dentro de otro set.",
+            "empty_episode", 409)
 
     budget = (current_app.extensions.get("budgets") or {}).get("tcggo")
     if budget is not None and not budget.can_afford(6):

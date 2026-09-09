@@ -152,6 +152,11 @@ RARITY_CANON = {
     "uncommon": "Uncommon",
     "rare holo ex": "Rare Holo EX",
     "classic collection": "Classic Collection",
+    # Same rarity, other way round and shouted — it arrived with a later set and
+    # lit up the health check as "Rare Secret / SECRET RARE" (#75). "Rare Secret"
+    # is the spelling the rest of the app uses (printing_variants.HOLO_RARITIES).
+    "secret rare": "Rare Secret",
+    "rare secret": "Rare Secret",
 }
 
 
@@ -159,6 +164,33 @@ def canonical_rarity(value: str | None) -> str | None:
     if not value:
         return None
     return RARITY_CANON.get(value.strip().lower(), value.strip())
+
+
+def canonicalise_stored_rarities(repo) -> dict:
+    """Rewrite rarities already in the database to their canonical spelling.
+
+    A new entry in RARITY_CANON only helps the next import, and there is no
+    reason to make someone re-import sixteen sets to clear a red line on the
+    maintenance page. This walks what is stored and fixes the ones that now map
+    to something different — nothing else is touched.
+    """
+    changes: list[tuple[str, str]] = []
+    for row in repo._all("SELECT DISTINCT rarity FROM cards "
+                         "WHERE rarity IS NOT NULL AND rarity <> ''"):
+        canon = canonical_rarity(row["rarity"])
+        if canon and canon != row["rarity"]:
+            changes.append((canon, row["rarity"]))
+    if not changes:
+        return {"spellings": 0, "cards": 0}
+    cards = 0
+    with repo.tx() as c:
+        for canon, old in changes:
+            cards += c.execute("UPDATE cards SET rarity=? WHERE rarity=?",
+                               (canon, old)).rowcount
+    log.info("canonicalised %d rarity spelling(s) over %d card(s): %s",
+             len(changes), cards, ", ".join(f"{o} -> {n}" for n, o in changes))
+    return {"spellings": len(changes), "cards": cards,
+            "detail": [f"{o} → {n}" for n, o in changes]}
 
 
 def _text(value) -> str:

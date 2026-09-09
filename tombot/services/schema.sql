@@ -275,6 +275,14 @@ CREATE TABLE IF NOT EXISTS market_episodes (
     released_at  TEXT,
     logo         TEXT,
     cards_total  INTEGER,
+    -- How many Cardmarket products tcggo holds for this set, from its own
+    -- `prices.cardmarket.total`. NOT the same as cards_total, and that is the
+    -- point (#75): tcggo lists "Celebrations: Classic Collection" as 25 cards
+    -- and 0 products, because those 25 cards are filed under Celebrations
+    -- itself. Importing it fetches nothing and costs a request to find out.
+    -- NULL means we have not been told — which is not the same as zero, so an
+    -- unknown set stays offered rather than being hidden on a guess.
+    products_total INTEGER,
     seen_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
