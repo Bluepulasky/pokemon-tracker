@@ -369,11 +369,10 @@ def import_episode(episode_id):
     from ..services.market_import import MarketImporter
     from ..services.tcggo_catalog import TcggoCatalog
 
-    source = svc("versions_source")
-    if source is None or not source.configured:
-        raise ApiError("no hay fuente configurada (TCGGO_API_KEY)",
-                       "not_configured", 503)
-
+    # What is being asked for is settled before whether we could serve it: both
+    # of these are certain from what is already stored, and neither needs a
+    # source, a key or a request. Asking "is tcggo configured" first would
+    # answer 503 to a set that could never be imported by anyone.
     episode = repo()._one(
         "SELECT * FROM market_episodes WHERE episode_id=?", (episode_id,))
     if not episode:
@@ -385,6 +384,11 @@ def import_episode(episode_id):
             f"tcggo no tiene cartas para «{episode['name']}», así que importarlo "
             f"no traería nada. Si sus cartas existen, están dentro de otro set.",
             "empty_episode", 409)
+
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        raise ApiError("no hay fuente configurada (TCGGO_API_KEY)",
+                       "not_configured", 503)
 
     budget = (current_app.extensions.get("budgets") or {}).get("tcggo")
     if budget is not None and not budget.can_afford(6):

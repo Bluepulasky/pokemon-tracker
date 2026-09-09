@@ -75,8 +75,15 @@ def test_the_search_marks_the_empty_set_and_not_the_real_one(client):
     assert eps[35]["empty"] is False
 
 
-def test_importing_an_empty_set_is_refused_before_spending_a_request(client):
-    """The button is hidden, but the endpoint is reachable without it."""
+def test_importing_an_empty_set_is_refused_before_spending_a_request(client,
+                                                                    monkeypatch):
+    """The button is hidden, but the endpoint is reachable without it.
+
+    Refused with no source configured on purpose: an empty set can never be
+    imported by anyone, so that answer must not depend on having a key. CI has
+    none, which is how the check being ordered after the key check was caught.
+    """
+    monkeypatch.setattr(Config, "TCGGO_API_KEY", None)
     r = client.post("/api/maintenance/episodes/36/import")
     assert r.status_code == 409
     body = r.get_json()
@@ -84,9 +91,10 @@ def test_importing_an_empty_set_is_refused_before_spending_a_request(client):
     assert "Classic Collection" in body["error"]["message"]
 
 
-def test_a_real_set_is_not_refused(client):
+def test_a_real_set_is_not_refused(client, monkeypatch):
     """It fails for want of a configured source, not for being empty — the
     guard must not stand in front of a set that has products."""
+    monkeypatch.setattr(Config, "TCGGO_API_KEY", None)
     r = client.post("/api/maintenance/episodes/35/import")
     assert r.status_code != 409
 
