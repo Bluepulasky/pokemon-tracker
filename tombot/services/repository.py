@@ -152,6 +152,10 @@ class PokemonRepo:
         # idempotent: one DISTINCT over a column that has a handful of values.
         from .tcggo_catalog import canonicalise_stored_rarities
         canonicalise_stored_rarities(self)
+        # Same shape of problem: ranks were stored per printing, so one card
+        # could hold two of them. Resolving it on start is what clears the
+        # Blastoise that is a 3 in Base and a 4 in Celebrations (#76).
+        self.unify_reprint_ratings()
 
     @staticmethod
     def _retire_product_keyed_market_products(c) -> None:
@@ -253,6 +257,11 @@ class PokemonRepo:
                      updated_at=datetime('now')""",
                 rows,
             )
+        # A card ranked before this set existed has reprints in it now, and they
+        # arrived unranked. Catching that here rather than leaving it to the
+        # next start is what stops an import re-opening the split (#76); scoped
+        # to the names just written, so it costs nothing on a big catalogue.
+        self.unify_reprint_ratings([r["name"] for r in rows])
         return len(rows)
 
     def set_card_image_local(self, card_id: str, rel_path: str) -> None:
@@ -971,7 +980,7 @@ class PokemonRepo:
             card_type: str = "", energy_type: str = "", edition: str = "",
             min_quantity: int | None = None,
             rating: int | None = None, rating_min: int | None = None,
-            rating_max: int | None = None,
+            rating_max: int | None = None, unique_reprints: bool = False,
             sort: str = "set", page: int = 1, page_size: int = 60
     ) -> tuple[list[dict], int]:
         """Every card in the personal sets, owned or not ("All" view mode).
@@ -983,6 +992,13 @@ class PokemonRepo:
         Owning a slot several times over — a Hitmonchan in EX and in GD — used
         to emit one row per copy and draw the same card twice (#78); the copies
         are folded onto the best-conditioned one and counted in the badge.
+
+        `unique_reprints` shows a card once instead of once per printing (#76):
+        of the slots that survived the filters, only the earliest printing of
+        each card is kept. Earliest by release date, so Blastoise is the Base
+        Set one rather than the Base Set 2 or Celebrations reprint. It is
+        deliberately not "the one you own" — this view is the catalogue, and
+        which printing you happen to hold is the other toggle's question.
 
         Filters that describe a physical copy — condition, variant, language,
         rating — can only match owned rows, so applying any of them drops
@@ -1066,13 +1082,53 @@ class PokemonRepo:
             LEFT JOIN card_ratings cr ON cr.card_id = COALESCE(i.card_id, c.id)
             WHERE {w}"""
 
-        total = self._scalar(f"SELECT COUNT(DISTINCT sl.id) {base}", params) or 0
         rank = self._CONDITION_RANK
-        rows = self._all(
-            f"""WITH matched AS (
+        # The card a slot stands for. A slot whose display card is missing gets
+        # a key of its own rather than grouping with every other such slot.
+        group_cols = ("""SELECT sl.id AS slot_id,
+                                IFNULL(c.name, 'slot:' || sl.id) AS gname,
+                                IFNULL(c.artist, '') AS gartist,
+                                os.release_date AS rel, c.number_sort AS ns """
+                      + base + " GROUP BY sl.id")
+        if unique_reprints:
+            total = self._scalar(
+                f"""WITH slots AS ({group_cols})
+                    SELECT COUNT(*) FROM (SELECT 1 FROM slots s
+                                           GROUP BY s.gname, s.gartist)""",
+                params) or 0
+        else:
+            total = self._scalar(f"SELECT COUNT(DISTINCT sl.id) {base}", params) or 0
+
+        # Under the reprints toggle the card shown is the earliest printing,
+        # which is often one you do not have while holding the reprint. Saying
+        # "owned" there would claim a card you have not got; saying nothing at
+        # all draws your Blastoise as missing. So the row carries the fact
+        # separately and the tile says which it is (#76).
+        reprint_owned = (
+            "EXISTS (SELECT 1 FROM collection_items ri "
+            "          JOIN cards rc ON rc.id = ri.card_id "
+            "         WHERE rc.name = c.name "
+            "           AND IFNULL(rc.artist,'') = IFNULL(c.artist,''))"
+            if unique_reprints else "0")
+        ctes = [f"""matched AS (
                     SELECT sl.id AS slot_id, i.id AS item_id, i.quantity AS qty,
                            CASE WHEN i.id IS NULL THEN 9 ELSE {rank} END AS crank
-                    {base})
+                    {base})"""]
+        row_params, keep = list(params), ""
+        if unique_reprints:
+            # NULLs last: a set with no release date must not win "earliest" by
+            # default — that is a guess dressed up as an answer.
+            ctes.append(f"""slots AS ({group_cols})""")
+            ctes.append("""picked AS (
+                    SELECT (SELECT s2.slot_id FROM slots s2
+                             WHERE s2.gname = s.gname AND s2.gartist = s.gartist
+                             ORDER BY s2.rel IS NULL, s2.rel, s2.ns, s2.slot_id
+                             LIMIT 1) AS slot_id
+                      FROM slots s GROUP BY s.gname, s.gartist)""")
+            row_params = list(params) + list(params)
+            keep = " WHERE sl.id IN (SELECT slot_id FROM picked)"
+        rows = self._all(
+            f"""WITH {", ".join(ctes)}
                 SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
                        cs.id AS personal_set_id, cs.name AS personal_set_name,
                        c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
@@ -1083,6 +1139,7 @@ class PokemonRepo:
                        COALESCE(cr.rating, 0) AS rating,
                        i.created_at, i.updated_at,
                        g.group_quantity, g.group_rows,
+                       {reprint_owned} AS reprint_owned,
                        CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS owned
                 FROM (SELECT slot_id, SUM(qty) AS group_quantity,
                              COUNT(item_id) AS group_rows,
@@ -1096,11 +1153,13 @@ class PokemonRepo:
                 LEFT JOIN official_sets os ON os.id = c.official_set_id
                 LEFT JOIN collection_items i ON i.id = g.item_id
                 LEFT JOIN card_ratings cr ON cr.card_id = COALESCE(i.card_id, c.id)
+                {keep}
                 ORDER BY {order} LIMIT ? OFFSET ?""",
-            params + [page_size, (page - 1) * page_size],
+            row_params + [page_size, (page - 1) * page_size],
         )
         for r in rows:
             r["owned"] = bool(r["owned"])
+            r["reprint_owned"] = bool(r["reprint_owned"]) and not r["owned"]
             r["photos"] = []
         owned_rows = [r for r in rows if r["owned"]]
         if owned_rows:
@@ -1138,20 +1197,92 @@ class PokemonRepo:
             "COUNT(*) AS item_rows FROM collection_items"
         ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0}
 
+    # A rank is a judgement about the card, and every printing of it is the
+    # same card — same artwork, same power level. Ranking the Base Set Blastoise
+    # 3 and the Celebrations one 4 is two answers to one question (#76). This
+    # matches every reprint: same name, same illustrator, the definition the
+    # version picker and loose completion already use.
+    _REPRINTS_OF = ("SELECT id FROM cards WHERE name = ? "
+                    "AND IFNULL(artist,'') = IFNULL(?,'')")
+
     def set_card_rating(self, card_id: str, rating: int) -> None:
-        """0 clears the rank rather than storing it — 0 means unranked, and a row
-        saying so is indistinguishable from no row while making every average and
-        count query carry a `rating > 0` guard."""
+        """Rank the card — every printing of it, not the one in front of you.
+
+        0 clears the rank rather than storing it: 0 means unranked, and a row
+        saying so is indistinguishable from no row while making every average
+        and count query carry a `rating > 0` guard.
+        """
+        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
+        # A card the catalogue does not know has no findable reprints, so it
+        # ranks alone rather than silently ranking nothing.
+        where, args = (("name = ? AND IFNULL(artist,'') = IFNULL(?,'')",
+                        (ref["name"], ref["artist"])) if ref
+                       else ("id = ?", (card_id,)))
         with self.tx() as c:
             if int(rating) <= 0:
-                c.execute("DELETE FROM card_ratings WHERE card_id = ?", (card_id,))
+                c.execute("DELETE FROM card_ratings WHERE card_id IN "
+                          f"(SELECT id FROM cards WHERE {where})", args)
             else:
                 c.execute(
-                    "INSERT INTO card_ratings(card_id, rating) VALUES (?,?) "
+                    "INSERT INTO card_ratings(card_id, rating) "
+                    f"SELECT id, ? FROM cards WHERE {where} "
                     "ON CONFLICT(card_id) DO UPDATE SET rating=excluded.rating, "
                     "updated_at=datetime('now')",
-                    (card_id, int(rating)),
+                    (int(rating), *args),
                 )
+
+    def unify_reprint_ratings(self, names: Sequence[str] | None = None) -> dict:
+        """Give every printing of a card the one rank the card has (#76).
+
+        Ranking used to write a single row, so the same card could hold two
+        ranks across two sets, and a set imported after the card was ranked
+        brought in a printing with none. Both are the same fault — the rank is
+        a fact about the card, and it was stored per printing.
+
+        The most recently set rank wins, because it is the last thing the user
+        decided; the older one is a leftover from before they saw the other
+        printing. Idempotent: rows already holding the winning value are not
+        rewritten, so the timestamps that decide the winner stay put.
+
+        `names` scopes the pass to the cards just imported. Without it the
+        whole catalogue is checked, which is what `init_db` wants.
+        """
+        scope, args = "", []
+        if names is not None:
+            uniq = list(dict.fromkeys(names))
+            if not uniq:
+                return {"cards_ranked": 0, "groups": 0}
+            scope = f" WHERE c.name IN ({','.join('?' * len(uniq))})"
+            args = uniq
+        groups = self._all(
+            f"""SELECT c.name, c.artist
+                  FROM cards c LEFT JOIN card_ratings r ON r.card_id = c.id
+                  {scope}
+                 GROUP BY c.name, IFNULL(c.artist,'')
+                HAVING COUNT(r.card_id) > 0
+                   AND (COUNT(r.card_id) <> COUNT(*)
+                        OR COUNT(DISTINCT r.rating) > 1)""", args)
+        if not groups:
+            return {"cards_ranked": 0, "groups": 0}
+        changed = 0
+        with self.tx() as c:
+            for g in groups:
+                winner = c.execute(
+                    "SELECT r.rating FROM card_ratings r JOIN cards k ON k.id = r.card_id "
+                    "WHERE k.name = ? AND IFNULL(k.artist,'') = IFNULL(?,'') "
+                    "ORDER BY r.updated_at DESC, r.card_id DESC LIMIT 1",
+                    (g["name"], g["artist"])).fetchone()[0]
+                changed += c.execute(
+                    "INSERT INTO card_ratings(card_id, rating) "
+                    f"SELECT id, ? FROM ({self._REPRINTS_OF}) AS k "
+                    "  WHERE NOT EXISTS (SELECT 1 FROM card_ratings r "
+                    "                     WHERE r.card_id = k.id AND r.rating = ?) "
+                    "ON CONFLICT(card_id) DO UPDATE SET rating=excluded.rating, "
+                    "updated_at=datetime('now')",
+                    (winner, g["name"], g["artist"], winner)).rowcount
+        log.info("unified the Hall of Fame rank across %d reprint group(s), "
+                 "%d printing(s) changed", len(groups), changed)
+        return {"cards_ranked": changed, "groups": len(groups)}
 
     def set_card_target(self, card_id: str, target: int) -> None:
         """A target of 1 is stored as absence — it is the default, and a row

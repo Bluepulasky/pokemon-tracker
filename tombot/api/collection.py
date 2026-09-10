@@ -151,6 +151,10 @@ def list_items():
             rating=_rating_arg("rating"),
             rating_min=_rating_arg("rating_min"),
             rating_max=_rating_arg("rating_max"),
+            # One entry per card instead of one per printing (#76). Only this
+            # mode takes it: "En colección" is already one tile per card, since
+            # the copies you own of a card are that card (#78).
+            unique_reprints=_truthy("unique_reprints"),
             sort=request.args.get("sort", "set"),
             page=page, page_size=size,
         )

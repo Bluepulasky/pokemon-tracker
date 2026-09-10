@@ -173,6 +173,31 @@ def check_card_types(repo) -> list[dict]:
         [f"{r['set_id']}: {r['n']}" for r in rows])]
 
 
+def check_reprint_ratings(repo) -> list[dict]:
+    """Two printings of one card holding two Hall of Fame ranks.
+
+    The rank is a judgement about the card, so every printing of it carries the
+    same one; ranking and importing both keep them together (#76). A split here
+    means something wrote a rank without going through that, and the symptom is
+    a card that sorts in two different places in the Hall of Fame.
+    """
+    rows = repo._all(
+        """SELECT c.name, c.artist, COUNT(DISTINCT r.rating) AS ranks,
+                  COUNT(r.card_id) AS rated, COUNT(*) AS printings
+             FROM cards c JOIN card_ratings r ON r.card_id = c.id
+            GROUP BY c.name, IFNULL(c.artist,'')
+           HAVING COUNT(DISTINCT r.rating) > 1""")
+    if not rows:
+        return []
+    return [_finding(
+        "warning", "reprint_ratings",
+        f"{len(rows)} carta(s) tienen dos puntajes distintos de Hall of Fame "
+        f"entre sus reimpresiones. Son la misma carta, así que deberían tener "
+        f"el mismo. Volvé a puntuar cualquiera de ellas y se emparejan.",
+        [f"{r['name']} ({r['artist'] or 'sin ilustrador'}): {r['ranks']} puntajes"
+         for r in rows[:10]])]
+
+
 def run_checks(repo, conditions) -> dict:
     findings: list[dict] = []
     for fn, args in ((check_conditions, (repo, conditions)),
@@ -180,7 +205,8 @@ def run_checks(repo, conditions) -> dict:
                      (check_set_dates, (repo,)),
                      (check_card_numbers, (repo,)),
                      (check_products, (repo,)),
-                     (check_card_types, (repo,))):
+                     (check_card_types, (repo,)),
+                     (check_reprint_ratings, (repo,))):
         try:
             findings.extend(fn(*args))
         except Exception:                                    # noqa: BLE001
