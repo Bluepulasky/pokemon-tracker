@@ -763,6 +763,11 @@ details { padding: 8px 20px; }
 .version .v-name { font-size: .72rem; color: var(--muted, #6b7280); }
 /* The print run. A Base Set card has three, and without this they are three
    identical tiles reading "Base / BS 57" at different prices (#68). */
+/* Under "Reprints únicos" the card shown is the earliest printing, which may
+   not be the one in hand. This says so without claiming the card is yours. */
+.badge.reprint-own { bottom: 6px; right: 6px; font-size: 9px; font-weight: 600;
+                     background: rgba(14,16,19,.82); color: var(--muted, #9aa3af); }
+
 /* A set tcggo lists but holds no cards for: shown so a search for it does not
    look broken, dimmed so it does not look addable (#75). */
 .episode.empty { opacity: .55; }

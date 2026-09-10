@@ -394,6 +394,12 @@ async function collection(r) {
   // All pulls every slot in the personal sets.
   const showAll = r.params.get('show_all') === '1';
   if (showAll) f.show_all = '1';
+  // One entry per card instead of one per printing (#76). Only meaningful in
+  // "Todas las del set": "En colección" already shows a card once, because the
+  // copies you own of a card are that card (#78), so the toggle is not offered
+  // there rather than sitting on screen doing nothing.
+  const uniqueReprints = showAll && r.params.get('unique_reprints') === '1';
+  if (uniqueReprints) f.unique_reprints = '1';
   const [res, setList] = await Promise.all([api.collection(f), api.sets()]);
   const t = res.totals;
 
@@ -420,6 +426,14 @@ async function collection(r) {
           .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
             data-qmin="${v}">${label}</span>`).join('')}
       </div>
+      ${showAll ? `<div class="mode-toggle">
+        ${[['', 'Todas las versiones'], ['1', 'Reprints únicos']]
+          .map(([v, label]) => `<span class="chip${
+            (uniqueReprints ? '1' : '') === v ? ' on' : ''}"
+            data-uniq="${v}" title="${v
+              ? 'Una sola entrada por carta: la impresión más vieja de cada una'
+              : 'Cada reimpresión por separado'}">${label}</span>`).join('')}
+      </div>` : ''}
     </div>
 
     <div class="toolbar">
@@ -459,13 +473,20 @@ async function collection(r) {
     }
     if (f.rating_min && !('rating_min' in overrides)) p.set('rating_min', f.rating_min);
     if (showAll && !('show_all' in overrides)) p.set('show_all', '1');
+    if (uniqueReprints && !('unique_reprints' in overrides)) p.set('unique_reprints', '1');
     for (const [k, v] of Object.entries(overrides)) {
       if (v) p.set(k, v); else p.delete(k);
     }
     location.hash = `#/cartas?${p}`;
   };
   view().querySelectorAll('[data-mode]').forEach((chip) => {
-    chip.onclick = () => apply({ show_all: chip.dataset.mode === 'all' ? '1' : '' });
+    // Leaving "Todas las del set" takes the reprint toggle with it — it has no
+    // meaning in the owned view and would come back on unexpectedly.
+    chip.onclick = () => apply({ show_all: chip.dataset.mode === 'all' ? '1' : '',
+                                 unique_reprints: '' });
+  });
+  view().querySelectorAll('[data-uniq]').forEach((chip) => {
+    chip.onclick = () => apply({ unique_reprints: chip.dataset.uniq });
   });
   view().querySelectorAll('[data-qmin]').forEach((chip) => {
     chip.onclick = () => {
@@ -496,6 +517,10 @@ function itemHtml(i) {
   // including copies that are a reprint in another set (#78). A partial price
   // is a floor, not the tile's value, and says so rather than passing for one.
   const qty = i.group_quantity ?? i.quantity;
+  // The Hall of Fame rank is a judgement about the card, so it shows on a card
+  // you have not got yet — the same reason the rank filter matches those (#76).
+  // Hiding it meant the ranked Base Set Blastoise looked unranked next to the
+  // reprint you own, which is the split all over again.
   const grouped = (i.group_card_ids?.length ?? 0) > 1;
   const price = v.total != null ? `${v.partial ? '≥' : ''}${eur(v.total)}` : '';
   return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}"
@@ -504,7 +529,9 @@ function itemHtml(i) {
       ${src ? `<img src="${esc(src)}" alt="${esc(i.name || i.label)}" loading="lazy">`
             : placeholder(i.number, i.official_set_id)}
       ${owned && qty > 1 ? `<span class="badge qty">×${qty}</span>` : ''}
-      ${owned && i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
+      ${i.reprint_owned ? `<span class="badge reprint-own"
+        title="No tenés esta impresión, pero sí otra versión de la carta">otra versión</span>` : ''}
+      ${i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
       ${owned && price ? `<span class="badge val"${v.partial
         ? ' title="Alguna copia no tiene precio: el total es un mínimo."' : ''
         }>${esc(price)}</span>` : ''}
