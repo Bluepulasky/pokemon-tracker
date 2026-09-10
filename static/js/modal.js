@@ -32,14 +32,14 @@ const opts = (list, sel) => list
   .map((o) => `<option value="${esc(o.key)}"${o.key === sel ? ' selected' : ''}>${esc(o.label)}</option>`)
   .join('');
 
-export async function openCard(cardId) {
+export async function openCard(cardId, opts) {
   const root = document.getElementById('modal-root');
   root.hidden = false;
   root.innerHTML = '<div class="modal"><div class="loading">Cargando…</div></div>';
 
   let card, items;
   try {
-    [card, items] = await Promise.all([api.card(cardId), api.byCard(cardId)]);
+    [card, items] = await Promise.all([api.card(cardId), api.byCard(cardId, opts)]);
   } catch (e) { toast(e.message, true); closeModal(); return; }
   items = items.data;
 

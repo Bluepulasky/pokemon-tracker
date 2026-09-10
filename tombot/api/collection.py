@@ -81,19 +81,31 @@ def _priced(rows):
     mods = repo().get_modifiers()
     locale = cfg().CARDMARKET_LOCALE
     # Grid art comes from the best-conditioned copy of the card, which may live
-    # on a different row than the one being rendered.
-    best = repo().best_photos_for_cards([r["card_id"] for r in rows if r.get("card_id")])
+    # on a different row than the one being rendered. A grouped row already
+    # chose one across its whole group, which is wider than one card_id, so it
+    # is left alone.
+    needs_art = [r["card_id"] for r in rows
+                 if r.get("card_id") and "display_photo" not in r
+                 and r.get("owned", True)]
+    best = repo().best_photos_for_cards(needs_art)
     # The card's direct Cardmarket product match, for rows that never pinned an
     # exact version. Replaces the old card-level redirector, which now only 404s
     # (issue #27). One lookup for the whole page.
     by_card = repo().market_urls_for_cards([r["card_id"] for r in rows if r.get("card_id")])
     for r in rows:
-        r["display_photo"] = best.get(r["card_id"]) if r.get("owned", True) else None
+        if "display_photo" not in r:
+            r["display_photo"] = best.get(r["card_id"]) if r.get("owned", True) else None
         # A placeholder has no physical copy, so it has no estimated value —
         # pricing it would invent a number for a card that is not owned.
-        r["value"] = (pricing.estimate_item(r, mods) if r.get("owned", True)
+        # estimate_row, not estimate_item: a grid tile stands for every copy
+        # of the card and is worth all of them (#78).
+        r["value"] = (pricing.estimate_row(r, mods) if r.get("owned", True)
                       else {"unit": None, "total": None, "currency": "EUR",
                             "basis": "not_owned", "updated_at": None})
+        # The members were only needed to price the tile; the client gets the
+        # card ids and the count, not a second copy of every row.
+        r.pop("group_items", None)
+        r.pop("gkey", None)
         r["market_url"] = market_url(r, locale=locale) or by_card.get(r.get("card_id"))
 
     # A row that chose a version knows its exact Cardmarket product, so its link
@@ -184,8 +196,15 @@ def get_item(item_id):
 
 @bp.get("/by-card/<card_id>")
 def by_card(card_id):
-    """All physical variants held for one logical card — powers the modal."""
-    return jsonify({"data": _priced(repo().items_by_card(card_id))})
+    """All physical variants held for one logical card — powers the modal.
+
+    `reprints=1` is how the Cartas grid opens a tile it collapsed: that tile
+    stands for the reprints too, so its modal has to list them whether or not
+    the set is on loose completion (#78). Without the flag the modal stays
+    strict, which is what the Sets page needs.
+    """
+    rows = repo().items_by_card(card_id, include_reprints=_truthy("reprints"))
+    return jsonify({"data": _priced(rows)})
 
 
 @bp.post("")

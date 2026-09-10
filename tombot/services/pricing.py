@@ -130,6 +130,35 @@ class PricingService:
             "updated_at": row.get("updated_at"),
         }
 
+    def estimate_row(self, row: dict, modifiers: dict | None = None) -> dict:
+        """What a Cartas tile is worth: every copy it stands for (#78).
+
+        A tile reading ×2 has to be worth two cards, and the two need not be
+        the same printing — a Base Set Dragonair and its Base Set 2 reprint are
+        priced apart — so each copy is estimated as itself and the totals are
+        added. `partial` says some copy has no price of its own: the sum is
+        then a floor rather than the tile's value, and a short number passed
+        off as complete is the silent fallback this app keeps getting bitten by.
+        """
+        members = row.get("group_items")
+        if not members or len(members) < 2:
+            return self.estimate_item(row, modifiers)
+        mods = modifiers if modifiers is not None else self.repo.get_modifiers()
+        values = [self.estimate_item(m, mods) for m in members]
+        priced = [v["total"] for v in values if v.get("total") is not None]
+        return {
+            # The copies differ in printing and grade, so there is no unit price.
+            "unit": None,
+            # No copy is priced at all: say so rather than showing 0.
+            "total": round(sum(priced), 2) if priced else None,
+            "currency": next((v["currency"] for v in values if v.get("currency")),
+                             "EUR"),
+            "basis": "group",
+            "partial": len(priced) < len(values),
+            "updated_at": max((v["updated_at"] for v in values if v.get("updated_at")),
+                              default=None),
+        }
+
     def value_collection(self) -> dict:
         """Total estimated value plus how much of it is actually priced.
 
@@ -142,7 +171,11 @@ class PricingService:
         per_set: dict[str, float] = {}
         page = 1
         while True:
-            rows, count = self.repo.list_collection(page=page, page_size=500)
+            # Ungrouped: the total counts physical cards and files each under
+            # its own set, so the grid's one-tile-per-card view would both drop
+            # the copies it folds away and misattribute a reprint's value (#78).
+            rows, count = self.repo.list_collection(page=page, page_size=500,
+                                                    group=False)
             if not rows:
                 break
             for r in rows:

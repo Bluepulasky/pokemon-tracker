@@ -724,15 +724,30 @@ class PokemonRepo:
                 files.append(p["thumb_filename"])
         return files
 
-    def items_by_card(self, card_id: str) -> list[dict]:
+    def items_by_card(self, card_id: str, *,
+                      include_reprints: bool = False) -> list[dict]:
         """Owned copies of this card. When the card is collected by a loose set,
         this also returns the owned reprints — same name and illustrator, in
         other sets — so the modal shows what the loose set grid already counts
         (issue #47). Reprint rows are flagged `is_reprint` and sorted after the
-        card's own copies."""
+        card's own copies.
+
+        `include_reprints` drops the loose-set condition and returns them
+        always. The Cartas grid shows one tile per logical card (#78), so the
+        modal that tile opens has to list the same copies whichever member card
+        represents it — otherwise the tile reads ×2 and the modal shows one.
+        Strict stays the default everywhere else: opening a card you do not own
+        from the Sets page must not list a reprint, which would read as owning
+        the card you are looking at.
+        """
         ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
         name = ref["name"] if ref else None
         artist = ref["artist"] if ref else None
+        loose = "1" if include_reprints else (
+            "EXISTS (SELECT 1 FROM set_slot_cards ssc "
+            "         JOIN set_loose_completion lc ON lc.set_id = ssc.set_id "
+            "        WHERE ssc.card_id = ?)")
+        gate_params = () if include_reprints else (card_id,)
         rows = self._all(
             "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
@@ -742,14 +757,10 @@ class PokemonRepo:
             "JOIN official_sets os ON os.id = c.official_set_id "
             "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id "
             "WHERE i.card_id = ? "
-            "   OR (EXISTS (SELECT 1 FROM set_slot_cards ssc "
-            "                JOIN set_loose_completion lc ON lc.set_id = ssc.set_id "
-            "               WHERE ssc.card_id = ?) "
+            f"   OR ({loose} "
             "       AND c.name = ? AND IFNULL(c.artist,'') = IFNULL(?,'')) "
-            "ORDER BY is_reprint, "
-            "CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1 "
-            "WHEN 'GD' THEN 2 WHEN 'PL' THEN 3 ELSE 4 END, i.variant",
-            (card_id, card_id, card_id, name, artist),
+            f"ORDER BY is_reprint, {self._CONDITION_RANK}, i.variant",
+            (card_id, card_id, *gate_params, name, artist),
         )
         for r in rows:
             r["is_reprint"] = bool(r["is_reprint"])
@@ -762,8 +773,17 @@ class PokemonRepo:
                         edition: str = "", min_quantity: int | None = None,
                         rating: int | None = None, rating_min: int | None = None,
                         rating_max: int | None = None,
-                        sort: str = "set", page: int = 1, page_size: int = 60
-                        ) -> tuple[list[dict], int]:
+                        sort: str = "set", page: int = 1, page_size: int = 60,
+                        group: bool = True) -> tuple[list[dict], int]:
+        """Owned rows, one per logical card by default (#78).
+
+        `group=False` gives one row per stored copy instead. That is what
+        accounting wants: a total or a per-set breakdown has to see every
+        physical card and file each under the set it is actually from, and the
+        collapsed view would drop the copies folded away and post the whole
+        group's value to the representative's set. Grouping is a fact about the
+        grid, not about the collection.
+        """
         where, params = ["1=1"], []
         if q:
             where.append("(c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)")
@@ -807,10 +827,14 @@ class PokemonRepo:
             where.append("i.variant NOT IN ('first_edition', 'shadowless')")
         # Total copies held of the card, not of this one row — "2 or more" is a
         # question about the card, and three copies split across a holo row and a
-        # normal row is three copies.
+        # normal row is three copies. The card here is the logical one the grid
+        # shows a tile for, so the filter and the ×N badge agree (#78).
         if min_quantity is not None:
-            where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
-                         "WHERE q.card_id = i.card_id) >= ?")
+            where.append(
+                "(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
+                "   JOIN cards qc ON qc.id = q.card_id "
+                "  WHERE qc.name = c.name "
+                "    AND IFNULL(qc.artist,'') = IFNULL(c.artist,'')) >= ?")
             params.append(int(min_quantity))
         # COALESCE because an unranked card has no card_ratings row at all.
         if rating is not None:
@@ -831,28 +855,115 @@ class PokemonRepo:
             "number": "c.number_sort",
             "rarity": "c.rarity, c.number_sort",
             "recent": "i.created_at DESC",
-            "quantity": "i.quantity DESC",
+            # The badge counts every copy in the tile, so the sort has to as
+            # well, or "por cantidad" puts a ×1 above a ×3.
+            "quantity": "g.group_quantity DESC",
         }.get(sort, "os.release_date, c.number_sort")
+
+        # One tile per logical card, not one per stored row (#78). A Dragonair
+        # held M/NM in Base and EX in Base Set 2 is two rows and one card:
+        # showing both counted the card twice, split its value across two
+        # prices, and gave one tile a modal listing both copies while the other
+        # listed one. The whole group is collapsed onto its best-conditioned
+        # row, which is also the copy whose photo represents it.
+        key, rank = self._LOGICAL_CARD, self._CONDITION_RANK
+        src = ("FROM collection_items i JOIN cards c ON c.id = i.card_id "
+               "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id")
+        cols = """i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
+                       c.image_small_url, c.image_local, c.external_ids_json,
+                       os.name AS set_name, os.name AS printing_name,
+                       COALESCE(cr.rating, 0) AS rating"""
+        if not group:
+            # There is no group to count, so "por cantidad" is the row's own.
+            if sort == "quantity":
+                order = "i.quantity DESC"
+            total = self._scalar(f"SELECT COUNT(*) {src} WHERE {w}", params) or 0
+            rows = self._all(
+                f"""SELECT {cols}
+                    {src} JOIN official_sets os ON os.id = c.official_set_id
+                    WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""",
+                params + [page_size, (page - 1) * page_size],
+            )
+            by_item = self.photos_for_items([r["id"] for r in rows])
+            for r in rows:
+                r["photos"] = by_item.get(r["id"], [])
+            return rows, total
         total = self._scalar(
-            f"SELECT COUNT(*) FROM collection_items i JOIN cards c ON c.id=i.card_id "
-            f"LEFT JOIN card_ratings cr ON cr.card_id = i.card_id WHERE {w}",
+            f"SELECT COUNT(*) FROM (SELECT 1 {src} WHERE {w} GROUP BY {key})",
             params,
         ) or 0
         rows = self._all(
-            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
-                       c.image_small_url, c.image_local, c.external_ids_json,
-                       os.name AS set_name, os.name AS printing_name,
-                       COALESCE(cr.rating, 0) AS rating
-                FROM collection_items i
+            f"""WITH matched AS (
+                    SELECT i.id AS item_id, {key} AS gkey, i.quantity AS qty,
+                           {rank} AS crank
+                    {src} WHERE {w})
+                SELECT {cols}, g.gkey, g.group_quantity, g.group_rows
+                FROM (SELECT gkey, SUM(qty) AS group_quantity,
+                             COUNT(*) AS group_rows,
+                             (SELECT m2.item_id FROM matched m2
+                               WHERE m2.gkey = m.gkey
+                               ORDER BY m2.crank, m2.item_id LIMIT 1) AS item_id
+                        FROM matched m GROUP BY gkey) g
+                JOIN collection_items i ON i.id = g.item_id
                 JOIN cards c ON c.id = i.card_id
                 JOIN official_sets os ON os.id = c.official_set_id
                 LEFT JOIN card_ratings cr ON cr.card_id = i.card_id
-                WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""",
+                ORDER BY {order} LIMIT ? OFFSET ?""",
             params + [page_size, (page - 1) * page_size],
         )
-        for r in rows:
-            r["photos"] = self.get_photos(r["id"])
+        if not rows:
+            return rows, total
+        keys = [r["gkey"] for r in rows]
+        members = self._all(
+            f"""SELECT i.id, i.card_id, i.variant, i.condition, i.language,
+                       i.quantity, i.market_product_id, i.first_edition,
+                       c.official_set_id, {key} AS gkey
+                {src}
+                WHERE ({w}) AND {key} IN ({",".join("?" * len(keys))})
+                ORDER BY {rank}, i.id""",
+            params + keys,
+        )
+        self._attach_group(rows, members, "gkey")
         return rows, total
+
+    def _attach_group(self, rows: list[dict], members: list[dict],
+                      key: str) -> None:
+        """Fold the rows a grid tile stands for onto the row that represents it.
+
+        Each tile carries `group_items` (every copy behind it, best condition
+        first, so the caller can sum their value), `group_card_ids`, and the
+        photo to show: the nicest copy owned, even when that copy is a
+        different printing. Photos come back in one query rather than one per
+        row, which is what the page-at-a-time grid wants.
+        """
+        by_item = self.photos_for_items([m["id"] for m in members if m["id"]])
+        grouped: dict = {}
+        for m in members:
+            m["photos"] = by_item.get(m["id"], [])
+            grouped.setdefault(m[key], []).append(m)
+        for r in rows:
+            mates = grouped.get(r[key], [])
+            r["group_items"] = mates
+            r["group_card_ids"] = list(dict.fromkeys(m["card_id"] for m in mates))
+            r["photos"] = by_item.get(r["id"], []) if r["id"] else []
+            # Members are already in condition order and each row's photos are
+            # primary-first, so the first one found is the best copy's best
+            # photo. Falling through to none is right: catalog art beats a
+            # photo of a card you did not take.
+            r["display_photo"] = next((p for m in mates for p in m["photos"]), None)
+
+    def photos_for_items(self, item_ids: Sequence[int]) -> dict[int, list[dict]]:
+        """Photos for many rows at once, primary first, keyed by item id."""
+        ids = list(dict.fromkeys(item_ids))
+        if not ids:
+            return {}
+        out: dict[int, list[dict]] = {}
+        for p in self._all(
+                f"""SELECT * FROM collection_photos
+                     WHERE item_id IN ({",".join("?" * len(ids))})
+                     ORDER BY item_id, is_primary DESC, position""", ids):
+            out.setdefault(p["item_id"], []).append(p)
+        return out
 
     def list_slots_with_ownership(
             self, *, q: str = "", set_id: str = "", condition: str = "",
@@ -865,11 +976,13 @@ class PokemonRepo:
     ) -> tuple[list[dict], int]:
         """Every card in the personal sets, owned or not ("All" view mode).
 
-        One row per owned collection item, or a single placeholder row for a slot
-        nothing satisfies. The ownership join goes through a subquery rather than
-        joining set_slot_cards directly: a slot can group several catalog cards,
-        and a direct join would emit one duplicate placeholder per member card
-        for the slots that are not owned at all.
+        One row per slot, owned or not. The ownership join goes through a
+        subquery rather than joining set_slot_cards directly: a slot can group
+        several catalog cards, and a direct join would emit one duplicate
+        placeholder per member card for the slots that are not owned at all.
+        Owning a slot several times over — a Hitmonchan in EX and in GD — used
+        to emit one row per copy and draw the same card twice (#78); the copies
+        are folded onto the best-conditioned one and counted in the badge.
 
         Filters that describe a physical copy — condition, variant, language,
         rating — can only match owned rows, so applying any of them drops
@@ -904,9 +1017,12 @@ class PokemonRepo:
         elif edition == "unlimited":
             where.append("i.variant IS NOT NULL "
                          "AND i.variant NOT IN ('first_edition', 'shadowless')")
+        # Counted over the slot, which is what a tile stands for here, so the
+        # filter and the ×N badge agree (#78).
         if min_quantity is not None:
             where.append("(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
-                         "WHERE q.card_id = COALESCE(i.card_id, c.id)) >= ?")
+                         " WHERE q.card_id IN (SELECT card_id FROM set_slot_cards "
+                         "                      WHERE slot_id = sl.id)) >= ?")
             params.append(int(min_quantity))
 
         # No ownership condition. The rank is a judgement about the card, so a
@@ -930,7 +1046,7 @@ class PokemonRepo:
             "number": "c.number_sort",
             "rarity": "c.rarity, c.number_sort",
             "rating": "COALESCE(cr.rating, -1) DESC, c.number_sort",
-            "quantity": "COALESCE(i.quantity, 0) DESC, c.number_sort",
+            "quantity": "COALESCE(g.group_quantity, 0) DESC, c.number_sort",
             "owned": "owned DESC, c.number_sort",
             "recent": "COALESCE(i.created_at, '') DESC, c.number_sort",
         }.get(sort, "cs.position, c.number_sort")
@@ -950,9 +1066,14 @@ class PokemonRepo:
             LEFT JOIN card_ratings cr ON cr.card_id = COALESCE(i.card_id, c.id)
             WHERE {w}"""
 
-        total = self._scalar(f"SELECT COUNT(*) {base}", params) or 0
+        total = self._scalar(f"SELECT COUNT(DISTINCT sl.id) {base}", params) or 0
+        rank = self._CONDITION_RANK
         rows = self._all(
-            f"""SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
+            f"""WITH matched AS (
+                    SELECT sl.id AS slot_id, i.id AS item_id, i.quantity AS qty,
+                           CASE WHEN i.id IS NULL THEN 9 ELSE {rank} END AS crank
+                    {base})
+                SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
                        cs.id AS personal_set_id, cs.name AS personal_set_name,
                        c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
                        c.official_set_id, c.image_small_url, c.image_local,
@@ -961,13 +1082,39 @@ class PokemonRepo:
                        i.quantity, i.notes,
                        COALESCE(cr.rating, 0) AS rating,
                        i.created_at, i.updated_at,
+                       g.group_quantity, g.group_rows,
                        CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS owned
-                {base} ORDER BY {order} LIMIT ? OFFSET ?""",
+                FROM (SELECT slot_id, SUM(qty) AS group_quantity,
+                             COUNT(item_id) AS group_rows,
+                             (SELECT m2.item_id FROM matched m2
+                               WHERE m2.slot_id = m.slot_id
+                               ORDER BY m2.crank, m2.item_id LIMIT 1) AS item_id
+                        FROM matched m GROUP BY slot_id) g
+                JOIN set_slots sl ON sl.id = g.slot_id
+                JOIN collection_sets cs ON cs.id = sl.set_id
+                LEFT JOIN cards c ON c.id = sl.display_card_id
+                LEFT JOIN official_sets os ON os.id = c.official_set_id
+                LEFT JOIN collection_items i ON i.id = g.item_id
+                LEFT JOIN card_ratings cr ON cr.card_id = COALESCE(i.card_id, c.id)
+                ORDER BY {order} LIMIT ? OFFSET ?""",
             params + [page_size, (page - 1) * page_size],
         )
         for r in rows:
             r["owned"] = bool(r["owned"])
-            r["photos"] = self.get_photos(r["id"]) if r["id"] else []
+            r["photos"] = []
+        owned_rows = [r for r in rows if r["owned"]]
+        if owned_rows:
+            ids = [r["slot_id"] for r in owned_rows]
+            members = self._all(
+                f"""SELECT sl.id AS slot_id, i.id, i.card_id, i.variant,
+                           i.condition, i.language, i.quantity,
+                           i.market_product_id, i.first_edition
+                    {base} AND i.id IS NOT NULL
+                      AND sl.id IN ({",".join("?" * len(ids))})
+                    ORDER BY {rank}, i.id""",
+                params + ids,
+            )
+            self._attach_group(owned_rows, members, "slot_id")
         return rows, total
 
     def slots_ownership_totals(self, set_id: str = "") -> dict:
@@ -1413,6 +1560,20 @@ class PokemonRepo:
     # dual-type card (modern) lists two, so this is a membership test, not `=`.
     _ENERGY_TYPE_MATCH = ("EXISTS (SELECT 1 FROM json_each(c.types_json) "
                           "WHERE json_each.value = ?)")
+
+    # Grades best-first, as config.CONDITIONS orders them. A grade that is not
+    # listed sorts last rather than failing, so a rename here goes unnoticed
+    # unless a test catches it.
+    _CONDITION_RANK = ("CASE i.condition WHEN 'M/NM' THEN 0 WHEN 'EX' THEN 1 "
+                       "WHEN 'GD' THEN 2 WHEN 'PL' THEN 3 ELSE 4 END")
+
+    # What makes two owned rows the same *card* for the Cartas grid: the same
+    # printing, or a reprint of it — same name and illustrator, which is the
+    # definition loose completion and the version picker already use (#47).
+    # A separator no card name or illustrator contains, so the two fields
+    # cannot run together and forge a match: ("Dark Dragonair", no illustrator)
+    # and ("Dark", "Dragonair") stay two different cards.
+    _LOGICAL_CARD = "c.name || CHAR(31) || IFNULL(c.artist, '')"
 
     def fill_card_fields(self, updates: dict[str, list],
                          overwrite: bool = False) -> dict[str, int]:

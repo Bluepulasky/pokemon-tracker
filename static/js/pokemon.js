@@ -408,7 +408,7 @@ async function collection(r) {
       ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${
           t.physical_cards} físicas`
       : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${
-          res.total} registros`}</p>
+          t.item_rows} registros`}</p>
 
     <div class="mode-toggles">
       <div class="mode-toggle">
@@ -492,13 +492,22 @@ function itemHtml(i) {
   const shown = i.display_photo || i.photos?.find((p) => p.is_primary) || i.photos?.[0];
   const src = owned ? (shown ? photoUrl(shown) : cardArt(i)) : cardArt(i);
   const v = i.value || {};
-  return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}">
+  // One tile per card, so the badge and the price count every copy behind it —
+  // including copies that are a reprint in another set (#78). A partial price
+  // is a floor, not the tile's value, and says so rather than passing for one.
+  const qty = i.group_quantity ?? i.quantity;
+  const grouped = (i.group_card_ids?.length ?? 0) > 1;
+  const price = v.total != null ? `${v.partial ? '≥' : ''}${eur(v.total)}` : '';
+  return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}"
+       ${grouped ? 'data-reprints="1"' : ''}>
     <div class="art">
       ${src ? `<img src="${esc(src)}" alt="${esc(i.name || i.label)}" loading="lazy">`
             : placeholder(i.number, i.official_set_id)}
-      ${owned && i.quantity > 1 ? `<span class="badge qty">×${i.quantity}</span>` : ''}
+      ${owned && qty > 1 ? `<span class="badge qty">×${qty}</span>` : ''}
       ${owned && i.rating ? `<span class="badge hof-badge${i.rating < 7 ? ' fav' : ''}">★${i.rating}</span>` : ''}
-      ${owned && v.total != null ? `<span class="badge val">${esc(eur(v.total))}</span>` : ''}
+      ${owned && price ? `<span class="badge val"${v.partial
+        ? ' title="Alguna copia no tiene precio: el total es un mínimo."' : ''
+        }>${esc(price)}</span>` : ''}
     </div>
     <div class="label">
       <span class="nm">${esc(i.name || i.label || '—')}</span>
@@ -1013,7 +1022,11 @@ async function missing(r) {
 /* ----------------------------------------------------------------- glue */
 function wireCardClicks() {
   view().querySelectorAll('[data-card]').forEach((n) => {
-    n.onclick = () => { if (n.dataset.card) openCard(n.dataset.card); };
+    // A tile that collapsed reprints opens a modal listing them, or it would
+    // read ×2 and then show one copy (#78).
+    n.onclick = () => {
+      if (n.dataset.card) openCard(n.dataset.card, { reprints: !!n.dataset.reprints });
+    };
   });
 }
 
