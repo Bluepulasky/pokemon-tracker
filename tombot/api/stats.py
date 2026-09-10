@@ -60,15 +60,19 @@ def _top_value(limit: int = 10):
     r = repo()
     pricing = svc("pricing")
     mods = r.get_modifiers()
+    # Grouped, like the Cartas grid: one entry per card, worth every copy of
+    # it. Listing rows would enter a card owned twice twice over, and pricing
+    # only the shown row would rank it below what it is actually worth (#78).
     rows, _ = r.list_collection(page=1, page_size=500)
     valued = []
     for row in rows:
-        est = pricing.estimate_item(row, mods)
+        est = pricing.estimate_row(row, mods)
         if est["total"] is not None:
             valued.append({"card_id": row["card_id"], "name": row["name"],
                            "number": row["number"], "set_name": row.get("set_name"),
                            "variant": row["variant"], "condition": row["condition"],
-                           "quantity": row["quantity"], "value": est["total"]})
+                           "quantity": row.get("group_quantity") or row["quantity"],
+                           "value": est["total"]})
     return sorted(valued, key=lambda v: v["value"], reverse=True)[:limit]
 
 

@@ -88,7 +88,9 @@ def test_rating_filters_match_every_variant(repo):
     repo.set_card_rating("base1-2", 3)
 
     top, _ = repo.list_collection(rating_min=7)
-    assert len(top) == 2, "both variants of the ranked card"
+    # One tile per card, so the two variants are one row of two copies (#78).
+    assert [i["card_id"] for i in top] == ["base1-4"]
+    assert top[0]["group_rows"] == 2 and top[0]["group_quantity"] == 2
     exact, _ = repo.list_collection(rating=3)
     assert [i["card_id"] for i in exact] == ["base1-2"]
     unranked, _ = repo.list_collection(rating=0)

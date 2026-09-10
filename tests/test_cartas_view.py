@@ -59,12 +59,29 @@ def test_owning_any_member_of_a_grouped_slot_marks_it_owned(repo):
     assert {r["label"]: r["owned"] for r in rows}["Charizard"] is True
 
 
-def test_multiple_owned_variants_produce_multiple_rows(repo):
-    repo.upsert_collection_item({"card_id": "base1-1", "condition": "M/NM"})
+def test_multiple_owned_variants_collapse_to_one_row(repo):
+    """A slot is one completion target, so it is one tile however many copies
+    satisfy it. Two copies drew the same card twice and made the grid count a
+    set as bigger than it is (#78) — they are now one row, badged x2, standing
+    on the best-conditioned copy."""
     repo.upsert_collection_item({"card_id": "base1-1", "condition": "EX"})
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "M/NM"})
     rows, total = repo.list_slots_with_ownership(set_id="mine", page_size=100)
-    assert total == 4, "two owned variants + two placeholders"
-    assert sum(1 for r in rows if r["label"] == "Alakazam") == 2
+    assert total == 3, "one owned slot + two placeholders"
+    alakazam = [r for r in rows if r["label"] == "Alakazam"]
+    assert len(alakazam) == 1
+    assert alakazam[0]["group_quantity"] == 2 and alakazam[0]["group_rows"] == 2
+    assert alakazam[0]["condition"] == "M/NM", "the nicest copy represents it"
+
+
+def test_a_collapsed_slot_carries_every_copy(repo):
+    """The row has to carry the copies it stands for, or the tile cannot be
+    priced as the two cards it shows."""
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "M/NM"})
+    repo.upsert_collection_item({"card_id": "base1-1", "condition": "GD"})
+    rows, _ = repo.list_slots_with_ownership(set_id="mine", page_size=100)
+    alakazam = next(r for r in rows if r["label"] == "Alakazam")
+    assert [m["condition"] for m in alakazam["group_items"]] == ["M/NM", "GD"]
 
 
 def test_physical_filters_exclude_placeholders(repo):
