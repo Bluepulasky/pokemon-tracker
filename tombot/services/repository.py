@@ -24,6 +24,44 @@ from .printing_variants import variants_for
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 SCHEMA_VERSION = "1"
 
+# The one answer to "how many copies of this slot do I hold?" (#82).
+#
+# Four views asked it and only one of them read the "any version counts" flag,
+# so a set with loose completion on reported a card as held on the Sets page and
+# as entirely missing in the Faltantes list — the same card, two answers on two
+# screens. Every caller now selects from this, and a change to what counts as
+# held lands on all of them at once.
+#
+# Strict (the default): only the set's own printing counts. Loose (the set has a
+# set_loose_completion row): any owned reprint of a slot member counts, a reprint
+# being the same name AND illustrator — so the Fossil Magneton fills a Fossil
+# slot but the Base Set one, which shares only the name, does not.
+SLOT_HELD_CTE = """
+    WITH slot_held AS (
+        SELECT sl.id AS slot_id, sl.set_id AS set_id,
+               COALESCE(t.target, 1) AS want,
+               CASE WHEN lc.set_id IS NOT NULL THEN
+                 (SELECT COALESCE(SUM(i.quantity), 0)
+                    FROM collection_items i
+                    JOIN cards ci ON ci.id = i.card_id
+                   WHERE EXISTS (
+                       SELECT 1 FROM set_slot_cards m2
+                       JOIN cards c2 ON c2.id = m2.card_id
+                      WHERE m2.slot_id = sl.id
+                        AND c2.name = ci.name
+                        AND IFNULL(c2.artist,'') = IFNULL(ci.artist,'')))
+               ELSE
+                 (SELECT COALESCE(SUM(i.quantity), 0)
+                    FROM set_slot_cards m
+                    JOIN collection_items i ON i.card_id = m.card_id
+                   WHERE m.slot_id = sl.id)
+               END AS held
+          FROM set_slots sl
+          LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
+          LEFT JOIN set_loose_completion lc ON lc.set_id = sl.set_id
+    )
+"""
+
 
 def _number_sort(number: str) -> float:
     """Sort key for card numbers.
@@ -516,27 +554,22 @@ class PokemonRepo:
         """Slots with ownership state. A slot counts as owned if ANY member card is held —
         this is what makes reprints/variants collapse to one logical card."""
         return self._all(
-            """SELECT sl.id AS slot_id, sl.position, sl.source,
+            SLOT_HELD_CTE + """
+               SELECT sl.id AS slot_id, sl.position, sl.source,
                       COALESCE(sl.label, c.name) AS label,
                       c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
                       c.image_small_url, c.image_local, c.official_set_id,
-                      COALESCE(t.target, 1) AS target,
+                      h.want AS target,
                       -- Three states, not two. Holding a single copy takes the
                       -- card out of the greyed-out treatment; reaching the target
                       -- is what earns the tick.
-                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                        JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) > 0 AS owned,
-                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                        JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) >= COALESCE(t.target, 1) AS complete,
-                      (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                        JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) AS quantity,
+                      h.held > 0 AS owned,
+                      h.held >= h.want AS complete,
+                      h.held AS quantity,
                       (SELECT COUNT(*) FROM set_slot_cards m WHERE m.slot_id = sl.id) AS member_count
                FROM set_slots sl
+               JOIN slot_held h ON h.slot_id = sl.id
                LEFT JOIN cards c ON c.id = sl.display_card_id
-               LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                WHERE sl.set_id = ?
                ORDER BY sl.position, c.number_sort""",
             (set_id,),
@@ -565,15 +598,16 @@ class PokemonRepo:
         # grouped by series (Base / Gym / Neo / …), ordered oldest-first. Both
         # are catalogue facts, so a set files itself — no manual group to keep.
         return self._all(
-            f"""SELECT s.id, s.name, s.group_name, s.position,
+            SLOT_HELD_CTE + f"""
+                SELECT s.id, s.name, s.group_name, s.position,
                        os.series AS series, os.release_date AS release_date,
                        -- The set logo: the one stored at import, or the cached
                        -- episode logo when import stored none (tcggo omits it on
                        -- a few, but the catalogue sync has them all).
                        COALESCE(NULLIF(os.logo_url, ''), me.logo) AS logo_url,
-                       COUNT(DISTINCT sl.id) AS target,
-                       COUNT(DISTINCT CASE WHEN sl.held > 0 THEN sl.id END) AS owned,
-                       COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.id END) AS complete,
+                       COUNT(DISTINCT sl.slot_id) AS target,
+                       COUNT(DISTINCT CASE WHEN sl.held > 0 THEN sl.slot_id END) AS owned,
+                       COUNT(DISTINCT CASE WHEN sl.held >= sl.want THEN sl.slot_id END) AS complete,
                        -- Copy progress caps each slot at its target so a pile of
                        -- spares cannot push the set past 100%.
                        COALESCE(SUM(MIN(sl.held, sl.want)), 0) AS copies_held,
@@ -583,34 +617,7 @@ class PokemonRepo:
                        ON os.id = json_extract(s.rules_json, '$.include_sets[0]')
                 LEFT JOIN set_episodes se ON se.official_set_id = os.id
                 LEFT JOIN market_episodes me ON me.episode_id = se.episode_id
-                LEFT JOIN (
-                    SELECT sl.id, sl.set_id,
-                           COALESCE(t.target, 1) AS want,
-                           -- Strict: only the set's own printing counts. Loose
-                           -- (a set_loose_completion row): any owned reprint of a
-                           -- slot member counts, a reprint being the same name AND
-                           -- illustrator — so the Fossil Magneton fills a Fossil
-                           -- slot but the Base Set one does not.
-                           CASE WHEN lc.set_id IS NOT NULL THEN
-                             (SELECT COALESCE(SUM(i.quantity), 0)
-                                FROM collection_items i
-                                JOIN cards ci ON ci.id = i.card_id
-                               WHERE EXISTS (
-                                   SELECT 1 FROM set_slot_cards m2
-                                   JOIN cards c2 ON c2.id = m2.card_id
-                                  WHERE m2.slot_id = sl.id
-                                    AND c2.name = ci.name
-                                    AND IFNULL(c2.artist,'') = IFNULL(ci.artist,'')))
-                           ELSE
-                             (SELECT COALESCE(SUM(i.quantity), 0)
-                                FROM set_slot_cards m
-                                JOIN collection_items i ON i.card_id = m.card_id
-                               WHERE m.slot_id = sl.id)
-                           END AS held
-                      FROM set_slots sl
-                      LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
-                      LEFT JOIN set_loose_completion lc ON lc.set_id = sl.set_id
-                ) sl ON sl.set_id = s.id
+                LEFT JOIN slot_held sl ON sl.set_id = s.id
                 {where}
                 GROUP BY s.id, s.name, s.group_name, s.position, os.series,
                          os.release_date, os.logo_url, me.logo
@@ -626,28 +633,22 @@ class PokemonRepo:
         }.get(sort, "c.number_sort")
         # Short of the target counts as missing, and the shortfall is reported so
         # the wishlist can say how many are still needed rather than just "none".
+        # What counts as held is the shared definition, so a set with "any version
+        # counts" on does not list a card here that the Sets page calls complete.
         return self._all(
-            f"""SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
+            SLOT_HELD_CTE + f"""
+                SELECT sl.id AS slot_id, COALESCE(sl.label, c.name) AS label,
                        c.id AS card_id, c.number, c.rarity, c.image_small_url,
                        c.image_local,
-                       COALESCE(t.target, 1) AS target,
-                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                         JOIN collection_items i ON i.card_id = m.card_id
-                        WHERE m.slot_id = sl.id) AS held,
-                       COALESCE(t.target, 1) - (
-                         SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                          JOIN collection_items i ON i.card_id = m.card_id
-                         WHERE m.slot_id = sl.id) AS still_needed,
-                       (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                         JOIN collection_items i ON i.card_id = m.card_id
-                        WHERE m.slot_id = sl.id) = 0 AS missing_entirely
+                       h.want AS target,
+                       h.held AS held,
+                       h.want - h.held AS still_needed,
+                       h.held = 0 AS missing_entirely
                 FROM set_slots sl
+                JOIN slot_held h ON h.slot_id = sl.id
                 LEFT JOIN cards c ON c.id = sl.display_card_id
-                LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                 WHERE sl.set_id = ?
-                  AND (SELECT COALESCE(SUM(i.quantity), 0) FROM set_slot_cards m
-                        JOIN collection_items i ON i.card_id = m.card_id
-                       WHERE m.slot_id = sl.id) < COALESCE(t.target, 1)
+                  AND h.held < h.want
                 ORDER BY {order}""",
             (set_id,),
         )
@@ -1104,12 +1105,22 @@ class PokemonRepo:
         # "owned" there would claim a card you have not got; saying nothing at
         # all draws your Blastoise as missing. So the row carries the fact
         # separately and the tile says which it is (#76).
-        reprint_owned = (
+        #
+        # A set with "any version counts" on asks the same question of every
+        # tile, toggle or no toggle: the holo Muk fills the slot for the plain
+        # one, so drawing that slot as plain missing contradicts the header
+        # above it, which counts it (#82). `owned` stays false either way — the
+        # copy in hand is a different printing, and claiming it here would put
+        # its condition and its price on a card it does not belong to.
+        held_elsewhere = (
             "EXISTS (SELECT 1 FROM collection_items ri "
             "          JOIN cards rc ON rc.id = ri.card_id "
             "         WHERE rc.name = c.name "
-            "           AND IFNULL(rc.artist,'') = IFNULL(c.artist,''))"
-            if unique_reprints else "0")
+            "           AND IFNULL(rc.artist,'') = IFNULL(c.artist,''))")
+        asks = ("1" if unique_reprints else
+                "EXISTS (SELECT 1 FROM set_loose_completion lc "
+                "         WHERE lc.set_id = sl.set_id)")
+        reprint_owned = f"(({asks}) AND {held_elsewhere})"
         ctes = [f"""matched AS (
                     SELECT sl.id AS slot_id, i.id AS item_id, i.quantity AS qty,
                            CASE WHEN i.id IS NULL THEN 9 ELSE {rank} END AS crank
@@ -1177,15 +1188,18 @@ class PokemonRepo:
         return rows, total
 
     def slots_ownership_totals(self, set_id: str = "") -> dict:
-        where = "WHERE sl.set_id = ?" if set_id else ""
+        """The "X / Y cartas conseguidas" line over the Cartas grid.
+
+        It reads the same held definition the Sets page does, so the count and
+        the tiles under it cannot disagree.
+        """
+        where = "WHERE h.set_id = ?" if set_id else ""
         params = (set_id,) if set_id else ()
         return self._one(
-            f"""SELECT COUNT(DISTINCT sl.id) AS slots,
-                       COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN sl.id END) AS owned_slots
-                FROM set_slots sl
-                LEFT JOIN collection_items i
-                       ON i.card_id IN (SELECT card_id FROM set_slot_cards
-                                         WHERE slot_id = sl.id)
+            SLOT_HELD_CTE + f"""
+                SELECT COUNT(*) AS slots,
+                       COUNT(CASE WHEN h.held > 0 THEN 1 END) AS owned_slots
+                FROM slot_held h
                 {where}""", params
         ) or {"slots": 0, "owned_slots": 0}
 
