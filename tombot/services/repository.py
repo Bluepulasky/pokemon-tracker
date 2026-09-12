@@ -761,6 +761,12 @@ class PokemonRepo:
             "SELECT i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id, "
             "c.image_small_url, c.image_local, c.external_ids_json, "
             "os.name AS printing_name, COALESCE(cr.rating, 0) AS rating, "
+            # The set code of the copy in hand, which is not the code of the
+            # card the modal was opened on: a grouped tile lists reprints from
+            # other sets, and "BS-18" beside "B2-22" is the only thing on the
+            # row that tells them apart (#83). Falls back to the set id when
+            # tcggo sent no code, which is still this copy's set and not a guess.
+            "COALESCE(NULLIF(os.ptcgo_code, ''), UPPER(os.id)) AS set_code, "
             "(i.card_id <> ?) AS is_reprint "
             "FROM collection_items i JOIN cards c ON c.id = i.card_id "
             "JOIN official_sets os ON os.id = c.official_set_id "

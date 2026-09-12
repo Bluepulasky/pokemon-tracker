@@ -147,6 +147,10 @@ function variantCard(item) {
   const priceRaw = v.unit != null
     ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
+  // Which printing this copy actually is, e.g. FO-13 (#83). It goes last so the
+  // three tags before it keep their positions — editVariant reads condition and
+  // language out of the list by index.
+  const code = item.set_code && item.number ? `${item.set_code}-${item.number}` : '';
   return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}"
      data-first-ed="${item.first_edition ? '1' : '0'}"
      data-price-raw="${priceRaw}"
@@ -156,6 +160,8 @@ function variantCard(item) {
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
+      ${code ? `<span class="tag code" title="${esc(item.printing_name || '')}"
+        >${esc(code)}</span>` : ''}
     </div>
     <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
