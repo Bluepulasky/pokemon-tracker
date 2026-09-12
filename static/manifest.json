@@ -1,0 +1,12 @@
+{
+  "name": "TomBot Pokémon Tracker",
+  "short_name": "TomBot",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e1013",
+  "theme_color": "#0e1013",
+  "icons": [
+    { "src": "/static/favicon_32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/static/favicon_ios.png", "sizes": "500x500", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

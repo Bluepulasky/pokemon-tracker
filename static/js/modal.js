@@ -210,7 +210,7 @@ function addForm(card) {
     </div>
     <div class="form-row">
       <div class="field"><label>Idioma</label>
-        <select name="language">${opts(META.languages, 'es')}</select></div>
+        <select name="language">${opts(META.languages, 'en')}</select></div>
       <div class="field" style="flex:0 0 90px"><label>Cantidad</label>
         <input name="quantity" type="number" min="1" value="1" inputmode="numeric"></div>
     </div>
