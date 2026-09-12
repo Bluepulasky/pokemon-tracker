@@ -148,6 +148,8 @@ function variantCard(item) {
     ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
   return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}"
+     data-condition="${esc(item.condition || '')}"
+     data-language="${esc(item.language || '')}"
      data-first-ed="${item.first_edition ? '1' : '0'}"
      data-price-raw="${priceRaw}"
      data-price-qty="${item.quantity}"
@@ -376,20 +378,21 @@ function wireVariants(root, cardId) {
 // CAMBIO 2: editVariant — reemplaza el select de variante por ¿Primera edición?
 // y añade un preview de precio en tiempo real.
 function editVariant(vc, id, cardId) {
-  // Leer precio base y metadatos del DOM
+  // Everything the form starts from is read off the element, never off the tag
+  // row. The grade and the language used to be recovered by their position in
+  // that row — tag[1] and tag[2] — and the language by matching its printed
+  // label back to a key. Both broke silently the moment a tag moved: adding the
+  // printing tag (#83) had to go last for exactly that reason, and the label
+  // lookup already depended on the Spanish text never being retouched.
   const priceRaw  = parseFloat(vc.dataset.priceRaw);
-  // CAMBIO: Usar el dataset directamente en lugar de intentar leerlo de las tags
-  const qty       = Number(vc.dataset.priceQty) || 1; 
+  const qty       = Number(vc.dataset.priceQty) || 1;
   const basis     = vc.dataset.priceBasis || '';
   const firstEdOn = vc.dataset.firstEd === '1';
 
-  const tags = vc.querySelectorAll('.tag');
-  
-  // Extraer valores actuales con seguridad
   const cur = {
-    condition: tags[1] ? tags[1].textContent.trim() : '',
-    language:  tags[2] ? (META.languages.find((l) => l.label === tags[2].textContent)?.key || 'es') : 'es',
-    quantity:  qty, // Usamos la variable qty definida arriba
+    condition: vc.dataset.condition || '',
+    language:  vc.dataset.language || 'es',
+    quantity:  qty,
   };
 
   vc.innerHTML = `
