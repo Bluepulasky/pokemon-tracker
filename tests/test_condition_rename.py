@@ -61,9 +61,19 @@ def test_the_api_refuses_an_unknown_condition_multiplier(tmp_path, monkeypatch):
     assert bad.status_code == 400
     assert "desconocida" in bad.get_json()["error"]["message"]
 
-    # A key with a slash cannot reach the route at all — Werkzeug refuses %2F.
-    assert client.put("/api/prices/modifiers/condition/N%2FNM",
-                      json={"multiplier": 1.0}).status_code == 404
+    # A grade with a slash in it now reaches the route, because M/NM is a real
+    # key and <path:key> is what lets it through. So the slashed typo is caught
+    # by the same validation as any other, not by a 404 from the router.
+    slashed = client.put("/api/prices/modifiers/condition/N%2FNM",
+                         json={"multiplier": 1.0})
+    assert slashed.status_code == 400
+    assert "desconocida" in slashed.get_json()["error"]["message"]
+
+    # The grade the slash was blocking. This is the one that could not be
+    # edited at all before: the route matched only up to the slash.
+    real = client.put("/api/prices/modifiers/condition/M%2FNM",
+                      json={"multiplier": 1.0})
+    assert real.status_code == 200
 
     good = client.put("/api/prices/modifiers/condition/EX", json={"multiplier": 0.9})
     assert good.status_code == 200
