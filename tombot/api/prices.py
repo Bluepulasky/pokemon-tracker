@@ -96,7 +96,7 @@ def modifiers():
     return jsonify(repo().get_modifiers())
 
 
-@bp.put("/modifiers/<kind>/<key>")
+@bp.put("/modifiers/<kind>/<path:key>")
 def set_modifier(kind, key):
     """Edit a condition price multiplier.
 
