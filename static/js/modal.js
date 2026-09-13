@@ -407,9 +407,8 @@ function editVariant(vc, id, cardId) {
       <input name="quantity" type="number" min="1" value="${cur.quantity}" inputmode="numeric"></div>
     <div class="field" style="margin-top:8px"><label>Precio manual</label>
       <input name="manual_price" type="number" step="0.01" min="0"
-             placeholder="usar el del feed" value="${esc(cur.manual)}" inputmode="decimal">
-      <small class="field-hint">El precio de esta impresión, antes de estado e
-        idioma. Vacío usa el del feed.</small></div>
+             placeholder="ingrese precio manual" value="${esc(cur.manual)}" inputmode="decimal">
+    </div>
     <div class="price-preview"></div>
     <div class="btn-row">
       <button class="btn primary save">Guardar</button>
@@ -441,15 +440,10 @@ function editVariant(vc, id, cardId) {
     const cents    = (n) => Number(n.toFixed(2));
     const newUnit  = cents(base * condMult * langMult * factor);
     const newTotal = cents(newUnit * liveQty);
-    const suffix   = factor > 1 ? ' · ×2 1ª ed.' : '';
-    const small    = typed !== ''
-      ? `${eur(newUnit)} × ${liveQty} · precio fijado a mano${suffix}`
-      : basis === 'no_data'
-        ? 'sin datos para esta impresión'
-        : basis === 'printing_level'
-          ? `${eur(newUnit)} × ${liveQty} · precio de la impresión${suffix}`
-          : `${eur(newUnit)} × ${liveQty}${suffix}`;
-    preview.innerHTML = `<div class="price">${esc(eur(newTotal))}<small>${small}</small></div>`;
+    const small = typed !== ''
+      ? `${eur(newUnit)} × ${liveQty} - manual`
+      : `${eur(newUnit)} × ${liveQty}`;
+    preview.innerHTML = `<div class="price">${esc(eur(newTotal))} <small>(${small})</small></div>`;
   }
 
   sel.onchange = updatePreview;
