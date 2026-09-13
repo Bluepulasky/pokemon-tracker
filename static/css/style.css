@@ -404,6 +404,10 @@ details { padding: 8px 20px; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
        background: var(--bg); border: 1px solid var(--line); color: var(--fg-dim); }
 .tag.ed { border-color: rgba(59,108,246,.4); color: #9db6ff; }
+/* The printing this copy is, e.g. FO-13. Monospaced and quieter than the rest:
+   it identifies the row rather than describing the card (#83). */
+.tag.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 10px; letter-spacing: .02em; }
 /* Big enough to actually judge a card by. Several photos scroll side by side. */
 .variant-card .photos {
   display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x mandatory;
