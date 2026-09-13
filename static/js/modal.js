@@ -147,11 +147,15 @@ function variantCard(item) {
   const priceRaw = v.unit != null
     ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
-  // Which printing this copy actually is, e.g. FO-13 (#83). It goes last so the
-  // three tags before it keep their positions — editVariant reads condition and
-  // language out of the list by index.
+  // Which printing this copy actually is, e.g. FO-13 (#83).
   const code = item.set_code && item.number ? `${item.set_code}-${item.number}` : '';
+  // The copy's own card, which is not the card the modal was opened on: a tile
+  // groups reprints (#78), so a Celebrations Blastoise can be listed under Base
+  // Set. Anything that writes or reads a price has to use this, or it lands on
+  // the wrong card (#88).
   return `<div class="variant-card" data-item="${item.id}" data-variant="${esc(item.variant)}"
+     data-card-id="${esc(item.card_id || '')}"
+     data-manual-price="${v.manual && v.base != null ? v.base : ''}"
      data-condition="${esc(item.condition || '')}"
      data-language="${esc(item.language || '')}"
      data-first-ed="${item.first_edition ? '1' : '0'}"
@@ -183,10 +187,6 @@ function variantCard(item) {
        target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
     <div class="quotes" data-quotes-for="${esc(item.card_id)}"
          data-variant="${esc(item.variant || '')}"></div>
-    <div class="field manual-price">
-      <input style="font-size: 12px;" type="number" step="0.01" min="0" placeholder="Precio manual"
-             value="${item.value?.manual ? item.value.unit : ''}">
-    </div>
     <div class="btn-row compact">
       <button class="btn xs act-photo">Foto</button>
       <button class="btn xs act-edit">Editar</button>
@@ -354,21 +354,10 @@ function wireVariants(root, cardId) {
 
     vc.querySelector('.act-edit').onclick = () => editVariant(vc, id, cardId);
 
-    const manual = vc.querySelector('.manual-price input');
-    if (manual) {
-      manual.onchange = async () => {
-        const raw = manual.value.trim();
-        try {
-          await api.setManualPrice(cardId, vc.dataset.variant, raw === '' ? null : Number(raw));
-          toast(raw === '' ? 'Precio manual quitado' : `Precio fijado en ${raw}`);
-          onChange();
-          openCard(cardId);
-        } catch (e) { toast(e.message, true); }
-      };
-    }
-
+    // The copy's own card again, not the open one: a Celebrations copy listed
+    // under Base Set was being quoted the Base Set card's prices (#88).
     const qbox = vc.querySelector('.quotes');
-    if (qbox) renderQuotes(qbox, cardId, vc.dataset.variant);
+    if (qbox) renderQuotes(qbox, vc.dataset.cardId, vc.dataset.variant);
 
     vc.querySelectorAll('[data-photo]').forEach((img) => {
       img.onclick = async () => {
@@ -398,6 +387,9 @@ function editVariant(vc, id, cardId) {
     condition: vc.dataset.condition || '',
     language:  vc.dataset.language || 'es',
     quantity:  qty,
+    // What was typed in, not what it works out to. These are different numbers
+    // whenever the grade or the language discounts the card (#88).
+    manual:    vc.dataset.manualPrice || '',
   };
 
   vc.innerHTML = `
@@ -413,6 +405,11 @@ function editVariant(vc, id, cardId) {
       <select name="language">${opts(META.languages, cur.language)}</select></div>
     <div class="field" style="margin-top:8px"><label>Cantidad</label>
       <input name="quantity" type="number" min="1" value="${cur.quantity}" inputmode="numeric"></div>
+    <div class="field" style="margin-top:8px"><label>Precio manual</label>
+      <input name="manual_price" type="number" step="0.01" min="0"
+             placeholder="usar el del feed" value="${esc(cur.manual)}" inputmode="decimal">
+      <small class="field-hint">El precio de esta impresión, antes de estado e
+        idioma. Vacío usa el del feed.</small></div>
     <div class="price-preview"></div>
     <div class="btn-row">
       <button class="btn primary save">Guardar</button>
@@ -423,21 +420,35 @@ function editVariant(vc, id, cardId) {
   const preview = vc.querySelector('.price-preview');
 
   function updatePreview() {
-    if (!preview || !Number.isFinite(priceRaw)) return;
+    if (!preview) return;
+    // A price typed by hand replaces the feed's, so the preview has to start
+    // from it. This is what makes the discount legible: type 15 on a GD copy
+    // and the 10,50 € appears under it, instead of the field silently coming
+    // back as 10,50 next time it is opened (#88).
+    const typed = vc.querySelector('[name=manual_price]').value.trim();
+    const base  = typed !== '' ? Number(typed) : priceRaw;
+    if (!Number.isFinite(base)) { preview.innerHTML = ''; return; }
     const factor   = sel.value === '1' ? 2.0 : 1.0;
     const condKey  = vc.querySelector('[name=condition]').value;
     const condMult = COND_MULTIPLIERS[condKey] ?? 1.0;
     const langKey  = vc.querySelector('[name=language]').value;
     const langMult = LANG_MULTIPLIERS[langKey] ?? 1.0;
     const liveQty  = Number(vc.querySelector('[name=quantity]').value) || 1;
-    const newUnit  = priceRaw * condMult * langMult * factor;
-    const newTotal = newUnit * liveQty;
+    // Rounded exactly where the backend rounds it: to the cent on the unit, and
+    // the total from that rounded unit rather than the raw one. Formatting the
+    // raw number instead rounded 7.225 up to 7,23 while the saved value came
+    // back 7,22, so the form promised a cent the card then disagreed with.
+    const cents    = (n) => Number(n.toFixed(2));
+    const newUnit  = cents(base * condMult * langMult * factor);
+    const newTotal = cents(newUnit * liveQty);
     const suffix   = factor > 1 ? ' · ×2 1ª ed.' : '';
-    const small    = basis === 'no_data'
-      ? 'sin datos para esta impresión'
-      : basis === 'printing_level'
-        ? `${eur(newUnit)} × ${liveQty} · precio de la impresión${suffix}`
-        : `${eur(newUnit)} × ${liveQty}${suffix}`;
+    const small    = typed !== ''
+      ? `${eur(newUnit)} × ${liveQty} · precio fijado a mano${suffix}`
+      : basis === 'no_data'
+        ? 'sin datos para esta impresión'
+        : basis === 'printing_level'
+          ? `${eur(newUnit)} × ${liveQty} · precio de la impresión${suffix}`
+          : `${eur(newUnit)} × ${liveQty}${suffix}`;
     preview.innerHTML = `<div class="price">${esc(eur(newTotal))}<small>${small}</small></div>`;
   }
 
@@ -445,11 +456,13 @@ function editVariant(vc, id, cardId) {
   vc.querySelector('[name=condition]').onchange = updatePreview;
   vc.querySelector('[name=language]').onchange = updatePreview;
   vc.querySelector('[name=quantity]').oninput = updatePreview;
+  vc.querySelector('[name=manual_price]').oninput = updatePreview;
   updatePreview();
 
   vc.querySelector('.cancel').onclick = () => openCard(cardId);
 
   vc.querySelector('.save').onclick = async () => {
+    const typed = vc.querySelector('[name=manual_price]').value.trim();
     try {
       await api.updateItem(id, {
         first_edition: vc.querySelector('[name=first_edition]').value === '1',
@@ -457,7 +470,16 @@ function editVariant(vc, id, cardId) {
         language:      vc.querySelector('[name=language]').value,
         quantity:      Number(vc.querySelector('[name=quantity]').value) || 1,
       });
-      toast('Actualizado');
+      // Against the copy's own card. Sending the open card's id wrote the price
+      // onto a printing the user was not editing and left the one they were
+      // looking at unpriced (#88). Only sent when it changed, so saving a grade
+      // does not quietly clear a price nobody touched.
+      if (typed !== cur.manual) {
+        await api.setManualPrice(vc.dataset.cardId, vc.dataset.variant,
+                                 typed === '' ? null : Number(typed));
+      }
+      toast(typed !== cur.manual && typed === '' ? 'Precio manual quitado'
+                                                 : 'Actualizado');
       onChange();
       openCard(cardId);
     } catch (e) { toast(e.message, true); }
