@@ -162,7 +162,7 @@ function variantCard(item) {
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
-      ${code ? `<span class="tag code" title="${esc(item.printing_name || '')}"
+      ${code ? `<span class="tag" title="${esc(item.printing_name || '')}"
         >${esc(code)}</span>` : ''}
     </div>
     <div class="photos${item.photos.length ? '' : ' empty'}">
@@ -184,8 +184,7 @@ function variantCard(item) {
     <div class="quotes" data-quotes-for="${esc(item.card_id)}"
          data-variant="${esc(item.variant || '')}"></div>
     <div class="field manual-price">
-      <label>Precio manual</label>
-      <input type="number" step="0.01" min="0" placeholder="usar el del feed"
+      <input style="font-size: 12px;" type="number" step="0.01" min="0" placeholder="Precio manual"
              value="${item.value?.manual ? item.value.unit : ''}">
     </div>
     <div class="btn-row compact">

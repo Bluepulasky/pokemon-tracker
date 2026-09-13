@@ -80,7 +80,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------------ view */
 .view { max-width: 1400px; margin: 0 auto; padding: 24px 16px 80px; }
-.loading, .empty { padding: 60px 20px; text-align: center; color: var(--fg-faint); }
+.loading, .empty { text-align: center; color: var(--fg-faint); }
 
 h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 4px; }
 h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-dim);
@@ -395,19 +395,15 @@ details { padding: 8px 20px; }
 .variants { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;
             scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
 .variant-card {
-  flex: none; width: 232px; scroll-snap-align: start;
+  flex: none; scroll-snap-align: start;
   background: var(--bg-3); border: 1px solid var(--line);
   border-radius: var(--radius-sm); padding: 10px;
   display: flex; flex-direction: column; gap: 8px;
 }
 .variant-card .tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.tag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
+.tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px;
        background: var(--bg); border: 1px solid var(--line); color: var(--fg-dim); }
 .tag.ed { border-color: rgba(59,108,246,.4); color: #9db6ff; }
-/* The printing this copy is, e.g. FO-13. Monospaced and quieter than the rest:
-   it identifies the row rather than describing the card (#83). */
-.tag.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 10px; letter-spacing: .02em; }
 /* Big enough to actually judge a card by. Several photos scroll side by side. */
 .variant-card .photos {
   display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -652,7 +648,7 @@ details { padding: 8px 20px; }
 /* The variant card is narrow, so the full-size row would wrap to three lines.
    Smaller targets give a tidy two rows without shrinking the primary picker in
    the add form. */
-.variant-card { width: 200px; }
+.variant-card { width: 235px; }
 .variant-card .rank { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
 .variant-card .rank.zero { padding: 0 8px; }
 .variant-card .rank-row { gap: 4px; }
