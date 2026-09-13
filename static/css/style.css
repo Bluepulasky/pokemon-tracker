@@ -435,6 +435,11 @@ details { padding: 8px 20px; }
   border: 1px solid var(--line); border-radius: var(--radius-sm); outline: none;
 }
 .field select:focus, .field input:focus { border-color: var(--accent-2); }
+/* Says what a field's number means when the number alone is misread. The manual
+   price is the printing's, before grade and language, and looks wrong next to
+   the total without this (#88). */
+.field-hint { display: block; margin-top: 5px; font-size: 10px; line-height: 1.35;
+              color: var(--fg-faint); }
 
 .btn {
   padding: 10px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm);

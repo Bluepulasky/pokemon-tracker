@@ -97,7 +97,8 @@ class PricingService:
                     and item.get("variant") not in VARIANT_PRICE_FIELDS:
                 row, basis = card_level, "printing_level"
             else:
-                return {"unit": None, "total": None, "currency": "EUR",
+                return {"unit": None, "total": None, "base": None,
+                        "currency": "EUR",
                         "basis": "no_data", "updated_at": None,
                         "reason": "sin precio para esta impresión"}
         else:
@@ -119,6 +120,12 @@ class PricingService:
         return {
             "unit": unit,
             "total": round(unit * qty, 2),
+            # The printing's own price, before grade, edition and language are
+            # applied. A manual price is exactly this number — what the user
+            # typed — and the edit form has to offer that back, not `unit`.
+            # Showing `unit` there handed a €15 entry back as €10.50 on a GD
+            # copy, so saving again would have compounded the discount (#88).
+            "base": row["price"],
             "first_edition_multiplier": first_ed_m,
             "language_multiplier": lang_m,
             "currency": row.get("currency", "EUR"),
