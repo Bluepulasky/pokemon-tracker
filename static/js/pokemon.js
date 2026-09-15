@@ -68,8 +68,6 @@ async function dashboard() {
 
   view().innerHTML = `
     <h1>Mi colección</h1>
-    <p class="sub">${d.unique_cards} cartas únicas · ${d.physical_cards} cartas físicas ·
-       ${d.sets_total} sets · ${pct(d.completion_pct)} únicas · ${pct(d.copies_pct)} copias</p>
 
     <div class="stat-grid">
       <div class="stat accent"><div class="k">Valor estimado</div>
@@ -77,6 +75,7 @@ async function dashboard() {
         ${v.unpriced_items ? `<div class="note">${v.unpriced_items} sin precio conocido</div>` : ''}</div>
       <div class="stat"><div class="k">Cartas únicas</div><div class="v">${d.unique_cards}</div></div>
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
+      <div class="stat"><div class="k">Pokémon únicos</div><div class="v">${d.unique_pokemon}</div></div>
       <div class="stat"><div class="k">Sets completos</div>
         <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
       <div class="stat"><div class="k">Completitud (únicas)</div>
@@ -238,13 +237,6 @@ async function setDetail(r) {
       <input type="checkbox" id="loose-toggle" ${s.loose_completion ? 'checked' : ''}>
       <span>Cualquier versión cuenta para el progreso <em>(experimental)</em></span>
     </label>
-
-    <div class="quick-select" id="q-collect">
-      <span class="qs-label">Coleccionar ★</span>
-      ${[['all', 'Todo'], ['holo', 'Solo holo'], ['non-holo', 'Solo no holo'],
-         ['none', 'Ninguno'], ['invert', 'Invertir']]
-.map(([k, l]) => `<button class="qs-btn" data-collect="${k}">${l}</button>`).join('')}
-    </div>
 
     <div class="toolbar">
       <div class="chips seg" id="f-rar">

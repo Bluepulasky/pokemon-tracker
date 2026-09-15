@@ -1212,10 +1212,29 @@ class PokemonRepo:
     def collection_totals(self) -> dict:
         """Unique logical cards vs physical copies: 67 cartas / 94 físicas."""
         return self._one(
-            "SELECT COUNT(DISTINCT card_id) AS unique_cards, "
-            "COALESCE(SUM(quantity), 0) AS physical_cards, "
-            "COUNT(*) AS item_rows FROM collection_items"
-        ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0}
+            """
+            WITH base_names AS (
+                SELECT DISTINCT
+                    CASE
+                        WHEN c.name GLOB "*'s *"
+                            THEN SUBSTR(c.name, INSTR(c.name, "'s ") + 3)
+                        WHEN c.name LIKE 'Dark %'    THEN SUBSTR(c.name, 6)
+                        WHEN c.name LIKE 'Light %'   THEN SUBSTR(c.name, 7)
+                        WHEN c.name LIKE 'Shining %' THEN SUBSTR(c.name, 9)
+                        ELSE c.name
+                    END AS pokemon_name
+                FROM collection_items ci
+                JOIN cards c ON c.id = ci.card_id
+                WHERE c.supertype = 'Pokémon'
+            )
+            SELECT
+                COUNT(DISTINCT card_id)           AS unique_cards,
+                COALESCE(SUM(quantity), 0)        AS physical_cards,
+                COUNT(*)                          AS item_rows,
+                (SELECT COUNT(*) FROM base_names) AS unique_pokemon
+            FROM collection_items
+            """
+        ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0, "unique_pokemon": 0}
 
     # A rank is a judgement about the card, and every printing of it is the
     # same card — same artwork, same power level. Ranking the Base Set Blastoise

@@ -35,6 +35,7 @@ def dashboard():
     return jsonify({
         "unique_cards": totals["unique_cards"],
         "physical_cards": totals["physical_cards"],
+        "unique_pokemon": totals["unique_pokemon"],
         "sets_total": len(progress),
         "sets_complete": sum(1 for p in progress
                              if p["target"] and p.get("complete") == p["target"]),

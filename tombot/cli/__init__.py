@@ -117,6 +117,7 @@ def take_snapshot() -> dict:
         "captured_on": date.today().isoformat(),
         "unique_cards": totals["unique_cards"],
         "physical_cards": totals["physical_cards"],
+        "unique_pokemon": totals["unique_pokemon"],
         "sets_total": len(progress),
         "sets_complete": sum(1 for p in progress
                              if p.get("target") and p["owned"] == p["target"]),
