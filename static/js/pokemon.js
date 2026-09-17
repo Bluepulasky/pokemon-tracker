@@ -220,43 +220,51 @@ async function setDetail(r) {
   view().innerHTML = `
     <div class="set-nav-row">
       <div class="set-nav-side left">
-        ${prev ? `<button class="set-nav" data-set="${prev.id}">‹‹ ${esc(prev.name)}</button>` : ''}
+        ${prev ? `<button class="set-nav" data-set="${prev.id}">
+          <span class="nav-arrow">‹‹</span>
+          <span class="nav-name">${esc(prev.name)}</span>
+        </button>` : ''}
       </div>
       <div class="set-nav-center">
         <h1>${esc(s.name)}</h1>
-        <p class="sub">Coleccionando ${collecting} de ${cards.length} · tenés ${p.owned}
-          · falta ${Math.max(0, collecting - p.owned)}</p>
+        <div class="sub">${p.owned} / ${collecting}</div>
       </div>
       <div class="set-nav-side right">
-        ${next ? `<button class="set-nav" data-set="${next.id}">${esc(next.name)} ››</button>` : ''}
+        ${next ? `<button class="set-nav" data-set="${next.id}">
+          <span class="nav-name">${esc(next.name)}</span>
+          <span class="nav-arrow">››</span>
+        </button>` : ''}
       </div>
     </div>
     ${progressBar(p.owned, collecting)}
 
-    <label class="loose-toggle" title="Una carta de este set cuenta como poseída si tenés cualquier reimpresión suya de otro set.">
-      <input type="checkbox" id="loose-toggle" ${s.loose_completion ? 'checked' : ''}>
-      <span>Cualquier versión cuenta para el progreso <em>(experimental)</em></span>
-    </label>
+    <div class="loose-toggle">
+      <label>
+        <input type="checkbox" id="loose-toggle" ${s.loose_completion ? 'checked' : ''}>
+        <span>Cualquier versión cuenta para el progreso</span>
+      </label>
+    </div>
 
     <div class="toolbar">
       <div class="chips seg" id="f-rar">
-        ${[['all', 'Todas'], ['holo', 'Holo'], ['no-holo', 'No holo']]
-.map(([k, l]) => `<span class="chip${rar === k ? ' on' : ''}" data-rar="${k}">${l}</span>`).join('')}
+        ${[['all','Todas'],['holo','Holo'],['no-holo','No holo']]
+          .map(([k,l]) => `<span class="chip${rar===k?' on':''}" data-rar="${k}">${l}</span>`).join('')}
       </div>
       <div class="chips seg" id="f-own">
-        ${[['all', 'Todas'], ['owned', 'Poseídas'], ['missing', 'Faltantes']]
-.map(([k, l]) => `<span class="chip${own === k ? ' on' : ''}" data-own="${k}">${l}</span>`).join('')}
+        ${[['all','Todas'],['owned','Poseídas'],['missing','Faltantes']]
+          .map(([k,l]) => `<span class="chip${own===k?' on':''}" data-own="${k}">${l}</span>`).join('')}
       </div>
       <div class="chips seg" id="f-col">
-        ${[['all', 'Todas'], ['collecting', 'Coleccionando'], ['not', 'No coleccionando']]
-.map(([k, l]) => `<span class="chip${col === k ? ' on' : ''}" data-col="${k}">${l}</span>`).join('')}
+        ${[['all','Todas'],['collecting','Coleccionando'],['not','No coleccionando']]
+          .map(([k,l]) => `<span class="chip${col===k?' on':''}" data-col="${k}">${l}</span>`).join('')}
       </div>
-      <select id="f-sort">
-        <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
-        <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
-        <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
-      </select>
-      <span class="spacer">${shown.length} cartas</span>
+      <div class="toolbar-bottom">
+        <select id="f-sort">
+          <option value="number"${sort==='number'?' selected':''}>Número</option>
+          <option value="name"${sort==='name'?' selected':''}>Nombre</option>
+          <option value="rarity"${sort==='rarity'?' selected':''}>Rareza</option>
+        </select>
+      </div>
     </div>
 
     <div class="card-grid">${shown.map(cardCheckHtml).join('')}</div>`;
