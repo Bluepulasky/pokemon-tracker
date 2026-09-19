@@ -411,13 +411,20 @@ details { padding: 8px 20px; }
 }
 
 .section-chevron {
-  color: var(--fg-dim);
-  font-size: 18px;
+  display: flex;
+  align-items: center;
   transition: transform .2s ease;
 }
 
-.modal-section[open] .section-chevron {
-  transform: rotate(180deg);
+.section-chevron::before {
+  content: '▶';
+  font-size: 10px;
+  transition: transform .2s ease;
+  display: inline-block;
+}
+
+.modal-section[open] .section-chevron::before {
+  transform: rotate(90deg);
 }
 
 .section-content {
@@ -467,8 +474,6 @@ details { padding: 8px 20px; }
 .variant-card .price small { color: var(--fg-faint); font-weight: 400; }
 
 .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.field label { display: block; font-size: 11px; text-transform: uppercase;
-               letter-spacing: .06em; color: var(--fg-faint); margin-bottom: 5px; }
 .field select, .field input {
   width: 100%; padding: 9px 11px; background: var(--bg-3);
   border: 1px solid var(--line); border-radius: var(--radius-sm); outline: none;
@@ -479,6 +484,84 @@ details { padding: 8px 20px; }
    the total without this (#88). */
 .field-hint { display: block; margin-top: 5px; font-size: 10px; line-height: 1.35;
               color: var(--fg-faint); }
+
+.field-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+.field-row .field {
+  flex: 1;
+  min-width: 0;
+}
+.field label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--fg-faint);
+  margin-bottom: 6px;
+}
+.slider-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.slider-val.good { color: var(--good); }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: var(--line);
+  border-radius: 999px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: -5.5px;
+  border: none;
+  box-shadow: none;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 3px;
+  background: var(--line);
+  border-radius: 999px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  .field-row { flex-direction: column; gap: 12px; }
+}
 
 .btn {
   padding: 10px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm);

@@ -32,7 +32,7 @@ const opts = (list, sel) => list
   .map((o) => `<option value="${esc(o.key)}"${o.key === sel ? ' selected' : ''}>${esc(o.label)}</option>`)
   .join('');
 
-export async function openCard(cardId, opts) {
+export async function openCard(cardId, opts = {}) {
   const { navList = [], navIdx = -1 } = opts;
   const prev = navIdx > 0 ? navList[navIdx - 1] : null;
   const next = navIdx < navList.length - 1 ? navList[navIdx + 1] : null;
@@ -45,6 +45,8 @@ export async function openCard(cardId, opts) {
     [card, items] = await Promise.all([api.card(cardId), api.byCard(cardId, opts)]);
   } catch (e) { toast(e.message, true); closeModal(); return; }
   items = items.data;
+  const totalOwned = items.reduce((a, i) => a + i.quantity, 0);
+  const targetMet = totalOwned >= (Number(card.target) || 1);
 
   root.innerHTML = '';
   root.appendChild(el(`
@@ -63,39 +65,29 @@ export async function openCard(cardId, opts) {
 
         <div class="modal-head">
           <div>
-            <h3>${esc(card.name)}</h3>
+            <h3>${card.market_url
+              ? `<a href="${esc(card.market_url)}" target="_blank" rel="noopener noreferrer"
+                    style="color:inherit;text-decoration:underline">${esc(card.name)}</a>`
+              : esc(card.name)}</h3>
             <div class="meta">
               ${esc(card.set_name)} #${esc(card.number)}${card.rarity ? ' · ' + esc(card.rarity) : ''}
             </div>
             <div class="meta">${esc(card.artist || '')}</div>
 
-            <div class="modal-status">
-              ${items.length
-                ? `<span class="tag" style="color:var(--good)">
-                    En colección · ${items.reduce((a, i) => a + i.quantity, 0)} física(s)
-                  </span>`
-                : '<span class="tag">No poseída</span>'}
-
-              ${card.market_url ? `
-                <a class="mkm"
-                  href="${esc(card.market_url)}"
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  Ver en Cardmarket ↗
-                </a>` : ''}
-            </div>
-
-            <div class="field card-rank">
-              <label>Hall of Fame</label>
-              ${rankRow(card.rating || 0)}
-            </div>
-
-            <div class="field card-target">
-              <label>Objetivo de copias</label>
-              <input type="number"
-                    min="1"
-                    inputmode="numeric"
-                    value="${Number(card.target) || 1}">
+            <div class="field-row">
+              <div class="field card-rank">
+                <label>Hall of Fame <span class="slider-val" id="rank-val">${card.rating || 0}</span></label>
+                <input type="range" min="0" max="8" step="1" value="${card.rating || 0}" id="rank-slider">
+              </div>
+              <div class="field card-target">
+                <label>
+                  Objetivo de copias
+                  <span class="slider-val${targetMet ? ' good' : ''}" id="target-val">
+                    ${totalOwned} / ${Number(card.target) || 1}
+                  </span>
+                </label>
+                <input type="range" min="0" max="8" step="1" value="${Number(card.target) || 1}" id="target-slider">
+              </div>
             </div>
           </div>
 
@@ -105,7 +97,7 @@ export async function openCard(cardId, opts) {
 
         <details class="modal-section variants-section" ${items.length ? 'open' : ''}>
           <summary>
-            <span class="section-chevron">⌄</span>
+            <span class="section-chevron"></span>
             Variantes en colección
           </summary>
 
@@ -118,7 +110,7 @@ export async function openCard(cardId, opts) {
 
         <details class="modal-section add-section" ${items.length ? '' : 'open'}>
           <summary>
-            <span class="section-chevron">⌄</span>
+          <span class="section-chevron"></span>
             ${items.length ? 'Añadir otra' : 'Registrar carta'}
           </summary>
 
@@ -136,6 +128,20 @@ export async function openCard(cardId, opts) {
   wireModalSections(root);
   wireCardRank(root, card);
   wireCardTarget(root, card);
+
+  // rank slider
+  const rankSlider = root.querySelector('#rank-slider');
+  const rankVal = root.querySelector('#rank-val');
+  rankSlider.oninput = () => { rankVal.textContent = rankSlider.value; };
+
+  // target slider  
+  const targetSlider = root.querySelector('#target-slider');
+  const targetVal = root.querySelector('#target-val');
+  targetSlider.oninput = () => {
+    const t = Number(targetSlider.value);
+    targetVal.textContent = `${totalOwned} / ${t}`;
+    targetVal.classList.toggle('good', totalOwned >= t);
+  };
   wireForm(root, card);
   wireVariants(root, cardId);
   if (prev) root.querySelector('.modal-nav.left').onclick =
@@ -243,46 +249,36 @@ function addForm(card) {
 }
 
 function wireModalSections(root) {
-  const sections = root.querySelectorAll('.modal-section');
-
-  sections.forEach((section) => {
-    section.addEventListener('toggle', () => {
-      if (!section.open) return;
-
-      sections.forEach((other) => {
-        if (other !== section) other.open = false;
-      });
-    });
-  });
-}
-
-/* The rank belongs to the card, so there is one picker for the whole modal.
-   It saves on click: ranking is the thing you do repeatedly while going through
-   a binder, and a two-step edit would be wrong for it. */
-function wireCardRank(root, card) {
-  const box = root.querySelector('.card-rank');
-  if (!box) return;
-  box.querySelectorAll('.rank').forEach((r) => {
-    r.onclick = async () => {
-      const value = Number(r.dataset.rank);
-      box.querySelectorAll('.rank').forEach((x) => x.classList.remove('on'));
-      r.classList.add('on');
-      try {
-        await api.rateCard(card.id, value);
-        onChange();
-      } catch (e) { toast(e.message, true); }
+  root.querySelectorAll('.modal-section summary').forEach((summary) => {
+    summary.onclick = (e) => {
+      e.preventDefault();
+      const section = summary.closest('.modal-section');
+      const isOpen = section.hasAttribute('open');
+      // cerramos todas primero
+      root.querySelectorAll('.modal-section').forEach((s) => s.removeAttribute('open'));
+      // si estaba cerrada, la abrimos
+      if (!isOpen) section.setAttribute('open', '');
     };
   });
 }
 
-/* The target belongs to the card, like the rank. Saved on blur rather than on
-   every keystroke, since it is a number you type rather than a value you pick. */
+function wireCardRank(root, card) {
+  const slider = root.querySelector('#rank-slider');
+  if (!slider) return;
+  slider.onchange = async () => {
+    const value = Number(slider.value);
+    try {
+      await api.rateCard(card.id, value);
+      onChange();
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
 function wireCardTarget(root, card) {
-  const input = root.querySelector('.card-target input');
-  if (!input) return;
-  input.onchange = async () => {
-    const value = Math.max(1, Number(input.value) || 1);
-    input.value = value;
+  const slider = root.querySelector('#target-slider');
+  if (!slider) return;
+  slider.onchange = async () => {
+    const value = Math.max(1, Number(slider.value));
     try {
       await api.setTarget(card.id, value);
       onChange();

@@ -164,10 +164,10 @@ async function sets() {
 
   view().innerHTML = `
     <h1>Sets</h1>
-    <p class="sub">${data.length} sets personalizados ·
-       ${data.reduce((a, s) => a + s.owned, 0)} / ${data.reduce((a, s) => a + s.target, 0)} cartas</p>
+    <div class="sub">${data.length} sets personalizados ·
+       ${data.reduce((a, s) => a + s.owned, 0)} / ${data.reduce((a, s) => a + s.target, 0)} cartas</div>
     ${Object.entries(groups).map(([g, list]) => `
-      <h2>${esc(g)}</h2>
+      <h2  style="margin-top: 12px;">${esc(g)}</h2>
       <div class="set-grid">${list.map((s) => setCardHtml({
         ...s, missing: s.target - s.owned })).join('')}</div>`).join('')}`;
 
