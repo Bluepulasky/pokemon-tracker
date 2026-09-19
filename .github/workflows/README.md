@@ -1,6 +1,6 @@
 # CI
 
-Two jobs, both on every pull request and every push to `main`.
+Three jobs, all on every pull request and every push to `main`.
 
 ## `tests`
 
@@ -14,6 +14,13 @@ Two jobs, both on every pull request and every push to `main`.
 The suite is hermetic — no network, no clock, no shared fixtures — so a failure
 is a real regression rather than a flake.
 
+## `frontend`
+
+`npm ci`, then `npm run check` (TypeScript, ESLint, Prettier) and `npm run build`
+in `frontend/`, on the Node version the Dockerfile's frontend stage uses. A type
+error, a lint error or unformatted code fails the job; so does a build that does
+not compile.
+
 ## `image`
 
 Covers the deployment surface the tests cannot reach:
@@ -24,6 +31,8 @@ Covers the deployment surface the tests cannot reach:
 - `scripts/entrypoint.sh` is executable — losing that bit breaks every container
   and nothing else would notice
 - the container boots and `/api/healthz` reports `ok: true`
+- `/` serves the React app — the image compiles it in a Node stage, and without
+  that output Flask answers 503 with build instructions instead of a page
 
 The health check asserts on the **payload**, not the status code. A booting
 container answers 200 well before the schema exists.

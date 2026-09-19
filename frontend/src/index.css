@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+/* Design tokens. Every colour, radius and shadow a component uses comes from
+   here, so utilities read as `bg-surface-2` / `text-fg-dim` / `border-line`. */
+@theme {
+  --color-surface: #0e1013;
+  --color-surface-2: #161a20;
+  --color-surface-3: #1e242c;
+  --color-line: #2a323c;
+  --color-fg: #e8edf4;
+  --color-fg-dim: #8b97a8;
+  --color-fg-faint: #5b6675;
+  --color-accent: #f5c506;
+  --color-accent-ink: #1a1400;
+  --color-accent-2: #3b6cf6;
+  --color-good: #3ecf8e;
+  --color-warn: #f5a524;
+  --color-bad: #f0526d;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --shadow-pop: 0 8px 30px rgb(0 0 0 / 0.45);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --aspect-card: 245 / 342;
+}
+
+@layer base {
+  body {
+    @apply bg-surface font-sans text-[15px] leading-normal text-fg antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  button:not(:disabled),
+  [role='button'],
+  summary {
+    cursor: pointer;
+  }
+
+  code {
+    @apply font-mono text-[0.9em];
+  }
+
+  /* Range inputs have no utility-level hooks for the track and thumb. */
+  input[type='range'] {
+    @apply m-0 h-6 w-full cursor-pointer appearance-none bg-transparent p-0 outline-none;
+  }
+  input[type='range']::-webkit-slider-runnable-track {
+    @apply h-0.75 rounded-full bg-line;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    @apply mt-[-5.5px] size-3.5 appearance-none rounded-full border-0 bg-accent;
+  }
+  input[type='range']::-moz-range-track {
+    @apply h-0.75 rounded-full bg-line;
+  }
+  input[type='range']::-moz-range-thumb {
+    @apply size-3.5 rounded-full border-0 bg-accent;
+  }
+}
+
+/* Diagonal hatching: over the art of a card that is not owned, and as the body
+   of a card that has no art at all. */
+@utility hatch-overlay {
+  background: repeating-linear-gradient(
+    45deg,
+    rgb(40 47 58 / 0.46) 0,
+    rgb(40 47 58 / 0.46) 9px,
+    rgb(70 80 95 / 0.46) 9px,
+    rgb(70 80 95 / 0.46) 18px
+  );
+}
+@utility hatch-solid {
+  background: repeating-linear-gradient(45deg, #39414e, #39414e 9px, #414a58 9px, #414a58 18px);
+}

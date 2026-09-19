@@ -8,6 +8,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Installed and built inside the image's frontend stage, never taken from the host.
+frontend/node_modules/
+frontend/dist/
+
 # Runtime state: bind-mounted at run time, must never be in the image.
 data/
 media/

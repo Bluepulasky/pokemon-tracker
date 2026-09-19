@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 from .config import Config
 from .services.repository import PokemonRepo
@@ -19,12 +19,22 @@ class ApiError(Exception):
         self.message, self.code, self.status = message, code, status
 
 
+FRONTEND_MISSING = """\
+The frontend has not been built: {path}/index.html does not exist.
+
+  make frontend          # or: cd frontend && npm ci && npm run build
+
+`make run`, `make dev` and the Docker image all build it for you.
+"""
+
+
 def create_app(config: type[Config] = Config) -> Flask:
     logging.basicConfig(level=logging.DEBUG if config.DEBUG else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     config.ensure_dirs()
 
-    app = Flask(__name__, static_folder="../static", template_folder="../templates")
+    frontend_dist = getattr(config, "FRONTEND_DIST", Config.FRONTEND_DIST)
+    app = Flask(__name__, static_folder=str(frontend_dist), static_url_path="/static")
     app.config.from_object(config)
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 
@@ -80,7 +90,7 @@ def create_app(config: type[Config] = Config) -> Flask:
     def _not_found(_e):
         if request.path.startswith("/api/") or request.path.startswith("/media/"):
             return jsonify({"error": {"code": "not_found", "message": "no encontrado"}}), 404
-        return render_template("index.html")      # SPA fallback for hash-less deep links
+        return spa_index()                        # SPA fallback for hash-less deep links
 
     @app.errorhandler(413)
     def _too_large(_e):
@@ -105,8 +115,19 @@ def create_app(config: type[Config] = Config) -> Flask:
     def media(filename):
         return send_from_directory(config.MEDIA_DIR, filename, max_age=86400)
 
+    def spa_index():
+        """The React app's entry page, or a 503 saying how to build it."""
+        if not (frontend_dist / "index.html").is_file():
+            return (FRONTEND_MISSING.format(path=frontend_dist), 503,
+                    {"Content-Type": "text/plain; charset=utf-8"})
+        # Never cached: it names the hashed asset files, so a stale copy keeps a
+        # browser on the previous build. The assets themselves cache freely.
+        response = send_from_directory(frontend_dist, "index.html", max_age=0)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.route("/")
     def index():
-        return render_template("index.html")
+        return spa_index()
 
     return app
