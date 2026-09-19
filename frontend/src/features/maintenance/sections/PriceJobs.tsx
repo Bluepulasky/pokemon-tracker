@@ -12,9 +12,9 @@ import { useApiMutation } from '@/hooks/useApiMutation';
 export function PriceJobs() {
   const client = useQueryClient();
 
-  const refresh = useApiMutation(api.refreshPricesAsync, {
-    onDone: (job) => client.setQueryData(queryKeys.jobStatus, job),
-  });
+  // Starting the job invalidates the cached reads, the job status among them,
+  // so the Estado panel picks the run up and polls it from there.
+  const refresh = useApiMutation(api.refreshPricesAsync);
   const sync = useApiMutation(api.syncCatalog, {
     success: (result) =>
       `Catálogo sincronizado: ${result.synced} sets. Ya podés buscarlos sin gastar consultas.`,

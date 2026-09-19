@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { api } from '@/api/client';
 import { queryKeys } from '@/api/queryKeys';
@@ -62,6 +62,9 @@ function CardModalBody({ state }: { state: OpenCardState }) {
     queryFn: () => api.itemsByCard(cardId, reprints),
   });
 
+  // Bumped after a copy is added, so the accordion remounts showing the copies.
+  const [addedCount, setAddedCount] = useState(0);
+
   const error = card.error ?? items.error;
   useEffect(() => {
     if (!error) return;
@@ -81,6 +84,7 @@ function CardModalBody({ state }: { state: OpenCardState }) {
       <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto">
         <CardHeader card={card.data} copies={copies} onClose={close} />
         <Accordion
+          key={addedCount}
           defaultOpen={hasCopies ? 'copies' : 'add'}
           sections={[
             {
@@ -103,6 +107,7 @@ function CardModalBody({ state }: { state: OpenCardState }) {
                   onCancel={close}
                   onAdded={(storedUnder) => {
                     if (storedUnder !== cardId) openCard(storedUnder);
+                    else setAddedCount((count) => count + 1);
                   }}
                 />
               ),

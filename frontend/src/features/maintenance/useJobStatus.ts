@@ -17,6 +17,8 @@ export function useJobStatus() {
     queryKey: queryKeys.jobStatus,
     queryFn: api.jobStatus,
     refetchInterval: (latest) => (latest.state.data?.status === 'running' ? POLL_MS : false),
+    // A job outlasts the user's attention: keep polling with the tab in the background.
+    refetchIntervalInBackground: true,
   });
 
   const status = query.data?.status;
