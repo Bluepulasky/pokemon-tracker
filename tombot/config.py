@@ -108,7 +108,7 @@ class Config:
 
     # --- scheduler ---------------------------------------------------------
     SCHEDULER_ENABLED = _bool("SCHEDULER_ENABLED", False)
-    SCHEDULER_CRON_DAY = int(os.environ.get("SCHEDULER_CRON_DAY", "1"))
+    SCHEDULER_CRON_DAY = os.environ.get("SCHEDULER_CRON_DAY", "sun")
     SCHEDULER_CRON_HOUR = int(os.environ.get("SCHEDULER_CRON_HOUR", "4"))
 
     @classmethod

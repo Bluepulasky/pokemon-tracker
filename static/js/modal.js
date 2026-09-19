@@ -33,6 +33,9 @@ const opts = (list, sel) => list
   .join('');
 
 export async function openCard(cardId, opts) {
+  const { navList = [], navIdx = -1 } = opts;
+  const prev = navIdx > 0 ? navList[navIdx - 1] : null;
+  const next = navIdx < navList.length - 1 ? navList[navIdx + 1] : null;
   const root = document.getElementById('modal-root');
   root.hidden = false;
   root.innerHTML = '<div class="modal"><div class="loading">Cargando…</div></div>';
@@ -49,9 +52,11 @@ export async function openCard(cardId, opts) {
     <div class="modal-layout">
 
       <div class="modal-card-art">
-        <img src="${esc(cardArt(card))}"
-            alt="${esc(card.name)}"
-            loading="lazy">
+        <img src="${esc(cardArt(card))}" alt="${esc(card.name)}" loading="lazy">
+        <div class="modal-card-nav">
+          ${prev ? `<button class="modal-nav left">‹‹ #${esc(prev.number)} ${esc(prev.name)}</button>` : '<span></span>'}
+          ${next ? `<button class="modal-nav right">#${esc(next.number)} ${esc(next.name)} ››</button>` : '<span></span>'}
+        </div>
       </div>
 
       <div class="modal-content">
@@ -133,6 +138,10 @@ export async function openCard(cardId, opts) {
   wireCardTarget(root, card);
   wireForm(root, card);
   wireVariants(root, cardId);
+  if (prev) root.querySelector('.modal-nav.left').onclick =
+    () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
+  if (next) root.querySelector('.modal-nav.right').onclick =
+    () => openCard(next.id, { ...opts, navIdx: navIdx + 1 });
 }
 
 // CAMBIO 1: añadir data-first-ed, data-price-unit-base, data-price-qty,

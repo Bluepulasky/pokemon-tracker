@@ -64,7 +64,11 @@ async function render(keepScroll = false) {
 async function dashboard() {
   const [d, hist] = await Promise.all([api.dashboard(), api.history()]);
   const v = d.value;
-  const points = hist.data.map((s) => ({ label: s.captured_on.slice(5), value: s.value_eur }));
+  const points = hist.data.map((s) => ({
+    label: s.captured_on.slice(5),
+    year: s.captured_on.slice(0, 4),
+    value: s.value_eur,
+  }));
 
   view().innerHTML = `
     <h1>Mi colección</h1>
@@ -77,15 +81,17 @@ async function dashboard() {
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
       <div class="stat"><div class="k">Pokémon únicos</div><div class="v">${d.unique_pokemon}</div></div>
       <div class="stat"><div class="k">Sets completos</div>
-        <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div></div>
-      <div class="stat"><div class="k">Completitud (únicas)</div>
+        <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div>
+        ${progressBar(d.sets_complete, d.sets_total)}
+        </div>
+      <div class="stat"><div class="k">Progreso (únicas)</div>
         <div class="v">${pct(d.completion_pct)}</div>
         ${progressBar(d.owned_cards, d.target_cards)}
-        <div class="note">${d.owned_cards} / ${d.target_cards} cartas distintas</div></div>
-      <div class="stat"><div class="k">Completitud (copias)</div>
+        </div>
+      <div class="stat"><div class="k">Progreso (copias)</div>
         <div class="v">${pct(d.copies_pct)}</div>
         ${progressBar(d.copies_held, d.copies_target)}
-        <div class="note">${d.copies_held} / ${d.copies_target} copias objetivo</div></div>
+        </div>
     </div>
 
     <h2 style="margin-top: 16px;">Evolución del valor</h2>
@@ -114,7 +120,7 @@ async function dashboard() {
       <span class="note" style="align-self:center">
         Última actualización: ${esc(d.last_price_refresh || 'nunca')}</span>
     </div>`;
-
+  lineChart.init();
   wireCardClicks();
   view().querySelectorAll('[data-set]').forEach((n) => {
     n.onclick = () => { location.hash = `#/set/${n.dataset.set}`; };
@@ -322,7 +328,7 @@ async function setDetail(r) {
 function cardCheckHtml(c) {
   const art = cardArt(c);
   return `<div class="card${c.owned ? '' : ' missing'}${c.collecting ? '' : ' not-collecting'}"
-       data-card="${esc(c.card_id)}">
+     data-card="${esc(c.card_id)}" data-number="${esc(c.number)}" data-name="${esc(c.label)}">
     <div class="art">
       ${art ? `<img src="${esc(art)}" alt="${esc(c.label)}" loading="lazy">`
             : placeholder(c.number, c.official_set_id)}
@@ -334,8 +340,6 @@ function cardCheckHtml(c) {
         ${c.collecting ? '★' : '☆'}
       </button>
     </div>
-    <div class="meta"><span class="name">${esc(c.label)}</span>
-      <span class="num">#${esc(c.number)}</span></div>
   </div>`;
 }
 
@@ -457,11 +461,10 @@ async function collection(r) {
         { key: 'quantity', label: 'Por cantidad' }, { key: 'rating', label: 'Por Hall of Fame' },
         { key: 'recent', label: 'Más recientes' },
       ], f.sort)}
-      <span class="spacer">${res.data.length} de ${res.total}</span>
     </div>
 
     ${res.data.length
-      ? `<div class="card-grid">${res.data.map(itemHtml).join('')}</div>`
+      ? `<div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>`
       : '<div class="empty">No hay cartas con estos filtros.</div>'}`;
 
   const apply = (overrides = {}) => {
@@ -524,7 +527,8 @@ function itemHtml(i) {
   const grouped = (i.group_card_ids?.length ?? 0) > 1;
   const price = v.total != null ? `${v.partial ? '≥' : ''}${eur(v.total)}` : '';
   return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}"
-       ${grouped ? 'data-reprints="1"' : ''}>
+     data-name="${esc(i.name || i.label || '')}" data-number="${esc(i.number || '')}"
+     ${grouped ? 'data-reprints="1"' : ''}>
     <div class="art">
       ${src ? `<img src="${esc(src)}" alt="${esc(i.name || i.label)}" loading="lazy">`
             : placeholder(i.number, i.official_set_id)}
@@ -1048,11 +1052,20 @@ async function missing(r) {
 
 /* ----------------------------------------------------------------- glue */
 function wireCardClicks() {
-  view().querySelectorAll('[data-card]').forEach((n) => {
-    // A tile that collapsed reprints opens a modal listing them, or it would
-    // read ×2 and then show one copy (#78).
+  const tiles = [...view().querySelectorAll('[data-card]')];
+  const navList = tiles.map((n) => ({
+    id: n.dataset.card,
+    name: n.dataset.name || '',
+    number: n.dataset.number || '',
+  }));
+
+  tiles.forEach((n, idx) => {
     n.onclick = () => {
-      if (n.dataset.card) openCard(n.dataset.card, { reprints: !!n.dataset.reprints });
+      if (n.dataset.card) openCard(n.dataset.card, {
+        reprints: !!n.dataset.reprints,
+        navList,
+        navIdx: idx,
+      });
     };
   });
 }

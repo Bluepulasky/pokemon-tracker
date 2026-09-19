@@ -58,29 +58,68 @@ export function progressBar(owned, target) {
   return `<div class="bar${p >= 100 ? ' good' : ''}"><i style="width:${Math.min(100, p)}%"></i></div>`;
 }
 
-/* Minimal inline SVG line chart — no charting library, no external requests. */
-export function lineChart(points, { height = 180, format = eur } = {}) {
+export function lineChart(points, { height = 200, format = eur } = {}) {
   if (!points.length) return '<div class="empty">Sin histórico todavía.</div>';
-  if (points.length === 1) points = [points[0], points[0]];
-  const W = 600, H = height, P = 26;
-  const ys = points.map((p) => p.value);
-  const min = Math.min(...ys), max = Math.max(...ys);
-  const span = max - min;
-  const x = (i) => P + (i * (W - P * 2)) / (points.length - 1);
-  // A flat series (or a single snapshot) would otherwise sit on the axis and read
-  // as zero; centre it instead so the value label matches what is drawn.
-  const y = (v) => span ? H - P - ((v - min) / span) * (H - P * 2) : H / 2;
-  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const area = `${line} L${x(points.length - 1).toFixed(1)},${H - P} L${x(0).toFixed(1)},${H - P} Z`;
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <defs><linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stop-color="#ffcb05" stop-opacity=".28"/>
-      <stop offset="100%" stop-color="#ffcb05" stop-opacity="0"/>
-    </linearGradient></defs>
-    <line class="axis" x1="${P}" y1="${H - P}" x2="${W - P}" y2="${H - P}"/>
-    <path class="area" d="${area}"/><path class="line" d="${line}"/>
-    <text x="${P}" y="14">${esc(format(max))}</text>
-    <text x="${P}" y="${H - 8}">${esc(points[0].label)}</text>
-    <text x="${W - P}" y="${H - 8}" text-anchor="end">${esc(points[points.length - 1].label)}</text>
-  </svg>`;
+  const id = 'chart-' + Math.random().toString(36).slice(2);
+  // Guardamos para inicializar después del render
+  lineChart._pending = lineChart._pending || {};
+  lineChart._pending[id] = { points, format };
+  return `<div style="height:${height}px"><canvas id="${id}"></canvas></div>`;
 }
+
+lineChart.init = function () {
+  for (const [id, { points: pts, format }] of Object.entries(lineChart._pending || {})) {
+    const canvas = document.getElementById(id);
+    if (!canvas) continue;
+    const fmt = (v) => '€' + Math.round(v).toLocaleString('es-ES');
+    const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const fmtLabel = (s) => {
+      const [m, d] = s.split('-');
+      return `${d} ${MESES[parseInt(m, 10) - 1]}`;
+    };
+    const fmtAxis = (val, idx) => {
+      const [m] = pts[idx].label.split('-');
+      return `${MESES[parseInt(m, 10) - 1]} ${pts[idx].year}`;
+    };
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: pts.map((p) => p.label),
+        datasets: [{
+          data: pts.map((p) => p.value),
+          borderColor: '#ffcb05',
+          backgroundColor: 'rgba(255,203,5,0.15)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#ffcb05',
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => fmtLabel(items[0].label),
+              label: (ctx) => fmt(ctx.parsed.y),
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: '#888', callback: fmtAxis },
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: '#888', callback: (v) => fmt(v) },
+          },
+        },
+      },
+    });
+    delete lineChart._pending[id];
+  }
+};

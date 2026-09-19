@@ -154,12 +154,14 @@ def scheduler():
                 click.secho(f"[scheduler] run failed: {e}", fg="red")
 
     sched = BlockingScheduler(timezone=os.environ.get("TZ", "UTC"))
-    trigger = CronTrigger(day=cfg.SCHEDULER_CRON_DAY, hour=cfg.SCHEDULER_CRON_HOUR,
-                          minute=0)
-    sched.add_job(job, trigger, id="monthly", max_instances=1,
-                  coalesce=True, misfire_grace_time=6 * 3600)
-    click.echo(f"[scheduler] monthly job: day {cfg.SCHEDULER_CRON_DAY} "
-               f"at {cfg.SCHEDULER_CRON_HOUR:02d}:00 ({sched.timezone})")
+    trigger = CronTrigger(day_of_week=cfg.SCHEDULER_CRON_DAY,
+                        hour=cfg.SCHEDULER_CRON_HOUR,
+                        timezone=os.environ.get("TZ", "UTC"))
+    sched.add_job(job, trigger, id="weekly", max_instances=1,
+                misfire_grace_time=3600)
+    click.echo(f"[scheduler] weekly job: {cfg.SCHEDULER_CRON_DAY} "
+            f"at {cfg.SCHEDULER_CRON_HOUR:02d}:00 ({sched.timezone})")
+    sched.start()
 
     if _bool_env("RUN_ON_START"):
         click.echo("[scheduler] RUN_ON_START set — running once now")

@@ -8,7 +8,7 @@
   --fg: #e8edf4;
   --fg-dim: #8b97a8;
   --fg-faint: #5b6675;
-  --accent: #ffcb05;          /* Pokémon yellow */
+  --accent: #f5c506;          /* Pokémon yellow */
   --accent-2: #3b6cf6;
   --good: #3ecf8e;
   --warn: #f5a524;
@@ -90,13 +90,13 @@ h2 { font-size: 16px; letter-spacing: -.01em; margin: 0 0 12px; color: var(--fg-
 details { padding: 8px 20px; }
 
 /* ------------------------------------------------------------------ stats */
-.stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-top: 10px;}
 .stat {
   background: var(--bg-2); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 16px;
 }
 .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-faint); }
-.stat .v { font-size: 26px; font-weight: 650; letter-spacing: -.03em; margin-top: 6px; }
+.stat .v { font-size: 25px; font-weight: 650; letter-spacing: -.03em; margin-top: 4px; }
 .stat .v small { font-size: 13px; font-weight: 500; color: var(--fg-dim); letter-spacing: 0; }
 .stat.accent .v { color: var(--accent); }
 
@@ -134,7 +134,7 @@ details { padding: 8px 20px; }
 .hidden-row .h-name { flex: 1; font-weight: 600; }
 /* The set's own logo, top-left, with the % floated to its right. Set logos are
    wide transparent banners, so contain + left align keeps them tidy. */
-.set-card .set-logo { height: 34px; max-width: 60%; object-fit: contain;
+.set-card .set-logo { height: 25px; max-width: 60%; object-fit: contain;
                       object-position: left center; display: block; margin-bottom: 8px; }
 .set-card .name { font-weight: 600; margin-bottom: 2px; }
 .set-card .count { color: var(--fg-dim); font-size: 13px; }
@@ -154,7 +154,14 @@ details { padding: 8px 20px; }
 
 .card-grid {
   display: grid; gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 14vw, 150px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+@media (max-width: 600px) {
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+.collection-grid .card .art { border-color: var(--accent); border-width: 4px; }
+.collection-grid .card .art img {
+  transform: scale(1.03);
 }
 .card {
   position: relative; cursor: pointer; border-radius: var(--radius-sm);
@@ -255,6 +262,7 @@ details { padding: 8px 20px; }
   min-width: 0;
   min-height: 0;
   display: flex;
+  flex-direction: column;    /* ← esto */
   align-items: center;
   justify-content: center;
   padding: 28px;
@@ -269,6 +277,37 @@ details { padding: 8px 20px; }
   max-width: 90%;
   object-fit: contain;
   border-radius: var(--radius);
+}
+
+
+.modal-card-nav {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.modal-nav {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0px 35px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48%;
+}
+
+.modal-nav.right {
+  text-align: right;
+}
+
+.modal-nav:hover { color: var(--text); }
+
+@media (max-width: 600px) {
+  .modal-card-nav { display: none; }
 }
 
 /* ----------------------------------------------------------- right column */
@@ -412,10 +451,10 @@ details { padding: 8px 20px; }
 .variant-card .photos img {
   width: 100%; flex: none; aspect-ratio: 245/342; object-fit: cover;
   border-radius: var(--radius-sm); scroll-snap-align: center; cursor: pointer;
-  border: 2px solid transparent; transition: border-color .15s;
+  border: 3px solid transparent; transition: border-color .15s;
 }
 .variant-card .photos img:hover { border-color: var(--fg-faint); }
-.variant-card .photos img.primary { border-color: var(--accent); }
+.variant-card .photos img.primary { border-color: var(--accent); border-width: 3px; }
 .variant-card .photos.empty { background: none; }
 .photo-empty {
   width: 100%; aspect-ratio: 245/342; display: flex; flex-direction: column;
@@ -464,7 +503,7 @@ details { padding: 8px 20px; }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
-        background: var(--bg-3); cursor: pointer; font-size: 13px; }
+        background: var(--bg-3); cursor: pointer; }
 .chip.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
 
 @media (max-width: 700px) {
@@ -497,14 +536,20 @@ details { padding: 8px 20px; }
     flex: 0 0 auto;
     min-height: 0;
     height: min(46vh, 440px);
-    padding: 20px 16px;
+    padding: 16px 16px 8px;   /* menos padding abajo para la nav */
     border-right: 0;
     border-bottom: 1px solid var(--line);
+
+    /* nuevo */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .modal-card-art img {
+    flex: 1;                  /* ocupa lo que sobra después de la nav */
+    min-height: 0;            /* flex necesita esto para no desbordar */
     width: auto;
-    height: 100%;
     max-width: 100%;
     object-fit: contain;
     border-radius: var(--radius);
@@ -695,7 +740,7 @@ details { padding: 8px 20px; }
 
 /* ------------------------------------------------------------- missing */
 .missing-list { display: grid; gap: 6px; }
-.missing-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+.missing-row { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
                background: var(--bg-2); border: 1px solid var(--line);
                border-radius: var(--radius-sm); cursor: pointer; }
 .missing-row:hover { border-color: var(--accent-2); }
@@ -704,11 +749,12 @@ details { padding: 8px 20px; }
 .missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
 
 /* --------------------------------------------------------------- chart */
-.chart { width: 100%; height: 180px; }
-.chart path.line { fill: none; stroke: var(--accent); stroke-width: 2; }
-.chart path.area { fill: url(#grad); stroke: none; }
-.chart .axis { stroke: var(--line); stroke-width: 1; }
-.chart text { fill: var(--fg-faint); font-size: 10px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .area { fill: url(#grad); }
+.chart .line { fill: none; stroke: #ffcb05; stroke-width: 2; stroke-linejoin: round; }
+.chart .axis-label { fill: var(--fg-dim); font-size: 11px; }
+.chart .value-tip { fill: #ffcb05; font-size: 11px; font-weight: 600; }
 
 /* --------------------------------------------------------------- toast */
 .toast {
@@ -740,7 +786,15 @@ details { padding: 8px 20px; }
   .modal-root { padding: 0; align-items: flex-end; }
   .modal { max-height: 92vh; border-radius: 16px 16px 0 0; }
   .modal-head .art { width: 92px; }
-  .stat .v { font-size: 22px; }
+  .stat-grid {
+    grid-template-columns: repeat(12, 1fr);
+    gap: 8px;
+  }
+  .stat { grid-column: span 3; }           /* fila 1: 4 × 3 = 12 */
+  .stat:nth-child(n+5) { grid-column: span 4; } /* fila 2: 3 × 4 = 12 */
+  .stat { padding: 10px 8px; }
+  .stat .v { font-size: 14px; }
+  .stat .k { font-size: 8px; }
 }
 
 /* ---- price source ------------------------------------------------------ */
