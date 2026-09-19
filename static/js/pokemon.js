@@ -7,6 +7,8 @@ import { cardArt, el, esc, eur, hofBadge, lineChart, pct, photoUrl, placeholder,
 
 const view = () => document.getElementById('view');
 let META = null;
+let _collGrid = null;
+let _collLoaded = 0;
 
 /* ------------------------------------------------------------------ boot */
 async function boot() {
@@ -64,6 +66,7 @@ async function render(keepScroll = false) {
 async function dashboard() {
   const [d, hist] = await Promise.all([api.dashboard(), api.history()]);
   const v = d.value;
+  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
   const points = hist.data.map((s) => ({
     label: s.captured_on.slice(5),
     year: s.captured_on.slice(0, 4),
@@ -108,7 +111,7 @@ async function dashboard() {
     <div class="missing-list">${
       d.top_value.length ? d.top_value.map((t) => `
         <div class="missing-row" data-card="${esc(t.card_id)}">
-          <span class="n">#${esc(t.number)}</span>
+          <span class="n">${esc(shortId(t.card_id))}</span>
           <span>${esc(t.name)}</span>
           <span class="tag">${esc(t.variant)} · ${esc(t.condition)} · ×${t.quantity}</span>
           <span class="r">${esc(eur(t.value))}</span>
@@ -378,6 +381,9 @@ function slotHtml(slot) {
 
 /* ------------------------------------------------------------ collection */
 async function collection(r) {
+  const page = Number(r.params.get('page') || 1);
+  const isAppend = page > 1 && _collGrid;
+
   const f = {
     set: r.params.get('set') || '',
     condition: r.params.get('condition') || '',
@@ -392,20 +398,35 @@ async function collection(r) {
     edition: r.params.get('edition') || '',
     min_quantity: r.params.get('min_quantity') || '',
     sort: r.params.get('sort') || 'set',
-    page_size: 240,
+    page_size: 150,
+    page,
   };
-  // Owned is the default: the inventory is what you reach for most often, and
-  // All pulls every slot in the personal sets.
   const showAll = r.params.get('show_all') === '1';
   if (showAll) f.show_all = '1';
-  // One entry per card instead of one per printing (#76). Only meaningful in
-  // "Todas las del set": "En colección" already shows a card once, because the
-  // copies you own of a card are that card (#78), so the toggle is not offered
-  // there rather than sitting on screen doing nothing.
   const uniqueReprints = showAll && r.params.get('unique_reprints') === '1';
   if (uniqueReprints) f.unique_reprints = '1';
+
   const [res, setList] = await Promise.all([api.collection(f), api.sets()]);
   const t = res.totals;
+
+  if (isAppend) {
+    // solo appendeamos cards al grid existente
+    _collGrid.insertAdjacentHTML('beforeend', res.data.map(itemHtml).join(''));
+    _collLoaded += res.data.length;
+    const wrap = view().querySelector('#load-more-wrap');
+    if (_collLoaded >= res.total) {
+      wrap?.remove();
+    } else {
+      wrap.querySelector('#load-more').textContent =
+        `Mostrando ${_collLoaded} de ${res.total} - Cargar más`;
+    }
+    wireCardClicks();
+    return;
+  }
+
+  // render completo
+  _collGrid = null;
+  _collLoaded = res.data.length;
 
   const sel = (id, label, options, cur) => `
     <select id="${id}"><option value="">${label}</option>${options.map((o) =>
@@ -415,10 +436,8 @@ async function collection(r) {
   view().innerHTML = `
     <h1>Cartas</h1>
     <p class="sub">${showAll
-      ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${
-          t.physical_cards} físicas`
-      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${
-          t.item_rows} registros`}</p>
+      ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${t.physical_cards} físicas`
+      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${t.item_rows} registros`}</p>
 
     <div class="mode-toggles">
       <div class="mode-toggle">
@@ -432,8 +451,7 @@ async function collection(r) {
       </div>
       ${showAll ? `<div class="mode-toggle">
         ${[['', 'Todas las versiones'], ['1', 'Reprints únicos']]
-          .map(([v, label]) => `<span class="chip${
-            (uniqueReprints ? '1' : '') === v ? ' on' : ''}"
+          .map(([v, label]) => `<span class="chip${(uniqueReprints ? '1' : '') === v ? ' on' : ''}"
             data-uniq="${v}" title="${v
               ? 'Una sola entrada por carta: la impresión más vieja de cada una'
               : 'Cada reimpresión por separado'}">${label}</span>`).join('')}
@@ -464,10 +482,17 @@ async function collection(r) {
     </div>
 
     ${res.data.length
-      ? `<div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>`
+      ? `<div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>
+         ${res.total > res.data.length ? `<div id="load-more-wrap">
+           <button id="load-more">Mostrando ${res.data.length} de ${res.total} - Cargar más</button>
+         </div>` : ''}`
       : '<div class="empty">No hay cartas con estos filtros.</div>'}`;
 
+  _collGrid = view().querySelector('.collection-grid');
+
   const apply = (overrides = {}) => {
+    _collGrid = null;  // reset al cambiar filtros
+    _collLoaded = 0;
     const p = new URLSearchParams();
     for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
                      'rating', 'type', 'color', 'edition', 'min_quantity', 'sort']) {
@@ -482,9 +507,17 @@ async function collection(r) {
     }
     location.hash = `#/cartas?${p}`;
   };
+
+  const loadMoreBtn = view().querySelector('#load-more');
+  if (loadMoreBtn) {
+    loadMoreBtn.onclick = () => {
+      const p = new URLSearchParams(location.hash.split('?')[1] || '');
+      p.set('page', page + 1);
+      collection({ params: p });
+    };
+  }
+
   view().querySelectorAll('[data-mode]').forEach((chip) => {
-    // Leaving "Todas las del set" takes the reprint toggle with it — it has no
-    // meaning in the owned view and would come back on unexpectedly.
     chip.onclick = () => apply({ show_all: chip.dataset.mode === 'all' ? '1' : '',
                                  unique_reprints: '' });
   });
@@ -493,8 +526,6 @@ async function collection(r) {
   });
   view().querySelectorAll('[data-qmin]').forEach((chip) => {
     chip.onclick = () => {
-      // rating_min=1 is "has any rank at all", since 0 means unranked.
-      // Clearing the exact-rating select avoids the two filters fighting.
       view().querySelector('#f-rating').value = '';
       apply({ rating_min: chip.dataset.qmin, rating: '' });
     };
@@ -505,7 +536,6 @@ async function collection(r) {
   q.onkeydown = (e) => { if (e.key === 'Enter') apply(); };
   wireCardClicks();
 }
-
 function itemHtml(i) {
   /* Prefer the user's own photo, then the catalog image.
      In "All" mode an unowned slot has no physical copy, so it renders as the
@@ -526,6 +556,7 @@ function itemHtml(i) {
   // reprint you own, which is the split all over again.
   const grouped = (i.group_card_ids?.length ?? 0) > 1;
   const price = v.total != null ? `${v.partial ? '≥' : ''}${eur(v.total)}` : '';
+  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
   return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}"
      data-name="${esc(i.name || i.label || '')}" data-number="${esc(i.number || '')}"
      ${grouped ? 'data-reprints="1"' : ''}>
@@ -542,7 +573,7 @@ function itemHtml(i) {
     </div>
     <div class="label">
       <span class="nm">${esc(i.name || i.label || '—')}</span>
-      <span class="no">#${esc(i.number)}${owned && i.condition ? ` · ${esc(i.condition)}` : ''}</span>
+      <span class="no">${esc(shortId(i.card_id))}${owned && i.condition ? ` - ${esc(i.condition)}` : ''}</span>
     </div>
   </div>`;
 }
@@ -1011,7 +1042,7 @@ async function missing(r) {
   const setId = r.id || r.params.get('set') || setList[0]?.id;
   const sort = r.params.get('sort') || 'number';
   if (!setId) { view().innerHTML = '<div class="empty">No hay sets.</div>'; return; }
-
+  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
   const [rows, s] = await Promise.all([api.missing(setId, sort), api.set(setId)]);
   const p = s.progress || {};
 
@@ -1029,12 +1060,11 @@ async function missing(r) {
         <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
         <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
       </select>
-      <span class="spacer">Usa esta vista como wishlist</span>
     </div>
 
     ${rows.data.length ? `<div class="missing-list">${rows.data.map((m) => `
       <div class="missing-row" data-card="${esc(m.card_id)}">
-        <span class="n">#${esc(m.number || '?')}</span>
+        <span class="n">${esc(shortId(m.card_id))}</span>
         <span>${esc(m.label || '')}</span>
         ${m.missing_entirely
           ? (m.target > 1 ? `<span class="tag">faltan ${m.still_needed} copias</span>` : '')

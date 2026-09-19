@@ -47,6 +47,7 @@ export async function openCard(cardId, opts = {}) {
   items = items.data;
   const totalOwned = items.reduce((a, i) => a + i.quantity, 0);
   const targetMet = totalOwned >= (Number(card.target) || 1);
+  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
 
   root.innerHTML = '';
   root.appendChild(el(`
@@ -56,8 +57,8 @@ export async function openCard(cardId, opts = {}) {
       <div class="modal-card-art">
         <img src="${esc(cardArt(card))}" alt="${esc(card.name)}" loading="lazy">
         <div class="modal-card-nav">
-          ${prev ? `<button class="modal-nav left">‹‹ #${esc(prev.number)} ${esc(prev.name)}</button>` : '<span></span>'}
-          ${next ? `<button class="modal-nav right">#${esc(next.number)} ${esc(next.name)} ››</button>` : '<span></span>'}
+          ${prev ? `<button class="modal-nav left">‹‹ ${esc(shortId(prev.id))} ${esc(prev.name)}</button>` : '<span></span>'}
+          ${next ? `<button class="modal-nav right">${esc(shortId(next.id))} ${esc(next.name)} ››</button>` : '<span></span>'}
         </div>
       </div>
 
