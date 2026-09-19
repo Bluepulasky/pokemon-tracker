@@ -3,6 +3,18 @@
 # Everything tunable is an environment variable so nothing here has to be edited
 # to change a port, a worker count or where the data lives. See .env.example.
 
+# --- frontend ---------------------------------------------------------------
+# The React app is compiled here and only its output is copied into the final
+# image, so the runtime image carries no Node and `docker compose up --build`
+# needs nothing installed on the host.
+FROM node:22-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# --- app --------------------------------------------------------------------
 FROM python:3.12-slim
 
 # libheif: pillow-heif needs it for iPhone HEIC uploads (PLAN.md §2.8).
@@ -25,6 +37,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=frontend /frontend/dist /srv/frontend/dist
 RUN chmod +x /srv/scripts/entrypoint.sh
 
 # Which commit this image was built from. .dockerignore excludes .git, so it has

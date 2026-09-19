@@ -10,9 +10,10 @@ you own, which you still need to complete a set, and what the collection is wort
   writes SQL. Everything else goes through it.
 - **SQLite** (`tombot/services/schema.sql`). WAL, `foreign_keys=ON`, thread-local
   connections, re-entrant `tx()`.
-- **Frontend** is a small vanilla-JS SPA in `static/js/` (no build step). It is
-  loaded as ES modules — validate with `node --check` on a `.mjs` copy, because
-  `node --check file.js` parses as CommonJS and hides a missing brace.
+- **Frontend** is a React + TypeScript + Tailwind SPA in `frontend/` (Vite). It
+  compiles to `frontend/dist`, which Flask serves under `/static`; with no build
+  present `/` answers 503 with the command to run rather than a blank page. See
+  "Frontend" below.
 
 ## The one data source: tcggo
 
@@ -132,6 +133,62 @@ Re-importing a set is what refreshes its prices. See `services/pricing.py`.
   make live tcggo calls casually; the version picker and pricing read from
   already-imported local data.
 
+## Frontend
+
+```
+frontend/src/
+  api/          client.ts (every endpoint), types.ts (response shapes), queryKeys.ts
+  components/   ui/ (Button, ChipGroup, controls, Panel, ListRow, …), cards/, sets/,
+                layout/ (AppShell, Topbar, GlobalSearch), charts/
+  context/      Toast, Meta (the /api/meta vocabularies), CardModal (open/close + prev/next)
+  features/     one folder per page: dashboard, sets, collection, missing,
+                maintenance/sections, card-modal
+  hooks/        useApiMutation, useUrlFilters, useDebouncedValue
+  lib/          format.ts (eur, pct, shortId, cardArt…), cn.ts
+  index.css     Tailwind import + the design tokens (@theme) — colours live here only
+```
+
+- **Routing is hash-based** (`#/sets`, `#/set/<id>`, `#/cartas?…`), the same URLs
+  the old UI used, so bookmarks and the installed iOS web app keep working. Filters
+  live in the URL query (`useUrlFilters`).
+- **Reads go through TanStack Query; writes through `useApiMutation`**, which
+  toasts the error or the success message and then invalidates every cached read
+  (`invalidateAppData`) — the equivalent of re-rendering the page after a change.
+- **Metered-call guard:** the episode search can reach tcggo when nothing matches
+  locally, so it is excluded from that blanket invalidation, never refetches on
+  its own (`staleTime: Infinity`), and the query client has retries and
+  refetch-on-focus off. Keep it that way when adding queries that can hit tcggo.
+- **Reuse before adding:** a new button, select, chip row, panel, list row or card
+  tile should be the existing component with a prop, not a new block of classes.
+- **Adding an endpoint to the UI:** its response shape goes in `api/types.ts` (only
+  the fields the UI reads), the call in `api/client.ts`, its cache key in
+  `api/queryKeys.ts`. Components never call `fetch` themselves.
+- **Styling is Tailwind utilities only** — no CSS files per component, no inline
+  `style` except a computed value (a progress width). A colour that is not a token
+  in `index.css` gets added there first. `cn()` merges classes, so a `className`
+  prop overrides a component's default (`w-full` + `w-24` → `w-24`).
+- **Write the canonical Tailwind class**: `z-100`, `w-22.5`, `aspect-5/7`, `my-3`,
+  `rounded-sm` — not `z-[100]`, `w-[90px]`, `aspect-[5/7]`, `mt-3 mb-3`, `rounded`.
+  In Tailwind 4 the spacing scale is open-ended (n × 4px), so most pixel values
+  have one. ESLint (`better-tailwindcss`) fails on the long form and
+  `npm run lint:fix` rewrites it; the Tailwind editor extension underlines the
+  same thing. Values with no canonical form (`text-[13px]`) stay arbitrary.
+- **No blocking dialogs** (`alert`/`confirm`): destructive or costly actions use
+  `ConfirmButton` (click to arm, click again to run); feedback is a toast.
+- **An effect returns a cleanup function or nothing.** `useEffect(() => fn())`
+  returns whatever `fn` returns — `window.scrollTo` returns a Promise in current
+  Chrome, and React throws "destroy is not a function". Use a block body.
+- **Checking a change against real data:** the local database is small (every
+  target is 1, a handful of cards owned), so states like "tenés 1 de 2" never
+  appear locally. `VITE_API_TARGET=http://<host>:8090 npm run dev` runs the local
+  UI against another instance's API — reads are safe, but **writes land on that
+  instance's real collection**, so look, don't save.
+- `npm run check` (typecheck + ESLint + Prettier) must pass; CI runs it. Prettier
+  sorts Tailwind classes, so run `npm run format` rather than ordering by hand.
+- **No UI tests that only assert a page renders or answers 200.** Test logic that
+  can be wrong (`features/card-modal/pricing.ts` is the kind of thing worth one);
+  what Flask does with the build is covered by `tests/test_frontend_serving.py`.
+
 ## Commands & run
 
 ```
@@ -142,5 +199,14 @@ flask monthly     # prices + snapshot (what cron calls)
 flask scheduler   # run monthly on a schedule, blocking (its own container)
 ```
 
-Docker: `docker compose up -d`. Config is `.env` (see `.env.example`). Port maps
-`8090:8080`. `pytest` runs the suite.
+```
+make run          # build the frontend if its sources changed, then serve on :8080
+make dev          # Flask debug server on :8080 + frontend rebuild-on-save (reload to see it)
+make dev-ui       # Vite dev server on :5173 with hot reload, proxying /api to :8080
+make frontend     # just build frontend/dist      make lint   # typecheck + eslint + prettier
+```
+
+Docker: `docker compose up -d --build`. The image builds the frontend in its own
+Node stage, so the host needs no Node. Running `flask run` / `waitress` by hand
+does **not** build it — run `make frontend` first (needs Node 22). Config is `.env`
+(see `.env.example`). Port maps `8090:8080`. `pytest` runs the suite.

@@ -1,0 +1,14 @@
+{
+  // The frontend is a subfolder, so each tool is told where its config lives.
+  "eslint.workingDirectories": ["frontend"],
+  "prettier.configPath": "frontend/.prettierrc.json",
+  "tailwindCSS.experimental.configFile": "frontend/src/index.css",
+  // Class strings inside cn(...) get completion and linting too.
+  "tailwindCSS.classFunctions": ["cn"],
+
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }
+}

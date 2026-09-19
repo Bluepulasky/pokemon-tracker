@@ -59,6 +59,9 @@ class Config:
     MEDIA_DIR = _path("MEDIA_DIR", BASE_DIR / "media")
     DB_PATH = Path(os.environ.get("DB_PATH", "")) if os.environ.get("DB_PATH") else DATA_DIR / "pokemon.db"
 
+    # The built React app (`npm run build` in frontend/). Served under /static.
+    FRONTEND_DIST = _path("FRONTEND_DIST", BASE_DIR / "frontend" / "dist")
+
     CATALOG_IMG_DIR = MEDIA_DIR / "catalog"
     COLLECTION_IMG_DIR = MEDIA_DIR / "collection"
     THUMB_DIR = MEDIA_DIR / "thumbs"

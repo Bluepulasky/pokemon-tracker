@@ -11,6 +11,9 @@ media/collection/*
 media/thumbs/*
 !media/**/.gitkeep
 dist/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
 .DS_Store
 .pytest_cache/
 
