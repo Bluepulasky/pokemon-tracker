@@ -139,7 +139,7 @@ flask init-db     # create the schema (idempotent). Startup runs this; no bootst
 flask prices      # re-price the collection from imported products (local, no network)
 flask snapshot    # write a collection snapshot for the history charts
 flask monthly     # prices + snapshot (what cron calls)
-flask scheduler   # run monthly on a schedule, blocking (its own container)
+flask scheduler   # run `monthly` weekly (SCHEDULER_CRON_DAY=mon..sun), blocking (its own container)
 ```
 
 Docker: `docker compose up -d`. Config is `.env` (see `.env.example`). Port maps
