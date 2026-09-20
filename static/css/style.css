@@ -820,7 +820,7 @@ input[type="range"]::-moz-range-thumb {
 /* The variant card is narrow, so the full-size row would wrap to three lines.
    Smaller targets give a tidy two rows without shrinking the primary picker in
    the add form. */
-.variant-card { width: 235px; }
+.variant-card { width: 240px; }
 .variant-card .rank { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
 .variant-card .rank.zero { padding: 0 8px; }
 .variant-card .rank-row { gap: 4px; }
@@ -835,11 +835,23 @@ input[type="range"]::-moz-range-thumb {
   z-index: 9999;
   cursor: zoom-out;
 }
-.lightbox img {
-  max-height: 90vh;
+.lightbox-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+.lightbox-inner img {
+  max-height: 80vh;   /* ← bajamos para que el botón tenga espacio */
   max-width: 90vw;
   object-fit: contain;
   border-radius: var(--radius);
+}
+.lightbox-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: pointer;
 }
 
 .note { font-size: 12px; color: var(--fg-faint); margin-top: 8px; }

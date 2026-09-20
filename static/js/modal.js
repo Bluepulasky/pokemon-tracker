@@ -188,16 +188,19 @@ function variantCard(item) {
     </div>
     <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
-        ? item.photos.map((p) => `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
-             class="${p.is_primary ? 'primary' : ''}"
-             title="${p.is_primary ? 'Click derecho para marcar como principal' : 'Marcar como principal'}" loading="lazy">`).join('')
+        ? item.photos.map((p) => {
+          console.log(p.id, p.is_primary);
+          return `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
+              class="${p.is_primary ? 'primary' : ''}"
+              title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`;
+        }).join('')
         : `<div class="photo-empty">
              <span>Sin fotografía</span>
              <small>Toca «Foto» para añadir una</small>
            </div>`}
     </div>
     <div class="price">${esc(eur(v.total))}
-      <small>${v.basis === 'no_data' ? 'sin datos para esta impresión'
+      <small>${v.basis === 'no_data' ? 'sin data'
         : v.basis === 'printing_level' ? `${eur(v.unit)} × ${item.quantity} · precio de la impresión`
         : `${eur(v.unit)} × ${item.quantity}`}</small>
       ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
@@ -236,6 +239,10 @@ function addForm(card) {
         <select name="language">${opts(META.languages, 'en')}</select></div>
       <div class="field" style="flex:0 0 90px"><label>Cantidad</label>
         <input name="quantity" type="number" min="1" value="1" inputmode="numeric"></div>
+      <div class="field" style="flex:0 0 auto; align-self:flex-end">
+        <input type="file" accept="image/*" class="photo-input-new" style="display:none">
+        <button type="button" class="btn xs act-photo-new">Foto</button>
+      </div>
     </div>
     <div class="field"><label>Condición</label>
       <div class="chips">${META.conditions.map((c, i) =>
@@ -293,6 +300,7 @@ function wireForm(root, card) {
   if (versionBox) renderVersions(versionBox, form, versionBox.dataset.versionsFor);
 
   let condition = META.conditions[0].key;
+  let pendingPhoto = null;
 
   form.querySelectorAll('.chip').forEach((chip) => {
     chip.onclick = () => {
@@ -301,6 +309,18 @@ function wireForm(root, card) {
       condition = chip.dataset.cond;
     };
   });
+
+  // foto pendiente
+  const photoInput = form.querySelector('.photo-input-new');
+  const photoBtn = form.querySelector('.act-photo-new');
+  if (photoBtn && photoInput) {
+    photoBtn.onclick = () => photoInput.click();
+    photoInput.onchange = (e) => {
+      pendingPhoto = e.target.files[0] || null;
+      photoBtn.textContent = pendingPhoto ? '✓ Foto' : '📷 Foto';
+      photoBtn.classList.toggle('on', !!pendingPhoto);
+    };
+  }
 
   form.querySelector('.cancel').onclick = closeModal;
 
@@ -314,13 +334,20 @@ function wireForm(root, card) {
     btn.disabled = true;
     try {
       const targetCard = form.dataset.cardId || card.id;
-      await api.addItem({
+      const newItem = await api.addItem({
         card_id: targetCard,
         language: form.language.value,
         condition,
         quantity: Number(form.quantity.value) || 1,
         market_product_id: Number(form.dataset.productId),
       });
+      if (pendingPhoto && newItem?.id) {
+        try {
+          await api.uploadPhoto(newItem.id, pendingPhoto);
+        } catch (photoErr) {
+          toast('Carta guardada pero falló la foto: ' + photoErr.message, true);
+        }
+      }
       toast(`${card.name} añadida`);
       onChange();
       openCard(targetCard);
@@ -585,25 +612,35 @@ function applyVersion(form, v) {
   }
 }
 
-function wireLightbox(root, cardId) {
+function wireLightbox(root) {
   if (window.innerWidth <= 600) return;
 
   root.querySelectorAll('.variant-card .photos img[data-photo]').forEach((img) => {
-    const original = img.onclick; // el que puso wireVariants
+    console.log(img.src, img.classList.toString());
+    const originalOnclick = img.onclick;
     img.onclick = (e) => {
       e.stopPropagation();
       const overlay = document.createElement('div');
       overlay.className = 'lightbox';
-      overlay.innerHTML = `<img src="${img.src}" alt="">`;
+      overlay.innerHTML = `
+        <div class="lightbox-inner">
+          <img src="${img.src}" alt="">
+          ${img.classList.contains('primary') ? '' :
+            '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
+        </div>
+      `;
       document.body.appendChild(overlay);
-      // click en la imagen → cerrar
-      overlay.onclick = () => overlay.remove();
-      // click derecho → setPrimary (el comportamiento original)
-      img.oncontextmenu = (ev) => {
-        ev.preventDefault();
-        overlay.remove();
-        if (original) original.call(img, ev);
+      overlay.onclick = (ev) => {
+        if (!ev.target.closest('.lightbox-inner')) overlay.remove();
       };
+      const primaryBtn = overlay.querySelector('.lightbox-primary');
+      if (primaryBtn) {
+        primaryBtn.onclick = (ev) => {
+          ev.stopPropagation();
+          overlay.remove();
+          if (originalOnclick) originalOnclick.call(img, ev);
+        };
+      }
     };
   });
 }
