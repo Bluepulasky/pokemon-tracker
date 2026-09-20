@@ -145,6 +145,7 @@ export async function openCard(cardId, opts = {}) {
   };
   wireForm(root, card);
   wireVariants(root, cardId);
+  wireLightbox(root)
   if (prev) root.querySelector('.modal-nav.left').onclick =
     () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
   if (next) root.querySelector('.modal-nav.right').onclick =
@@ -179,17 +180,17 @@ function variantCard(item) {
      data-price-qty="${item.quantity}"
      data-price-basis="${esc(v.basis || '')}">
     <div class="tags">
+      ${code ? `<span class="tag" title="${esc(item.printing_name || '')}"
+        >${esc(code)}</span>` : ''}
       <span class="tag">${esc(label('variants', item.variant))}</span>
       <span class="tag">${esc(item.condition)}</span>
       <span class="tag">${esc(label('languages', item.language))}</span>
-      ${code ? `<span class="tag" title="${esc(item.printing_name || '')}"
-        >${esc(code)}</span>` : ''}
     </div>
     <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
         ? item.photos.map((p) => `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
              class="${p.is_primary ? 'primary' : ''}"
-             title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`).join('')
+             title="${p.is_primary ? 'Click derecho para marcar como principal' : 'Marcar como principal'}" loading="lazy">`).join('')
         : `<div class="photo-empty">
              <span>Sin fotografía</span>
              <small>Toca «Foto» para añadir una</small>
@@ -197,12 +198,11 @@ function variantCard(item) {
     </div>
     <div class="price">${esc(eur(v.total))}
       <small>${v.basis === 'no_data' ? 'sin datos para esta impresión'
-                : v.basis === 'printing_level' ? `${eur(v.unit)} × ${item.quantity} · precio de la impresión`
-                : `${eur(v.unit)} × ${item.quantity}`}</small></div>
-    ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
-       target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>` : ''}
-    <div class="quotes" data-quotes-for="${esc(item.card_id)}"
-         data-variant="${esc(item.variant || '')}"></div>
+        : v.basis === 'printing_level' ? `${eur(v.unit)} × ${item.quantity} · precio de la impresión`
+        : `${eur(v.unit)} × ${item.quantity}`}</small>
+      ${item.market_url ? `<a class="mkm sm" href="${esc(item.market_url)}"
+        target="_blank" rel="noopener noreferrer">MKM</a>` : ''}
+    </div>
     <div class="btn-row compact">
       <button class="btn xs act-photo">Foto</button>
       <button class="btn xs act-edit">Editar</button>
@@ -583,4 +583,27 @@ function applyVersion(form, v) {
       — producto Cardmarket <code>${v.market_product_id}</code>${note}`;
     summary.hidden = false;
   }
+}
+
+function wireLightbox(root, cardId) {
+  if (window.innerWidth <= 600) return;
+
+  root.querySelectorAll('.variant-card .photos img[data-photo]').forEach((img) => {
+    const original = img.onclick; // el que puso wireVariants
+    img.onclick = (e) => {
+      e.stopPropagation();
+      const overlay = document.createElement('div');
+      overlay.className = 'lightbox';
+      overlay.innerHTML = `<img src="${img.src}" alt="">`;
+      document.body.appendChild(overlay);
+      // click en la imagen → cerrar
+      overlay.onclick = () => overlay.remove();
+      // click derecho → setPrimary (el comportamiento original)
+      img.oncontextmenu = (ev) => {
+        ev.preventDefault();
+        overlay.remove();
+        if (original) original.call(img, ev);
+      };
+    };
+  });
 }

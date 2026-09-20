@@ -79,7 +79,10 @@ lineChart.init = function () {
     };
     const fmtAxis = (val, idx) => {
       const [m] = pts[idx].label.split('-');
-      return `${MESES[parseInt(m, 10) - 1]} ${pts[idx].year}`;
+      const year = pts[idx].year;
+      // solo mostrar si es el primero de ese mes
+      const isFirst = idx === 0 || pts[idx - 1].label.split('-')[0] !== m;
+      return isFirst ? `${MESES[parseInt(m, 10) - 1]} ${year}` : '';
     };
 
     new Chart(canvas, {

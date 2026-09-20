@@ -352,7 +352,6 @@ details { padding: 8px 20px; }
 
 .modal-head .meta {
   color: var(--fg-dim);
-  font-size: 13px;
 }
 
 .modal-head .close {
@@ -443,7 +442,7 @@ details { padding: 8px 20px; }
 }
 
 .section-content {
-  padding: 0 0 22px;
+  padding: 0 0 8px;
 }
 
 .modal-section:not([open]) .section-content {
@@ -485,7 +484,14 @@ details { padding: 8px 20px; }
   color: var(--fg-faint); font-size: 12px;
 }
 .photo-empty small { font-size: 11px; color: #4d5765; }
-.variant-card .price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.variant-card .price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .variant-card .price small { color: var(--fg-faint); font-weight: 400; }
 
 .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
@@ -590,8 +596,8 @@ input[type="range"]::-moz-range-thumb {
 .btn.ghost { background: none; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-/* Discreet controls under the photo: present, but not competing with it. */
-.btn-row.compact { margin-top: 0; gap: 6px; }
+.btn-row.compact { margin-top: 0; gap: 6px; display: grid; grid-template-columns: repeat(3, 1fr); }
+.btn-row.compact .btn { flex: 1; text-align: center; }
 .btn.xs {
   padding: 5px 10px; font-size: 12px; font-weight: 500;
   background: var(--bg-2); border-color: var(--line); flex: 1;
@@ -675,10 +681,6 @@ input[type="range"]::-moz-range-thumb {
 
   .modal-head h3 {
     font-size: 21px;
-  }
-
-  .modal-head .meta {
-    font-size: 12px;
   }
 
   .modal-head .close {
@@ -823,6 +825,23 @@ input[type="range"]::-moz-range-thumb {
 .variant-card .rank.zero { padding: 0 8px; }
 .variant-card .rank-row { gap: 4px; }
 
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: zoom-out;
+}
+.lightbox img {
+  max-height: 90vh;
+  max-width: 90vw;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
 .note { font-size: 12px; color: var(--fg-faint); margin-top: 8px; }
 
 /* Outbound Cardmarket link. rel=noopener because it opens in a new tab. */
@@ -833,7 +852,12 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(59,108,246,.10); transition: .15s;
 }
 .mkm:hover { background: rgba(59,108,246,.20); border-color: var(--accent-2); }
-.mkm.sm { margin-top: 8px; padding: 3px 9px; font-size: 11px; }
+.mkm.sm { 
+  margin-top: 0;
+  padding: 2px 7px; 
+  font-size: 10px;
+  vertical-align: middle;
+}
 .hr { height: 1px; background: var(--line); margin: 20px 0; }
 
 /* ------------------------------------------------------------- missing */
