@@ -157,7 +157,7 @@ details { padding: 8px 20px; }
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
 @media (max-width: 600px) {
-  .card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 }
 .collection-grid .card .art { border-color: var(--accent); border-width: 4px; }
 .collection-grid .card .art img {
