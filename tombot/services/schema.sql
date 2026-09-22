@@ -185,6 +185,10 @@ CREATE TABLE IF NOT EXISTS collection_photos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_photos_item ON collection_photos(item_id, position);
+-- At most one primary photo per item. init_db demotes any extras before this
+-- index is created, so it also applies to a database that already has some.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_one_primary
+    ON collection_photos(item_id) WHERE is_primary = 1;
 
 -- Hall of Fame rank, 0-8, per logical card.
 --

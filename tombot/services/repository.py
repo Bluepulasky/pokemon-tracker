@@ -170,6 +170,7 @@ class PokemonRepo:
         there is nothing to preserve). Keep it that simple."""
         with self.tx() as c:
             self._retire_product_keyed_market_products(c)
+            self._keep_one_primary_photo_per_item(c)
             c.executescript(SCHEMA_PATH.read_text())
             cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
             if "first_edition" not in cols:
@@ -217,6 +218,34 @@ class PokemonRepo:
                     "dropping %d row(s) so the printing-keyed table can be "
                     "created. Re-import your sets to refill it (#68).", n)
         c.execute("DROP TABLE market_products")
+
+    @staticmethod
+    def _keep_one_primary_photo_per_item(c) -> None:
+        """Leave each item with exactly one primary photo (#93).
+
+        Runs before schema.sql so the unique index on (item_id) WHERE
+        is_primary = 1 can be created on a database that already holds
+        duplicates. The photo that keeps the flag is the first by position,
+        then by id; an item whose photos have no primary gets its first one.
+        """
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE name='collection_photos'").fetchone():
+            return
+        demoted = c.execute(
+            """UPDATE collection_photos SET is_primary = 0
+               WHERE is_primary = 1 AND id <> (
+                   SELECT p.id FROM collection_photos p
+                   WHERE p.item_id = collection_photos.item_id AND p.is_primary = 1
+                   ORDER BY p.position, p.id LIMIT 1)""").rowcount
+        promoted = c.execute(
+            """UPDATE collection_photos SET is_primary = 1
+               WHERE id IN (
+                   SELECT (SELECT p.id FROM collection_photos p
+                           WHERE p.item_id = q.item_id ORDER BY p.position, p.id LIMIT 1)
+                   FROM collection_photos q GROUP BY q.item_id
+                   HAVING SUM(q.is_primary) = 0)""").rowcount
+        if demoted or promoted:
+            log.warning("collection_photos: %d extra primary flag(s) cleared, "
+                        "%d item(s) given one (#93)", demoted, promoted)
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         v = self._scalar("SELECT value FROM app_meta WHERE key = ?", (key,))
@@ -1393,21 +1422,23 @@ class PokemonRepo:
 
     # ---------------------------------------------------------------- photos
     def add_photo(self, item_id: int, p: dict) -> dict:
+        """Store a photo row; it is the primary only if the item has none yet.
+
+        One INSERT decides both the flag and the position, so two uploads
+        landing at once cannot both read "no primary yet" and both take it —
+        which is how an item ended up with every photo primary (#93).
+        """
         with self.tx() as c:
-            has_primary = c.execute(
-                "SELECT COUNT(*) FROM collection_photos WHERE item_id=? AND is_primary=1",
-                (item_id,),
-            ).fetchone()[0]
-            pos = c.execute(
-                "SELECT COALESCE(MAX(position), -1) + 1 FROM collection_photos WHERE item_id=?",
-                (item_id,),
-            ).fetchone()[0]
             cur = c.execute(
                 """INSERT INTO collection_photos
                      (item_id,filename,thumb_filename,width,height,bytes,is_primary,position)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,
+                     NOT EXISTS (SELECT 1 FROM collection_photos
+                                 WHERE item_id = ? AND is_primary = 1),
+                     (SELECT COALESCE(MAX(position), -1) + 1 FROM collection_photos
+                      WHERE item_id = ?))""",
                 (item_id, p["filename"], p.get("thumb_filename"), p.get("width"),
-                 p.get("height"), p.get("bytes"), 0 if has_primary else 1, pos),
+                 p.get("height"), p.get("bytes"), item_id, item_id),
             )
             row = c.execute("SELECT * FROM collection_photos WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)
