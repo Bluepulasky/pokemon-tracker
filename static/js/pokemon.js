@@ -1041,10 +1041,12 @@ async function missing(r) {
   const { data: setList } = await api.sets();
   const setId = r.id || r.params.get('set') || setList[0]?.id;
   const sort = r.params.get('sort') || 'number';
+  const onlyNoted = r.params.get('note') === '1';
   if (!setId) { view().innerHTML = '<div class="empty">No hay sets.</div>'; return; }
   const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
   const [rows, s] = await Promise.all([api.missing(setId, sort), api.set(setId)]);
   const p = s.progress || {};
+  const shown = onlyNoted ? rows.data.filter((m) => m.note) : rows.data;
 
   view().innerHTML = `
     <h1>Cartas faltantes</h1>
@@ -1060,23 +1062,32 @@ async function missing(r) {
         <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
         <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
       </select>
+      <div class="chips seg" id="f-note">
+        ${[['', 'Todas'], ['1', 'Con nota']]
+          .map(([k, l]) => `<span class="chip${(onlyNoted ? '1' : '') === k ? ' on' : ''}" data-note="${k}">${l}</span>`).join('')}
+      </div>
     </div>
 
-    ${rows.data.length ? `<div class="missing-list">${rows.data.map((m) => `
+    ${shown.length ? `<div class="missing-list">${shown.map((m) => `
       <div class="missing-row" data-card="${esc(m.card_id)}">
         <span class="n">${esc(shortId(m.card_id))}</span>
-        <span>${esc(m.label || '')}</span>
+        <span class="missing-name">${esc(m.label || '')}${
+          m.note ? `<small class="missing-note">${esc(m.note)}</small>` : ''}</span>
         ${m.missing_entirely
           ? (m.target > 1 ? `<span class="tag">faltan ${m.still_needed} copias</span>` : '')
           : `<span class="tag">tenés ${m.held} de ${m.target}</span>`}
         <span class="r">${esc(m.rarity || '')}</span>
       </div>`).join('')}</div>`
-      : '<div class="empty">🎉 Set completo.</div>'}`;
+      : `<div class="empty">${onlyNoted ? 'Ninguna faltante con nota.' : '🎉 Set completo.'}</div>`}`;
 
-  const nav = () => { location.hash = `#/missing/${view().querySelector('#f-set').value}?sort=${
-    view().querySelector('#f-sort').value}`; };
-  view().querySelector('#f-set').onchange = nav;
-  view().querySelector('#f-sort').onchange = nav;
+  const nav = (note = onlyNoted ? '1' : '') => {
+    const q = new URLSearchParams({ sort: view().querySelector('#f-sort').value });
+    if (note) q.set('note', '1');
+    location.hash = `#/missing/${view().querySelector('#f-set').value}?${q}`;
+  };
+  view().querySelector('#f-set').onchange = () => nav();
+  view().querySelector('#f-sort').onchange = () => nav();
+  view().querySelectorAll('#f-note .chip').forEach((c) => { c.onclick = () => nav(c.dataset.note); });
   wireCardClicks();
 }
 

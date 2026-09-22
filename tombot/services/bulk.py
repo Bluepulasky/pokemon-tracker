@@ -22,8 +22,10 @@ import io
 ID_KEYS = ("card_id", "id", "cardid")
 TARGET_KEYS = ("target_quantity", "target", "quantity", "cantidad", "objetivo")
 NAME_KEYS = ("card_name", "name", "nombre")
+NOTE_KEYS = ("note", "nota", "notes")
 
 MAX_TARGET = 999
+MAX_NOTE = 200
 
 
 def _norm(header: str) -> str:
@@ -38,7 +40,10 @@ def _pick(row: dict, keys) -> str | None:
 
 
 def parse_csv(text: str) -> tuple[list[dict], list[dict]]:
-    """Return (rows, errors). A row is {card_id, target, name, line}.
+    """Return (rows, errors). A row is {card_id, target, name, note, line}.
+
+    `note` is None when the file has no note column, "" when the cell is
+    blank; the caller treats both as "leave the note alone".
 
     Never raises on bad input: a spreadsheet is user input, and the caller
     reports every problem at once rather than failing on the first one.
@@ -107,9 +112,15 @@ def parse_csv(text: str) -> tuple[list[dict], list[dict]]:
             errors.append({"line": line, "card_id": card_id,
                            "error": f"card_id repetido, ya aparece en la línea {seen[card_id]}"})
             continue
+        note = _pick(raw, NOTE_KEYS)
+        if note and len(note) > MAX_NOTE:
+            errors.append({"line": line, "card_id": card_id,
+                           "error": f"la nota supera los {MAX_NOTE} caracteres"})
+            continue
+
         seen[card_id] = line
         rows.append({"card_id": card_id, "target": value,
-                     "name": _pick(raw, NAME_KEYS), "line": line})
+                     "name": _pick(raw, NAME_KEYS), "note": note, "line": line})
 
     return rows, errors
 
@@ -126,11 +137,18 @@ def apply_targets(repo, rows: list[dict]) -> dict:
             missing.append({"line": row["line"], "card_id": row["card_id"],
                             "error": "no existe en el catálogo"})
             continue
-        before = repo.get_card_target(row["card_id"])
-        if before == row["target"]:
+        before = repo.get_card_target_row(row["card_id"])
+        # A blank or absent note cell leaves the note alone: clearing one is
+        # done from the modal, so a file exported before notes existed cannot
+        # wipe them on the way back in.
+        note = row.get("note") or None
+        note_changes = note is not None and note != before["note"]
+        if before["target"] == row["target"] and not note_changes:
             unchanged.append(row["card_id"])
             continue
-        repo.set_card_target(row["card_id"], row["target"])
-        updated.append({"card_id": row["card_id"], "from": before,
-                        "to": row["target"]})
+        repo.set_card_target(row["card_id"], row["target"], note)
+        change = {"card_id": row["card_id"], "from": before["target"], "to": row["target"]}
+        if note_changes:
+            change["note"] = note
+        updated.append(change)
     return {"updated": updated, "unchanged": unchanged, "missing": missing}

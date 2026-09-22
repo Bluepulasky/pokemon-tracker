@@ -56,7 +56,7 @@ def test_excel_in_a_spanish_locale_parses():
     rows, errors = bulk.parse_csv(text)
     assert errors == []
     assert rows == [{"card_id": "base1-4", "target": 3,
-                     "name": "Charizard", "line": 2}]
+                     "name": "Charizard", "note": None, "line": 2}]
 
 
 def test_the_column_name_from_the_issue_and_the_one_the_app_uses_both_work():

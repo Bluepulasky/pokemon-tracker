@@ -90,6 +90,11 @@ export async function openCard(cardId, opts = {}) {
                 <input type="range" min="0" max="8" step="1" value="${Number(card.target) || 1}" id="target-slider">
               </div>
             </div>
+            <div class="field card-note">
+              <label>Nota</label>
+              <input type="text" id="target-note" maxlength="200"
+                     placeholder="ej. buscar de Celebrations" value="${esc(card.note || '')}">
+            </div>
           </div>
 
           <button class="close"
@@ -129,6 +134,7 @@ export async function openCard(cardId, opts = {}) {
   wireModalSections(root);
   wireCardRank(root, card);
   wireCardTarget(root, card);
+  wireCardNote(root, card);
 
   // rank slider
   const rankSlider = root.querySelector('#rank-slider');
@@ -289,6 +295,23 @@ function wireCardTarget(root, card) {
     const value = Math.max(1, Number(slider.value));
     try {
       await api.setTarget(card.id, value);
+      onChange();
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+/* Free text on the card's target — which printing to chase, say. Saved when
+   the field is left, like the target; blank removes it. */
+function wireCardNote(root, card) {
+  const input = root.querySelector('#target-note');
+  if (!input) return;
+  let saved = input.value;
+  input.onchange = async () => {
+    const value = input.value.trim();
+    if (value === saved) return;
+    try {
+      await api.setNote(card.id, value);
+      saved = value;
       onChange();
     } catch (e) { toast(e.message, true); }
   };

@@ -212,6 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_card_ratings_rating ON card_ratings(rating);
 CREATE TABLE IF NOT EXISTS card_targets (
     card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
     target     INTEGER NOT NULL CHECK (target >= 1),
+    note       TEXT,                          -- free text: which printing to chase, etc. (#94)
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
