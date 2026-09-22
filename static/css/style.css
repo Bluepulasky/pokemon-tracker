@@ -762,6 +762,8 @@ input[type="range"]::-moz-range-thumb {
   display: flex; align-items: center; gap: 7px; padding: 7px 14px;
 }
 .chips.seg .chip + .chip { border-left: 1px solid var(--line); }
+/* Same specificity as the rule above, or it wins and the active chip is unreadable. */
+.chips.seg .chip.on { background: var(--accent); color: #1a1400; }
 .chips.seg .chip b {
   font-size: 14px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
   background: rgba(255,255,255,.07); color: var(--fg-dim);
@@ -881,6 +883,9 @@ input[type="range"]::-moz-range-thumb {
 .missing-row .n { color: var(--fg-faint); font-variant-numeric: tabular-nums;
                   min-width: 44px; font-size: 13px; }
 .missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
+.missing-row .missing-name { display: flex; flex-direction: column; min-width: 0; }
+.missing-row .missing-note { font-size: 12px; color: var(--fg-dim); }
+.card-note { margin-top: 10px; }
 
 /* --------------------------------------------------------------- chart */
 .chart { width: 100%; height: auto; display: block; }

@@ -174,6 +174,9 @@ class PokemonRepo:
             cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
             if "first_edition" not in cols:
                 c.execute("ALTER TABLE collection_items ADD COLUMN first_edition INTEGER NOT NULL DEFAULT 0")
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(card_targets)")}
+            if "note" not in cols:
+                c.execute("ALTER TABLE card_targets ADD COLUMN note TEXT")
             # Seed the condition multipliers. INSERT OR IGNORE keeps any the user
             # has edited, and costs nothing on a database that already has them.
             for kind, key, mult in DEFAULT_MODIFIERS:
@@ -643,10 +646,12 @@ class PokemonRepo:
                        h.want AS target,
                        h.held AS held,
                        h.want - h.held AS still_needed,
-                       h.held = 0 AS missing_entirely
+                       h.held = 0 AS missing_entirely,
+                       NULLIF(t.note, '') AS note
                 FROM set_slots sl
                 JOIN slot_held h ON h.slot_id = sl.id
                 LEFT JOIN cards c ON c.id = sl.display_card_id
+                LEFT JOIN card_targets t ON t.card_id = sl.display_card_id
                 WHERE sl.set_id = ?
                   AND h.held < h.want
                 ORDER BY {order}""",
@@ -1323,23 +1328,41 @@ class PokemonRepo:
                  "%d printing(s) changed", len(groups), changed)
         return {"cards_ranked": changed, "groups": len(groups)}
 
-    def set_card_target(self, card_id: str, target: int) -> None:
-        """A target of 1 is stored as absence — it is the default, and a row
-        saying so would just be noise to keep in sync."""
+    def set_card_target(self, card_id: str, target: int | None = None,
+                        note: str | None = None) -> None:
+        """Set the copies wanted and/or the note. An argument left None keeps
+        its current value.
+
+        The default (target 1, no note) is stored as absence — a row saying so
+        would just be noise to keep in sync.
+        """
+        current = self.get_card_target_row(card_id)
+        new_target = int(target) if target is not None else current["target"]
+        new_note = (note.strip() if note is not None else current["note"]) or None
         with self.tx() as c:
-            if int(target) <= 1:
+            if new_target <= 1 and not new_note:
                 c.execute("DELETE FROM card_targets WHERE card_id = ?", (card_id,))
             else:
                 c.execute(
-                    "INSERT INTO card_targets(card_id, target) VALUES (?,?) "
+                    "INSERT INTO card_targets(card_id, target, note) VALUES (?,?,?) "
                     "ON CONFLICT(card_id) DO UPDATE SET target=excluded.target, "
-                    "updated_at=datetime('now')",
-                    (card_id, int(target)),
+                    "note=excluded.note, updated_at=datetime('now')",
+                    (card_id, max(1, new_target), new_note),
                 )
 
+    def get_card_target_row(self, card_id: str) -> dict:
+        """`{"target": int, "note": str | None}`, defaults when there is no row."""
+        row = self._one("SELECT target, note FROM card_targets WHERE card_id = ?", (card_id,))
+        return {"target": row["target"] if row else 1,
+                "note": (row["note"] or None) if row else None}
+
     def get_card_target(self, card_id: str) -> int:
-        return self._scalar(
-            "SELECT target FROM card_targets WHERE card_id = ?", (card_id,)) or 1
+        return self.get_card_target_row(card_id)["target"]
+
+    def card_notes(self) -> dict[str, str]:
+        """Every card that has a note, keyed by card id."""
+        return {r["card_id"]: r["note"] for r in self._all(
+            "SELECT card_id, note FROM card_targets WHERE note IS NOT NULL AND note <> ''")}
 
     def get_card_rating(self, card_id: str) -> int:
         return self._scalar(

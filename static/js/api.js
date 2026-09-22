@@ -33,6 +33,7 @@ export const api = {
   collection:  (f)            => req('GET', `/api/collection?${qs(f || {})}`),
   rateCard:    (cardId, rating) => req('PUT', `/api/cards/${cardId}/rating`, { rating }),
   setTarget:   (cardId, target) => req('PUT', `/api/cards/${cardId}/target`, { target }),
+  setNote:     (cardId, note)   => req('PUT', `/api/cards/${cardId}/target`, { note }),
   // reprints=1 for a Cartas tile that collapsed reprints into one card (#78).
   byCard:      (cardId, opts)  => req('GET', `/api/collection/by-card/${cardId}${
                                    opts && opts.reprints ? '?reprints=1' : ''}`),

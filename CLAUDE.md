@@ -74,6 +74,10 @@ it. Importing stores the set's cards and its Cardmarket products (with prices) i
 - **`collection_items`** — what you physically own: `(card_id, variant, condition,
   language)` unique, plus `market_product_id` — the exact **printing** chosen in
   the add-card modal, i.e. a `market_products.id`, not a Cardmarket product id.
+- **`card_targets`** — per card: how many copies count as complete (`target`)
+  and a free-text `note` (which printing to chase, #94). The default (1, no
+  note) is stored as absence. `note` is a column added by `init_db`'s
+  `ALTER TABLE` self-heal, the same way `collection_items.first_edition` was.
 - **`price_cache`** — the resolved price per owned printing.
 - **`price_modifiers`** — condition/language/variant multipliers, editable.
 - **`market_episodes`** — the tcggo set catalogue (all ~180 sets), filled by the

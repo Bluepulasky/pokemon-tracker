@@ -91,13 +91,15 @@ def get_card(card_id):
         }]
     card["available_printings"] = printings
     card["rating"] = repo().get_card_rating(card_id)
-    card["target"] = repo().get_card_target(card_id)
+    card.update(repo().get_card_target_row(card_id))     # target, note
     return jsonify(card)
 
 
 @bp.put("/cards/<card_id>/target")
 def set_card_target(card_id):
-    """How many copies of this card count as complete.
+    """How many copies of this card count as complete, and a free-text note
+    (which printing to chase, say). Either field may be sent alone; the other
+    keeps its value.
 
     Belongs to the card, like the rank: wanting three Charizards is a statement
     about the card, not about any one copy.
@@ -105,14 +107,29 @@ def set_card_target(card_id):
     if not repo().get_card(card_id):
         raise ApiError("carta no encontrada", "not_found", 404)
     body = request.get_json(silent=True) or {}
-    try:
-        target = int(body.get("target"))
-    except (TypeError, ValueError):
-        raise ApiError("el objetivo debe ser un entero >= 1", "invalid_target") from None
-    if target < 1:
-        raise ApiError("el objetivo debe ser al menos 1", "invalid_target")
-    repo().set_card_target(card_id, target)
-    return jsonify({"card_id": card_id, "target": repo().get_card_target(card_id)})
+    if "target" not in body and "note" not in body:
+        raise ApiError("hay que enviar target o note", "invalid_target")
+
+    target = None
+    if "target" in body:
+        try:
+            target = int(body.get("target"))
+        except (TypeError, ValueError):
+            raise ApiError("el objetivo debe ser un entero >= 1", "invalid_target") from None
+        if target < 1:
+            raise ApiError("el objetivo debe ser al menos 1", "invalid_target")
+
+    note = None
+    if "note" in body:
+        note = body.get("note")
+        if note is not None and not isinstance(note, str):
+            raise ApiError("la nota debe ser texto", "invalid_note")
+        note = (note or "").strip()
+        if len(note) > bulk.MAX_NOTE:
+            raise ApiError(f"la nota supera los {bulk.MAX_NOTE} caracteres", "invalid_note")
+
+    repo().set_card_target(card_id, target, note)
+    return jsonify({"card_id": card_id, **repo().get_card_target_row(card_id)})
 
 
 @bp.put("/cards/<card_id>/rating")
@@ -211,7 +228,8 @@ def export_targets():
     buf = io.StringIO()
     # utf-8-sig on the way out: Excel shows accents as mojibake without a BOM.
     writer = csv.writer(buf, delimiter=";")
-    writer.writerow(["card_id", "card_name", "target_quantity"])
+    writer.writerow(["card_id", "card_name", "target_quantity", "note"])
+    notes = repo().card_notes()
     seen = set()
     for slot in slots:
         card_id = slot.get("card_id")
@@ -219,7 +237,7 @@ def export_targets():
             continue
         seen.add(card_id)
         writer.writerow([card_id, slot.get("name") or slot.get("label") or "",
-                         slot.get("target") or 1])
+                         slot.get("target") or 1, notes.get(card_id, "")])
 
     name = f"objetivos-{set_id}.csv" if set_id else "objetivos.csv"
     return Response(
@@ -231,7 +249,7 @@ def export_targets():
 
 @bp.post("/maintenance/targets/import")
 def import_targets():
-    """Apply a CSV of target quantities.
+    """Apply a CSV of target quantities and, when the column is there, notes.
 
     Every problem is reported at once with its line number: a spreadsheet gets
     fixed in one pass, not by resubmitting to discover the next bad row.
