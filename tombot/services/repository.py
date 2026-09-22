@@ -662,6 +662,7 @@ class PokemonRepo:
             "number": "c.number_sort",
             "name": "COALESCE(sl.label, c.name)",
             "rarity": "c.rarity, c.number_sort",
+            "still_needed": "still_needed DESC, c.number_sort",
         }.get(sort, "c.number_sort")
         # Short of the target counts as missing, and the shortfall is reported so
         # the wishlist can say how many are still needed rather than just "none".

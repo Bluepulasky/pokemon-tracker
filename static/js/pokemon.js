@@ -113,7 +113,7 @@ async function dashboard() {
         <div class="missing-row" data-card="${esc(t.card_id)}">
           <span class="n">${esc(shortId(t.card_id))}</span>
           <span>${esc(t.name)}</span>
-          <span class="tag">${esc(t.variant)} · ${esc(t.condition)} · ×${t.quantity}</span>
+          <span class="tag2">${esc(t.variant)} · ${esc(t.condition)} · ×${t.quantity}</span>
           <span class="r">${esc(eur(t.value))}</span>
         </div>`).join('')
       : '<div class="empty">Todavía no hay precios. Ejecuta una actualización de precios.</div>'}</div>
@@ -1061,6 +1061,7 @@ async function missing(r) {
         <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
         <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
         <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
+        <option value="still_needed"${sort === 'still_needed' ? ' selected' : ''}>Por pendientes</option>
       </select>
       <div class="chips seg" id="f-note">
         ${[['', 'Todas'], ['1', 'Con nota']]
@@ -1071,11 +1072,9 @@ async function missing(r) {
     ${shown.length ? `<div class="missing-list">${shown.map((m) => `
       <div class="missing-row" data-card="${esc(m.card_id)}">
         <span class="n">${esc(shortId(m.card_id))}</span>
-        <span class="missing-name">${esc(m.label || '')}${
-          m.note ? `<small class="missing-note">${esc(m.note)}</small>` : ''}</span>
-        ${m.missing_entirely
-          ? (m.target > 1 ? `<span class="tag">faltan ${m.still_needed} copias</span>` : '')
-          : `<span class="tag">tenés ${m.held} de ${m.target}</span>`}
+        <span class="m">x${m.still_needed}</span>
+        <span class="missing-name">${esc(m.label || '')}</span>
+        ${m.note ? `<small class="tag2">${esc(m.note)}</small>` : ''}</span>
         <span class="r">${esc(m.rarity || '')}</span>
       </div>`).join('')}</div>`
       : `<div class="empty">${onlyNoted ? 'Ninguna faltante con nota.' : '🎉 Set completo.'}</div>`}`;

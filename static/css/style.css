@@ -882,10 +882,13 @@ input[type="range"]::-moz-range-thumb {
 .missing-row:hover { border-color: var(--accent-2); }
 .missing-row .n { color: var(--fg-faint); font-variant-numeric: tabular-nums;
                   min-width: 44px; font-size: 13px; }
+.missing-row .m { font-variant-numeric: tabular-nums; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: -6px; }
 .missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
 .missing-row .missing-name { display: flex; flex-direction: column; min-width: 0; }
 .missing-row .missing-note { font-size: 12px; color: var(--fg-dim); }
 .card-note { margin-top: 10px; }
+.tag2 { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px;
+       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); color: var(--accent);  }
 
 /* --------------------------------------------------------------- chart */
 .chart { width: 100%; height: auto; display: block; }
