@@ -113,7 +113,7 @@ async function dashboard() {
         <div class="missing-row" data-card="${esc(t.card_id)}">
           <span class="n">${esc(shortId(t.card_id))}</span>
           <span>${esc(t.name)}</span>
-          <span class="tag2">${esc(t.variant)} · ${esc(t.condition)} · ×${t.quantity}</span>
+          <span class="tag2">${esc(t.variant)} · ${esc(t.condition)}</span>
           <span class="r">${esc(eur(t.value))}</span>
         </div>`).join('')
       : '<div class="empty">Todavía no hay precios. Ejecuta una actualización de precios.</div>'}</div>
