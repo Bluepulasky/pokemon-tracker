@@ -35,9 +35,13 @@ def card_id_for(episode_code: str, number) -> str:
 
 
 def split_code(card_code_number: str) -> tuple[str, str]:
-    """"BS 4" -> ("BS", "4"). The number keeps letters: "SK H7" -> ("SK", "H7")."""
-    parts = (card_code_number or "").rsplit(" ", 1)
-    return (parts[0], parts[1]) if len(parts) == 2 else (card_code_number or "", "")
+    """"BS 4" -> ("BS", "4"). The number keeps letters: "SK H7" -> ("SK", "H7").
+
+    A code with no space is a bare number, not a prefix: Southern Islands
+    files its cards as "1", "14"… with no set code at all (#97).
+    """
+    parts = (card_code_number or "").strip().rsplit(" ", 1)
+    return (parts[0], parts[1]) if len(parts) == 2 else ("", parts[0])
 
 
 def _slug(text: str) -> str:

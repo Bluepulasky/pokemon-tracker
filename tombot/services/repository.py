@@ -1958,6 +1958,35 @@ class PokemonRepo:
                  len(ids), set_id, ", ".join(ids[:8]))
         return ids
 
+    def prune_market_products(self, episode_id: int, keep: list[tuple[str, str]]) -> int:
+        """Delete this episode's products that a fresh import did not send.
+
+        An import upserts by (episode, card_id, version), so a product stored
+        under an id the importer no longer derives — the "1-" rows a set with
+        prefix-less codes produced (#97) — would otherwise survive every
+        re-import and keep a phantom card alive next to the real one.
+
+        A product an owned copy points at is kept whatever the import says: the
+        copy's printing must not vanish under it. Returns how many were removed.
+        """
+        if not keep:
+            return 0
+        with self.tx() as c:
+            c.execute("CREATE TEMP TABLE IF NOT EXISTS fresh_products(card_id TEXT, version TEXT)")
+            c.execute("DELETE FROM fresh_products")
+            c.executemany("INSERT INTO fresh_products VALUES (?, ?)", keep)
+            cur = c.execute(
+                """DELETE FROM market_products
+                   WHERE episode_id = ?
+                     AND NOT EXISTS (SELECT 1 FROM fresh_products f
+                                     WHERE f.card_id = market_products.card_id
+                                       AND f.version = market_products.version)
+                     AND NOT EXISTS (SELECT 1 FROM collection_items i
+                                     WHERE i.market_product_id = market_products.id)""",
+                (episode_id,))
+            c.execute("DELETE FROM fresh_products")
+        return cur.rowcount
+
     def relink_collection_products(self) -> dict:
         """Reattach owned rows to their printing after the #68 re-import.
 
