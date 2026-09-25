@@ -214,7 +214,7 @@ details { padding: 8px 20px; }
   padding: 2px 7px; line-height: 1.5; backdrop-filter: blur(6px);
 }
 .badge.qty { top: 6px; right: 6px; background: rgba(255,203,5,.92); color: #1a1400; }
-.badge.own { top: 6px; left: 6px; background: rgba(62,207,142,.92); color: #04221a; }
+.badge.own { top: 6px; right: 6px; background: rgba(62,207,142,.92); color: #04221a; }
 /* Held but short of the target: neither missing nor done, so neither the grey
    hatch nor the green tick. The count says how far off it is. */
 .badge.partial { top: 6px; left: 6px; background: rgba(245,165,36,.92); color: #241800;

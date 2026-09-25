@@ -156,6 +156,24 @@ export async function openCard(cardId, opts = {}) {
     () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
   if (next) root.querySelector('.modal-nav.right').onclick =
     () => openCard(next.id, { ...opts, navIdx: navIdx + 1 });
+
+  function handleKeyNav(e) {
+    if (e.key === 'ArrowLeft' && prev) document.querySelector('.modal-nav.left')?.click();
+    if (e.key === 'ArrowRight' && next) document.querySelector('.modal-nav.right')?.click();
+  }
+
+  document.addEventListener('keydown', handleKeyNav);
+
+  root.querySelector('.close').addEventListener('click', () => {
+    document.removeEventListener('keydown', handleKeyNav);
+  }, { once: true });
+
+  // click fuera del modal
+  root.querySelector('.modal-overlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      document.removeEventListener('keydown', handleKeyNav);
+    }
+  }, { once: true });
 }
 
 // CAMBIO 1: añadir data-first-ed, data-price-unit-base, data-price-qty,
@@ -247,7 +265,7 @@ function addForm(card) {
         <input name="quantity" type="number" min="1" value="1" inputmode="numeric"></div>
       <div class="field" style="flex:0 0 auto; align-self:flex-end">
         <input type="file" accept="image/*" class="photo-input-new" style="display:none">
-        <button type="button" class="btn xs act-photo-new">Foto</button>
+        <button type="button" class="btn act-photo-new">Foto</button>
       </div>
     </div>
     <div class="field"><label>Condición</label>
