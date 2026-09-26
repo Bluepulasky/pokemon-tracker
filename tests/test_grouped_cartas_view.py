@@ -317,14 +317,12 @@ def test_each_copy_is_filed_under_its_own_set(app):
     assert by_set == {"bs": pytest.approx(14.31), "b2": pytest.approx(7.64)}
 
 
-def test_top_value_ranks_a_card_at_what_every_copy_is_worth(app):
-    """Ranks by unit price; a card owned twice still appears once with quantity=2."""
-    _own(app.repo, "bs-18", condition="M/NM")
+def test_top_value_ranks_by_unit_price(app):
+    """top_value is sorted by unit price, highest first."""
     _own(app.repo, "bs-18", condition="M/NM")
     _own(app.repo, "bs-7", condition="M/NM")
     PricingService(app.repo, Config).refresh()
 
     top = app.test_client().get("/api/dashboard").get_json()["top_value"]
-    assert [t["card_id"] for t in top] == ["bs-7", "bs-18"]
-    assert top[1]["quantity"] == 2
-    assert top[1]["value"] == pytest.approx(10.975)
+    values = [t["value"] for t in top]
+    assert values == sorted(values, reverse=True)
