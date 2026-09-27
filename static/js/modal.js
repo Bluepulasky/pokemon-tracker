@@ -151,7 +151,7 @@ export async function openCard(cardId, opts = {}) {
   };
   wireForm(root, card);
   wireVariants(root, cardId);
-  wireLightbox(root)
+  wireLightbox(root, cardId);
   if (prev) root.querySelector('.modal-nav.left').onclick =
     () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
   if (next) root.querySelector('.modal-nav.right').onclick =
@@ -648,42 +648,61 @@ function applyVersion(form, v) {
   }
 }
 
-function wireLightbox(root) {
+function wireLightbox(root, cardId) {
   if (window.innerWidth <= 600) return;
 
-  root.querySelectorAll('.variant-card').forEach((card) => {
-    const imgs = card.querySelectorAll('.photos img[data-photo]');
-    imgs.forEach((img) => {
-      const originalOnclick = img.onclick;
-      img.onclick = (e) => {
-        e.stopPropagation();
-        const overlay = document.createElement('div');
-        overlay.className = 'lightbox';
-        overlay.innerHTML = `
-          <div class="lightbox-inner">
-            <img src="${img.src}" alt="">
-            ${imgs.length > 1 && !img.classList.contains('primary') ?
-              '<button class="btn xs lightbox-primary">Marcar como principal</button>' : ''}
+  root.querySelectorAll('.variant-card .photos img[data-photo]').forEach((img) => {
+    const originalOnclick = img.onclick;
+    img.onclick = (e) => {
+      e.stopPropagation();
+      const overlay = document.createElement('div');
+      overlay.className = 'lightbox';
+      overlay.innerHTML = `
+        <div class="lightbox-inner">
+          <img src="${img.src}" alt="">
+          <div class="lightbox-actions">
+            ${img.classList.contains('primary') ? '' :
+              '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
+            <button class="btn xs danger lightbox-delete">Borrar foto</button>
           </div>
-        `;
-        document.body.appendChild(overlay);
-        overlay.onclick = (ev) => {
-          if (!ev.target.closest('.lightbox-inner')) overlay.remove();
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.onclick = (ev) => {
+        if (!ev.target.closest('.lightbox-inner')) overlay.remove();
+      };
+      const primaryBtn = overlay.querySelector('.lightbox-primary');
+      if (primaryBtn) {
+        primaryBtn.onclick = (ev) => {
+          ev.stopPropagation();
+          overlay.remove();
+          if (originalOnclick) originalOnclick.call(img, ev);
         };
-        const primaryBtn = overlay.querySelector('.lightbox-primary');
-        if (primaryBtn) {
-          primaryBtn.onclick = async (ev) => {
-            ev.stopPropagation();
-            overlay.remove();
-            try {
-              await api.setPrimary(Number(img.dataset.photo));
-              toast('Foto principal actualizada');
-              onChange();
-              openCard(img.closest('.variant-card')?.dataset?.cardId || '');
-            } catch (err) { toast(err.message, true); }
-          };
+      }
+      // Two clicks to delete: the first arms the button, the second sends the
+      // request. Closing the overlay disarms it. The modal reopens on the same
+      // card, which is where the remaining photos (and the re-elected primary)
+      // are read from.
+      const delBtn = overlay.querySelector('.lightbox-delete');
+      delBtn.onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!delBtn.classList.contains('armed')) {
+          delBtn.classList.add('armed');
+          delBtn.textContent = '¿Borrar? Confirmar';
+          return;
+        }
+        delBtn.disabled = true;
+        try {
+          await api.deletePhoto(Number(img.dataset.photo));
+          overlay.remove();
+          toast('Foto eliminada');
+          onChange();
+          openCard(cardId);
+        } catch (e) {
+          delBtn.disabled = false;
+          toast(e.message, true);
         }
       };
-    });
+    };
   });
 }
