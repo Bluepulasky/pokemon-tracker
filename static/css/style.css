@@ -850,11 +850,13 @@ input[type="range"]::-moz-range-thumb {
   object-fit: contain;
   border-radius: var(--radius);
 }
+.lightbox-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .lightbox-primary {
   border-color: var(--accent);
   color: var(--accent);
   cursor: pointer;
 }
+.lightbox-delete.armed { background: var(--bad); color: #fff; border-color: var(--bad); }
 
 .note { font-size: 12px; color: var(--fg-faint); margin-top: 8px; }
 
