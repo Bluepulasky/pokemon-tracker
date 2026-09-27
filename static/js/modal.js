@@ -168,16 +168,15 @@ export async function openCard(cardId, opts = {}) {
     document.removeEventListener('keydown', handleKeyNav);
   }, { once: true });
 
-  // click fuera del modal
-  root.querySelector('.modal-overlay').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) {
+  // click fuera del modal — el root mismo es el overlay
+  root.addEventListener('click', (e) => {
+    if (e.target === root) {
       document.removeEventListener('keydown', handleKeyNav);
+      closeModal();
     }
   }, { once: true });
 }
 
-// CAMBIO 1: añadir data-first-ed, data-price-unit-base, data-price-qty,
-// data-price-basis al div raíz — los lee editVariant para el preview.
 function variantCard(item) {
   const v = item.value || {};
   const label = (kind, key) => (META[kind].find((x) => x.key === key) || {}).label || key;
@@ -188,7 +187,6 @@ function variantCard(item) {
   const priceRaw = v.unit != null
     ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
-  // Which printing this copy actually is, e.g. FO-13 (#83).
   const code = item.set_code && item.number ? `${item.set_code}-${item.number}` : '';
   // The copy's own card, which is not the card the modal was opened on: a tile
   // groups reprints (#78), so a Celebrations Blastoise can be listed under Base
@@ -213,7 +211,6 @@ function variantCard(item) {
     <div class="photos${item.photos.length ? '' : ' empty'}">
       ${item.photos.length
         ? item.photos.map((p) => {
-          console.log(p.id, p.is_primary);
           return `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
               class="${p.is_primary ? 'primary' : ''}"
               title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`;
@@ -239,8 +236,6 @@ function variantCard(item) {
   </div>`;
 }
 
-/* 0-8 as a row of targets. A slider is fiddly on a phone and hides the value,
-   and this is the one control the feature exists for. */
 function rankRow(current) {
   return `<div class="rank-row">
     ${META.ratings.map((r) => `<span class="rank${r.value === 0 ? ' zero' : ''}${
@@ -656,32 +651,39 @@ function applyVersion(form, v) {
 function wireLightbox(root) {
   if (window.innerWidth <= 600) return;
 
-  root.querySelectorAll('.variant-card .photos img[data-photo]').forEach((img) => {
-    console.log(img.src, img.classList.toString());
-    const originalOnclick = img.onclick;
-    img.onclick = (e) => {
-      e.stopPropagation();
-      const overlay = document.createElement('div');
-      overlay.className = 'lightbox';
-      overlay.innerHTML = `
-        <div class="lightbox-inner">
-          <img src="${img.src}" alt="">
-          ${img.classList.contains('primary') ? '' :
-            '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
-        </div>
-      `;
-      document.body.appendChild(overlay);
-      overlay.onclick = (ev) => {
-        if (!ev.target.closest('.lightbox-inner')) overlay.remove();
-      };
-      const primaryBtn = overlay.querySelector('.lightbox-primary');
-      if (primaryBtn) {
-        primaryBtn.onclick = (ev) => {
-          ev.stopPropagation();
-          overlay.remove();
-          if (originalOnclick) originalOnclick.call(img, ev);
+  root.querySelectorAll('.variant-card').forEach((card) => {
+    const imgs = card.querySelectorAll('.photos img[data-photo]');
+    imgs.forEach((img) => {
+      const originalOnclick = img.onclick;
+      img.onclick = (e) => {
+        e.stopPropagation();
+        const overlay = document.createElement('div');
+        overlay.className = 'lightbox';
+        overlay.innerHTML = `
+          <div class="lightbox-inner">
+            <img src="${img.src}" alt="">
+            ${imgs.length > 1 && !img.classList.contains('primary') ?
+              '<button class="btn xs lightbox-primary">Marcar como principal</button>' : ''}
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.onclick = (ev) => {
+          if (!ev.target.closest('.lightbox-inner')) overlay.remove();
         };
-      }
-    };
+        const primaryBtn = overlay.querySelector('.lightbox-primary');
+        if (primaryBtn) {
+          primaryBtn.onclick = async (ev) => {
+            ev.stopPropagation();
+            overlay.remove();
+            try {
+              await api.setPrimary(Number(img.dataset.photo));
+              toast('Foto principal actualizada');
+              onChange();
+              openCard(img.closest('.variant-card')?.dataset?.cardId || '');
+            } catch (err) { toast(err.message, true); }
+          };
+        }
+      };
+    });
   });
 }
