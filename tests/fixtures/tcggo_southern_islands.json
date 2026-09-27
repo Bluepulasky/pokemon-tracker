@@ -1,0 +1,431 @@
+[
+ {
+  "id": 18532,
+  "name": "Mew",
+  "card_code_number": "1",
+  "card_number": 1,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275631,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18756/mew-1-southern-islands-pokemon.png",
+  "artist": {
+   "id": 677,
+   "name": "Keiko Fukuyama",
+   "slug": "keiko-fukuyama"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 580,
+    "30d_average": 496.64,
+    "7d_average": 1133.86,
+    "available_items": 45
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18532",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18532"
+  }
+ },
+ {
+  "id": 18545,
+  "name": "Slowking",
+  "card_code_number": "14",
+  "card_number": 14,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275644,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18769/slowking-14-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 250,
+    "30d_average": 180.39,
+    "7d_average": 168.29,
+    "available_items": 17
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18545",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18545"
+  }
+ },
+ {
+  "id": 18535,
+  "name": "Togepi",
+  "card_code_number": "4",
+  "card_number": 4,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275634,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18759/togepi-4-southern-islands-pokemon.png",
+  "artist": {
+   "id": 677,
+   "name": "Keiko Fukuyama",
+   "slug": "keiko-fukuyama"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 180.17,
+    "30d_average": 104.23,
+    "7d_average": 129.27,
+    "available_items": 23
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18535",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18535"
+  }
+ },
+ {
+  "id": 18542,
+  "name": "Marill",
+  "card_code_number": "11",
+  "card_number": 11,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275641,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18766/marill-11-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 132.13,
+    "30d_average": 91.17,
+    "7d_average": 113.57,
+    "available_items": 32
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18542",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18542"
+  }
+ },
+ {
+  "id": 18539,
+  "name": "Jigglypuff",
+  "card_code_number": "8",
+  "card_number": 8,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275638,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18763/jigglypuff-8-southern-islands-pokemon.png",
+  "artist": {
+   "id": 677,
+   "name": "Keiko Fukuyama",
+   "slug": "keiko-fukuyama"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 79,
+    "30d_average": 46.47,
+    "7d_average": 61.82,
+    "available_items": 10
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18539",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18539"
+  }
+ },
+ {
+  "id": 18546,
+  "name": "Wartortle",
+  "card_code_number": "15",
+  "card_number": 15,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275645,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18770/wartortle-15-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 78.08,
+    "30d_average": 74.75,
+    "7d_average": 131.34,
+    "available_items": 20
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18546",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18546"
+  }
+ },
+ {
+  "id": 18548,
+  "name": "Vileplume",
+  "card_code_number": "17",
+  "card_number": 17,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275647,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18772/vileplume-17-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 75,
+    "30d_average": 48.31,
+    "7d_average": 66.61,
+    "available_items": 25
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18548",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18548"
+  }
+ },
+ {
+  "id": 18543,
+  "name": "Lapras",
+  "card_code_number": "12",
+  "card_number": 12,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275642,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18767/lapras-12-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 72.07,
+    "30d_average": 71.37,
+    "7d_average": 76.1,
+    "available_items": 14
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18543",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18543"
+  }
+ },
+ {
+  "id": 18536,
+  "name": "Ivysaur",
+  "card_code_number": "5",
+  "card_number": 5,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275635,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18760/ivysaur-5-southern-islands-pokemon.png",
+  "artist": {
+   "id": 677,
+   "name": "Keiko Fukuyama",
+   "slug": "keiko-fukuyama"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 70,
+    "30d_average": 34.67,
+    "7d_average": 36.35,
+    "available_items": 20
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18536",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18536"
+  }
+ },
+ {
+  "id": 18541,
+  "name": "Tentacruel",
+  "card_code_number": "10",
+  "card_number": 10,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275640,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18765/tentacruel-10-southern-islands-pokemon.png",
+  "artist": {
+   "id": 362,
+   "name": "Naoyo Kimura",
+   "slug": "naoyo-kimura"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 69,
+    "30d_average": 44.3,
+    "7d_average": 69.36,
+    "available_items": 5
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18541",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18541"
+  }
+ },
+ {
+  "id": 18538,
+  "name": "Ledyba",
+  "card_code_number": "7",
+  "card_number": 7,
+  "rarity": null,
+  "supertype": "Pokémon",
+  "cardmarket_id": 275637,
+  "version": null,
+  "image": "https://images.tcggo.com/tcggo/storage/18762/ledyba-7-southern-islands-pokemon.png",
+  "artist": {
+   "id": 677,
+   "name": "Keiko Fukuyama",
+   "slug": "keiko-fukuyama"
+  },
+  "episode": {
+   "id": 161,
+   "name": "Southern Islands",
+   "slug": "southern-islands",
+   "code": "",
+   "released_at": "2001-07-31",
+   "logo": "https://images.tcggo.com/tcggo/storage/18755/southern-islands-logo.png",
+   "cards_total": 18,
+   "cards_printed_total": 18
+  },
+  "prices": {
+   "cardmarket": {
+    "currency": "EUR",
+    "lowest_near_mint": 54.99,
+    "30d_average": 34.67,
+    "7d_average": 45.57,
+    "available_items": 30
+   }
+  },
+  "links": {
+   "cardmarket": "https://www.tcggo.com/external/cm/18538",
+   "tcgplayer": "https://www.tcggo.com/external/tcgplayer/18538"
+  }
+ }
+]

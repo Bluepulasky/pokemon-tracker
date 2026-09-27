@@ -153,8 +153,8 @@ LANGUAGE_MULTIPLIERS = {"en": 1.00, "es": 0.85, "pt": 0.85, "other": 0.85}
 
 VARIANTS = ["normal", "holo", "reverse", "first_edition", "shadowless", "other"]
 VARIANT_LABELS = {
-    "normal": "Normal", "holo": "Holo", "reverse": "Reverse Holo",
-    "first_edition": "1st Edition", "shadowless": "Shadowless", "other": "Otra",
+    "normal": "Normal", "holo": "Holo", "reverse": "Reverse",
+    "first_edition": "1st", "shadowless": "Shadowless", "other": "Otra",
 }
 
 # Condition price multipliers, seeded once. No source prices by condition, so a

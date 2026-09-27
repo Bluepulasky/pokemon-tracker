@@ -61,7 +61,7 @@ def _top_value(limit: int = 20):
     r = repo()
     pricing = svc("pricing")
     mods = r.get_modifiers()
-    rows, _ = r.list_collection(page=1, page_size=500)
+    rows, _ = r.list_collection(page=1, page_size=500, group=False)
     valued = []
     for row in rows:
         est = pricing.estimate_row(row, mods)
@@ -69,10 +69,9 @@ def _top_value(limit: int = 20):
             valued.append({"card_id": row["card_id"], "name": row["name"],
                            "number": row["number"], "set_name": row.get("set_name"),
                            "variant": row["variant"], "condition": row["condition"],
-                           "quantity": row.get("group_quantity") or row["quantity"],
-                           "value": est["unit"]})   # ← unit en lugar de total
+                           "quantity": row.get("quantity"),
+                           "value": est["unit"]})
     return sorted(valued, key=lambda v: v["value"], reverse=True)[:limit]
-
 
 @bp.get("/stats/history")
 def history():

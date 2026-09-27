@@ -156,10 +156,27 @@ export async function openCard(cardId, opts = {}) {
     () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
   if (next) root.querySelector('.modal-nav.right').onclick =
     () => openCard(next.id, { ...opts, navIdx: navIdx + 1 });
+
+  function handleKeyNav(e) {
+    if (e.key === 'ArrowLeft' && prev) document.querySelector('.modal-nav.left')?.click();
+    if (e.key === 'ArrowRight' && next) document.querySelector('.modal-nav.right')?.click();
+  }
+
+  document.addEventListener('keydown', handleKeyNav);
+
+  root.querySelector('.close').addEventListener('click', () => {
+    document.removeEventListener('keydown', handleKeyNav);
+  }, { once: true });
+
+  // click fuera del modal — el root mismo es el overlay
+  root.addEventListener('click', (e) => {
+    if (e.target === root) {
+      document.removeEventListener('keydown', handleKeyNav);
+      closeModal();
+    }
+  }, { once: true });
 }
 
-// CAMBIO 1: añadir data-first-ed, data-price-unit-base, data-price-qty,
-// data-price-basis al div raíz — los lee editVariant para el preview.
 function variantCard(item) {
   const v = item.value || {};
   const label = (kind, key) => (META[kind].find((x) => x.key === key) || {}).label || key;
@@ -170,7 +187,6 @@ function variantCard(item) {
   const priceRaw = v.unit != null
     ? (v.unit / condMult / langMult / (item.first_edition ? 2 : 1)).toFixed(4)
     : '';
-  // Which printing this copy actually is, e.g. FO-13 (#83).
   const code = item.set_code && item.number ? `${item.set_code}-${item.number}` : '';
   // The copy's own card, which is not the card the modal was opened on: a tile
   // groups reprints (#78), so a Celebrations Blastoise can be listed under Base
@@ -220,8 +236,6 @@ function variantCard(item) {
   </div>`;
 }
 
-/* 0-8 as a row of targets. A slider is fiddly on a phone and hides the value,
-   and this is the one control the feature exists for. */
 function rankRow(current) {
   return `<div class="rank-row">
     ${META.ratings.map((r) => `<span class="rank${r.value === 0 ? ' zero' : ''}${
@@ -246,7 +260,7 @@ function addForm(card) {
         <input name="quantity" type="number" min="1" value="1" inputmode="numeric"></div>
       <div class="field" style="flex:0 0 auto; align-self:flex-end">
         <input type="file" accept="image/*" class="photo-input-new" style="display:none">
-        <button type="button" class="btn xs act-photo-new">Foto</button>
+        <button type="button" class="btn act-photo-new">Foto</button>
       </div>
     </div>
     <div class="field"><label>Condición</label>
