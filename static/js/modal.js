@@ -212,8 +212,10 @@ function variantCard(item) {
       ${item.photos.length
         ? item.photos.map((p) => {
           return `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
-              class="${p.is_primary ? 'primary' : ''}"
-              title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`;
+              class="${p.is_primary ? 'primary' : ''}${p.is_cover ? ' cover' : ''}"
+              title="${[p.is_primary ? 'Principal' : 'Marcar como principal',
+                        p.is_cover ? 'Portada del grupo' : ''].filter(Boolean).join(' · ')}"
+              loading="lazy">`;
         }).join('')
         : `<div class="photo-empty">
              <span>Sin fotografía</span>
@@ -655,11 +657,15 @@ function wireLightbox(root, cardId) {
     const originalOnclick = img.onclick;
     img.onclick = (e) => {
       e.stopPropagation();
+      const isCover = img.classList.contains('cover');
       const overlay = document.createElement('div');
       overlay.className = 'lightbox';
       overlay.innerHTML = `
         <div class="lightbox-inner">
           <img src="${img.src}" alt="">
+          ${img.classList.contains('primary') ? '' :
+            '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
+          <button class="btn xs lightbox-cover">${isCover ? 'Quitar portada' : 'Usar como portada'}</button>
           <div class="lightbox-actions">
             ${img.classList.contains('primary') ? '' :
               '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
@@ -679,6 +685,18 @@ function wireLightbox(root, cardId) {
           if (originalOnclick) originalOnclick.call(img, ev);
         };
       }
+      // The cover is the photo the grid shows for the whole reprint group,
+      // over the best-condition rule. Toggling it reopens the card so every
+      // copy's strip reflects the one cover the group now has.
+      overlay.querySelector('.lightbox-cover').onclick = async (ev) => {
+        ev.stopPropagation();
+        try {
+          await api.setCover(Number(img.dataset.photo), !isCover);
+          overlay.remove();
+          toast(isCover ? 'Portada quitada' : 'Portada del grupo actualizada');
+          onChange();
+          openCard(cardId);
+        } catch (e) { toast(e.message, true); }
       // Two clicks to delete: the first arms the button, the second sends the
       // request. Closing the overlay disarms it. The modal reopens on the same
       // card, which is where the remaining photos (and the re-elected primary)

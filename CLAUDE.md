@@ -122,6 +122,10 @@ Re-importing a set is what refreshes its prices. See `services/pricing.py`.
   survives — so it needs an explicit drop, and `market_products` is the only
   table where that is safe (it holds nothing the user typed and a re-import
   rebuilds it in full; see `_retire_product_keyed_market_products`).
+  A column that an **index** in `schema.sql` depends on (`is_cover`) has to be
+  added by an `ALTER TABLE` that runs **before** `executescript`, or
+  `CREATE INDEX` fails with "no such column" on an existing database; the
+  other `ALTER`s run after it (see `_add_cover_column_to_photos`).
 - **After a schema.sql change, restart runs `init_db` only via the Docker
   entrypoint.** Running `waitress`/`flask run` directly does not — run
   `flask init-db` once yourself, or the new table is missing ("no such table").
