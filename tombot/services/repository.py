@@ -171,6 +171,7 @@ class PokemonRepo:
         with self.tx() as c:
             self._retire_product_keyed_market_products(c)
             self._keep_one_primary_photo_per_item(c)
+            self._add_cover_column_to_photos(c)
             c.executescript(SCHEMA_PATH.read_text())
             cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
             if "first_edition" not in cols:
@@ -221,6 +222,22 @@ class PokemonRepo:
                     "dropping %d row(s) so the printing-keyed table can be "
                     "created. Re-import your sets to refill it (#68).", n)
         c.execute("DROP TABLE market_products")
+
+    @staticmethod
+    def _add_cover_column_to_photos(c) -> None:
+        """Add collection_photos.is_cover to a database from before it.
+
+        Unlike the other ALTER TABLE self-heals this one has to run before
+        schema.sql, because schema.sql creates a partial index on the column
+        and CREATE INDEX fails with "no such column" if it is not there yet.
+        On a fresh database the table does not exist and CREATE TABLE
+        brings the column itself.
+        """
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE name='collection_photos'").fetchone():
+            return
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_photos)")}
+        if "is_cover" not in cols:
+            c.execute("ALTER TABLE collection_photos ADD COLUMN is_cover INTEGER NOT NULL DEFAULT 0")
 
     @staticmethod
     def _keep_one_primary_photo_per_item(c) -> None:
@@ -997,11 +1014,15 @@ class PokemonRepo:
             r["group_items"] = mates
             r["group_card_ids"] = list(dict.fromkeys(m["card_id"] for m in mates))
             r["photos"] = by_item.get(r["id"], []) if r["id"] else []
-            # Members are already in condition order and each row's photos are
-            # primary-first, so the first one found is the best copy's best
-            # photo. Falling through to none is right: catalog art beats a
-            # photo of a card you did not take.
-            r["display_photo"] = next((p for m in mates for p in m["photos"]), None)
+            # A cover chosen by hand wins. Members are already in condition
+            # order and each row's photos are primary-first, so with no cover
+            # the first photo found is the best copy's best photo, and with
+            # more than one cover (a slot wider than one reprint group) the
+            # best copy's cover. Falling through to none is right: catalog art
+            # beats a photo of a card you did not take.
+            photos = [p for m in mates for p in m["photos"]]
+            r["display_photo"] = next((p for p in photos if p["is_cover"]),
+                                      next(iter(photos), None))
 
     def photos_for_items(self, item_ids: Sequence[int]) -> dict[int, list[dict]]:
         """Photos for many rows at once, primary first, keyed by item id."""
@@ -1478,8 +1499,9 @@ class PokemonRepo:
 
         A card owned in several conditions should show the nicest copy, not
         whichever row happens to sort first — seeing a Damaged scan when a Near
-        Mint one exists misrepresents the collection. Ranked by condition, then
-        by the primary flag within that condition.
+        Mint one exists misrepresents the collection. A cover chosen by hand
+        comes first; otherwise ranked by condition, then by the primary flag
+        within that condition.
 
         One query for the whole page rather than one per card.
         """
@@ -1492,6 +1514,7 @@ class PokemonRepo:
                 JOIN collection_items i ON i.id = p.item_id
                 WHERE i.card_id IN ({",".join("?" * len(ids))})
                 ORDER BY i.card_id,
+                         p.is_cover DESC,
                          -- Best condition first. These are the grade keys
                          -- from config.CONDITIONS; a key that is not listed
                          -- sorts last rather than failing, so a rename here
@@ -1518,6 +1541,34 @@ class PokemonRepo:
                 return
             c.execute("UPDATE collection_photos SET is_primary=0 WHERE item_id=?", (row["item_id"],))
             c.execute("UPDATE collection_photos SET is_primary=1 WHERE id=?", (photo_id,))
+
+    def set_cover_photo(self, photo_id: int, on: bool = True) -> None:
+        """Make one photo the cover of its card's reprint group, or clear it.
+
+        The group is the same one the Cartas grid folds into a tile (same
+        name and illustrator, _LOGICAL_CARD), so setting a cover on a Base
+        Set 2 copy clears the one on the Base Set copy: one cover per tile,
+        which the per-item unique index alone cannot promise. Clearing puts
+        the tile back on the best-condition rule.
+        """
+        with self.tx() as c:
+            row = c.execute("SELECT item_id FROM collection_photos WHERE id=?",
+                            (photo_id,)).fetchone()
+            if not row:
+                return
+            c.execute(
+                f"""UPDATE collection_photos SET is_cover = 0
+                    WHERE is_cover = 1 AND item_id IN (
+                        SELECT i.id FROM collection_items i JOIN cards c ON c.id = i.card_id
+                        WHERE {self._LOGICAL_CARD} = (
+                            SELECT {self._LOGICAL_CARD}
+                            FROM collection_photos p
+                            JOIN collection_items i ON i.id = p.item_id
+                            JOIN cards c ON c.id = i.card_id
+                            WHERE p.id = ?))""",
+                (photo_id,))
+            if on:
+                c.execute("UPDATE collection_photos SET is_cover = 1 WHERE id = ?", (photo_id,))
 
     def delete_photo(self, photo_id: int) -> list[str]:
         p = self.get_photo(photo_id)

@@ -44,6 +44,7 @@ export const api = {
                                    return req('POST', `/api/collection/${id}/photos`, fd, true); },
   deletePhoto: (id)           => req('DELETE', `/api/collection/photos/${id}`),
   setPrimary:  (id)           => req('PUT', `/api/collection/photos/${id}`, { is_primary: true }),
+  setCover:    (id, on = true) => req('PUT', `/api/collection/photos/${id}`, { is_cover: on }),
   refreshPrices: ()           => req('POST', '/api/prices/refresh', {}),
   refreshAsync: ()            => req('POST', '/api/prices/refresh-async', {}),
   syncCatalog:  ()            => req('POST', '/api/maintenance/sync-catalog', {}),

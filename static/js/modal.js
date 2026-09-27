@@ -151,7 +151,7 @@ export async function openCard(cardId, opts = {}) {
   };
   wireForm(root, card);
   wireVariants(root, cardId);
-  wireLightbox(root)
+  wireLightbox(root, cardId);
   if (prev) root.querySelector('.modal-nav.left').onclick =
     () => openCard(prev.id, { ...opts, navIdx: navIdx - 1 });
   if (next) root.querySelector('.modal-nav.right').onclick =
@@ -197,8 +197,10 @@ function variantCard(item) {
         ? item.photos.map((p) => {
           console.log(p.id, p.is_primary);
           return `<img src="${esc(photoUrl(p, false))}" data-photo="${p.id}"
-              class="${p.is_primary ? 'primary' : ''}"
-              title="${p.is_primary ? 'Principal' : 'Marcar como principal'}" loading="lazy">`;
+              class="${p.is_primary ? 'primary' : ''}${p.is_cover ? ' cover' : ''}"
+              title="${[p.is_primary ? 'Principal' : 'Marcar como principal',
+                        p.is_cover ? 'Portada del grupo' : ''].filter(Boolean).join(' · ')}"
+              loading="lazy">`;
         }).join('')
         : `<div class="photo-empty">
              <span>Sin fotografía</span>
@@ -635,7 +637,7 @@ function applyVersion(form, v) {
   }
 }
 
-function wireLightbox(root) {
+function wireLightbox(root, cardId) {
   if (window.innerWidth <= 600) return;
 
   root.querySelectorAll('.variant-card .photos img[data-photo]').forEach((img) => {
@@ -643,6 +645,7 @@ function wireLightbox(root) {
     const originalOnclick = img.onclick;
     img.onclick = (e) => {
       e.stopPropagation();
+      const isCover = img.classList.contains('cover');
       const overlay = document.createElement('div');
       overlay.className = 'lightbox';
       overlay.innerHTML = `
@@ -650,6 +653,7 @@ function wireLightbox(root) {
           <img src="${img.src}" alt="">
           ${img.classList.contains('primary') ? '' :
             '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
+          <button class="btn xs lightbox-cover">${isCover ? 'Quitar portada' : 'Usar como portada'}</button>
         </div>
       `;
       document.body.appendChild(overlay);
@@ -664,6 +668,19 @@ function wireLightbox(root) {
           if (originalOnclick) originalOnclick.call(img, ev);
         };
       }
+      // The cover is the photo the grid shows for the whole reprint group,
+      // over the best-condition rule. Toggling it reopens the card so every
+      // copy's strip reflects the one cover the group now has.
+      overlay.querySelector('.lightbox-cover').onclick = async (ev) => {
+        ev.stopPropagation();
+        try {
+          await api.setCover(Number(img.dataset.photo), !isCover);
+          overlay.remove();
+          toast(isCover ? 'Portada quitada' : 'Portada del grupo actualizada');
+          onChange();
+          openCard(cardId);
+        } catch (e) { toast(e.message, true); }
+      };
     };
   });
 }

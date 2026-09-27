@@ -272,8 +272,13 @@ def upload_photo(item_id):
 def update_photo(photo_id):
     if not repo().get_photo(photo_id):
         raise ApiError("foto no encontrada", "not_found", 404)
-    if (request.get_json(silent=True) or {}).get("is_primary"):
+    body = request.get_json(silent=True) or {}
+    if body.get("is_primary"):
         repo().set_primary_photo(photo_id)
+    # true sets this photo as the cover of its reprint group, false clears it
+    # (back to the best-condition rule); absent leaves it alone.
+    if "is_cover" in body:
+        repo().set_cover_photo(photo_id, bool(body["is_cover"]))
     return jsonify(repo().get_photo(photo_id))
 
 

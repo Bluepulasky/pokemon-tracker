@@ -180,6 +180,11 @@ CREATE TABLE IF NOT EXISTS collection_photos (
     height         INTEGER,
     bytes          INTEGER,
     is_primary     INTEGER NOT NULL DEFAULT 0,
+    -- The photo that represents the card's whole reprint group in a grid,
+    -- chosen by hand. Overrides the best-condition rule in _attach_group and
+    -- best_photos_for_cards; 0 everywhere means "automatic". Added by
+    -- init_db's ALTER TABLE on a database from before it.
+    is_cover       INTEGER NOT NULL DEFAULT 0,
     position       INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -189,6 +194,10 @@ CREATE INDEX IF NOT EXISTS idx_photos_item ON collection_photos(item_id, positio
 -- index is created, so it also applies to a database that already has some.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_one_primary
     ON collection_photos(item_id) WHERE is_primary = 1;
+-- At most one cover per item. set_cover_photo also clears the flag across
+-- the item's reprint group, which the index cannot express.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_one_cover
+    ON collection_photos(item_id) WHERE is_cover = 1;
 
 -- Hall of Fame rank, 0-8, per logical card.
 --
