@@ -209,13 +209,8 @@ async function setDetail(r) {
   const next = allSets[idx + 1] ?? null;
   const p = s.progress || { owned: 0, target: 0, completion_pct: 0 };
   const sort = r.params.get('sort') || 'number';
-  const rar = r.params.get('rar') || 'all';       // all | holo | no-holo (view)
-  const own = r.params.get('own') || 'all';       // all | owned | missing (view)
-  const col = r.params.get('col') || 'collecting'; // all | collecting | not (view)
 
   const isHolo = (c) => /holo/i.test(c.rarity || '');
-  // Every card in the set, each tagged collecting/owned. The set is a checklist
-  // of the whole thing; the toggle on each card says whether it counts.
   const cards = (s.cards || []).map((c) => ({
     card_id: c.id, label: c.name, name: c.name, number: c.number,
     number_sort: c.number_sort, rarity: c.rarity,
@@ -225,16 +220,45 @@ async function setDetail(r) {
     collecting: !!c.collecting, holo: isHolo(c),
   }));
 
-  let shown = cards;
-  if (rar === 'holo') shown = shown.filter((c) => c.holo);
-  if (rar === 'no-holo') shown = shown.filter((c) => !c.holo);
-  if (own === 'owned') shown = shown.filter((c) => c.owned);
-  if (own === 'missing') shown = shown.filter((c) => !c.owned);
-  if (col === 'collecting') shown = shown.filter((c) => c.collecting);
-  if (col === 'not') shown = shown.filter((c) => !c.collecting);
-  shown = [...shown].sort(sorter(sort));
-
   const collecting = cards.filter((c) => c.collecting).length;
+  const rarities = [...new Set(cards.map(c => c.rarity).filter(Boolean))].sort();
+
+  const filters = {
+    q: '',
+    rar: new Set(rarities),
+    owned: true, missing: true,
+    collecting: true, notCollecting: false,
+  };
+
+  function applyFilters() {
+    let shown = cards;
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      shown = shown.filter(c =>
+        c.name.toLowerCase().includes(q) || c.number.toLowerCase().includes(q));
+    }
+    if (filters.rar.size < rarities.length)
+      shown = shown.filter(c => filters.rar.has(c.rarity));
+    if (!filters.owned || !filters.missing)
+      shown = shown.filter(c => (filters.owned && c.owned) || (filters.missing && !c.owned));
+    if (!filters.collecting || !filters.notCollecting)
+      shown = shown.filter(c =>
+        (filters.collecting && c.collecting) || (filters.notCollecting && !c.collecting));
+    shown = [...shown].sort(sorter(sort));
+    view().querySelector('.card-grid').innerHTML = shown.map(cardCheckHtml).join('');
+    wireCardClicks();
+    view().querySelectorAll('[data-toggle]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const wasCollecting = btn.dataset.collecting === '1';
+        btn.disabled = true;
+        try {
+          await api.setCardInSet(r.id, btn.dataset.toggle, wasCollecting ? 'drop' : 'keep');
+          setDetail(r);
+        } catch (err) { toast(err.message, true); btn.disabled = false; }
+      };
+    });
+  }
 
   view().innerHTML = `
     <div class="set-nav-row">
@@ -246,7 +270,6 @@ async function setDetail(r) {
       </div>
       <div class="set-nav-center">
         <h1>${esc(s.name)}</h1>
-        <div class="sub">${p.owned} / ${collecting}</div>
       </div>
       <div class="set-nav-side right">
         ${next ? `<button class="set-nav" data-set="${next.id}">
@@ -264,51 +287,109 @@ async function setDetail(r) {
       </label>
     </div>
 
-    <div class="toolbar">
-      <div class="chips seg" id="f-rar">
-        ${[['all','Todas'],['holo','Holo'],['no-holo','No holo']]
-          .map(([k,l]) => `<span class="chip${rar===k?' on':''}" data-rar="${k}">${l}</span>`).join('')}
-      </div>
-      <div class="chips seg" id="f-own">
-        ${[['all','Todas'],['owned','Poseídas'],['missing','Faltantes']]
-          .map(([k,l]) => `<span class="chip${own===k?' on':''}" data-own="${k}">${l}</span>`).join('')}
-      </div>
-      <div class="chips seg" id="f-col">
-        ${[['all','Todas'],['collecting','Coleccionando'],['not','No coleccionando']]
-          .map(([k,l]) => `<span class="chip${col===k?' on':''}" data-col="${k}">${l}</span>`).join('')}
-      </div>
-      <div class="toolbar-bottom">
-        <select id="f-sort">
-          <option value="number"${sort==='number'?' selected':''}>Número</option>
-          <option value="name"${sort==='name'?' selected':''}>Nombre</option>
-          <option value="rarity"${sort==='rarity'?' selected':''}>Rareza</option>
-        </select>
+    <div class="toolbar" id="toolbar">
+      <div class="sub">${p.owned} / ${collecting}</div>
+      <button class="toolbar-toggle" id="toolbar-toggle" title="Filtros">🔍</button>
+      <div class="toolbar-filters" id="toolbar-filters">
+        <div class="toolbar-filters-inner">
+
+          <div class="filter-section">
+            <input type="search" id="f-q" placeholder="Buscar por nombre o número…">
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Rareza</div>
+            <div class="chips" id="f-rar">
+              ${rarities.map(rr => `<span class="chip on" data-rar="${esc(rr)}">${esc(rr)}</span>`).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Colección</div>
+            <div class="chips" id="f-own">
+              <span class="chip on" data-own="owned">Poseídas</span>
+              <span class="chip on" data-own="missing">Faltantes</span>
+            </div>
+            <div class="chips" id="f-col" style="margin-top:6px">
+              <span class="chip on" data-col="collecting">Coleccionando</span>
+              <span class="chip" data-col="notCollecting">No coleccionando</span>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
 
-    <div class="card-grid">${shown.map(cardCheckHtml).join('')}</div>`;
+    <div class="sort-fab">
+      <span>↕</span>
+      <select id="f-sort">
+        <option value="number"${sort==='number'?' selected':''}>Número</option>
+        <option value="name"${sort==='name'?' selected':''}>Nombre</option>
+        <option value="rarity"${sort==='rarity'?' selected':''}>Rareza</option>
+      </select>
+    </div>
+
+    <div class="card-grid">${cards.filter(c => c.collecting).sort(sorter(sort)).map(cardCheckHtml).join('')}</div>`;
+
   view().querySelectorAll('.set-nav').forEach((btn) => {
-      btn.onclick = () => { location.hash = `#/set/${btn.dataset.set}`; };
-    });
+    btn.onclick = () => { location.hash = `#/set/${btn.dataset.set}`; };
+  });
+
   const nav = (over) => {
-    const q = new URLSearchParams({ sort, rar, own, col, ...over });
+    const q = new URLSearchParams({ sort, ...over });
     location.hash = `#/set/${r.id}?${q.toString()}`;
   };
   view().querySelector('#f-sort').onchange = (e) => nav({ sort: e.target.value });
+
   view().querySelector('#loose-toggle').onchange = async (e) => {
     e.target.disabled = true;
     try {
       await api.setLoose(r.id, e.target.checked);
-      setDetail(r);   // re-render: counts and owned marks reflect the new mode
+      setDetail(r);
     } catch (err) { toast(err.message, true); e.target.disabled = false; }
   };
-  view().querySelectorAll('#f-rar .chip').forEach((c) => c.onclick = () => nav({ rar: c.dataset.rar }));
-  view().querySelectorAll('#f-own .chip').forEach((c) => c.onclick = () => nav({ own: c.dataset.own }));
-  view().querySelectorAll('#f-col .chip').forEach((c) => c.onclick = () => nav({ col: c.dataset.col }));
 
-  // Quick-select bulk-applies the star to the whole set, so "how do I collect
-  // this set" is one click instead of a hundred. It re-renders in place, keeping
-  // the current filters and scroll intent.
+  view().querySelector('#toolbar-toggle').onclick = () => {
+    const panel = view().querySelector('#toolbar-filters');
+    const toggle = view().querySelector('#toolbar-toggle');
+    const open = panel.classList.toggle('open');
+    toggle.classList.toggle('active', open);
+  };
+
+  view().querySelectorAll('#f-rar .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.rar.add(c.dataset.rar);
+      else filters.rar.delete(c.dataset.rar);
+      applyFilters();
+    };
+  });
+
+  view().querySelectorAll('#f-own .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.dataset.own === 'owned') filters.owned = c.classList.contains('on');
+      if (c.dataset.own === 'missing') filters.missing = c.classList.contains('on');
+      applyFilters();
+    };
+  });
+
+  view().querySelectorAll('#f-col .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.dataset.col === 'collecting') filters.collecting = c.classList.contains('on');
+      if (c.dataset.col === 'notCollecting') filters.notCollecting = c.classList.contains('on');
+      applyFilters();
+    };
+  });
+
+  let searchTimer;
+  view().querySelector('#f-q').oninput = (e) => {
+    filters.q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 250);
+  };
+
   view().querySelectorAll('#q-collect .qs-btn').forEach((btn) => {
     btn.onclick = async () => {
       view().querySelectorAll('.qs-btn').forEach((b) => { b.disabled = true; });
@@ -323,18 +404,6 @@ async function setDetail(r) {
     };
   });
 
-  // The collecting toggle is a per-card exception on top of any bulk rule.
-  view().querySelectorAll('[data-toggle]').forEach((btn) => {
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      const wasCollecting = btn.dataset.collecting === '1';
-      btn.disabled = true;
-      try {
-        await api.setCardInSet(r.id, btn.dataset.toggle, wasCollecting ? 'drop' : 'keep');
-        setDetail(r);
-      } catch (err) { toast(err.message, true); btn.disabled = false; }
-    };
-  });
   wireCardClicks();
 }
 

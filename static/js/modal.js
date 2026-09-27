@@ -663,12 +663,10 @@ function wireLightbox(root, cardId) {
       overlay.innerHTML = `
         <div class="lightbox-inner">
           <img src="${img.src}" alt="">
-          ${img.classList.contains('primary') ? '' :
-            '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
-          <button class="btn xs lightbox-cover">${isCover ? 'Quitar portada' : 'Usar como portada'}</button>
           <div class="lightbox-actions">
             ${img.classList.contains('primary') ? '' :
               '<button class="btn xs lightbox-primary">Marcar como principal</button>'}
+            <button class="btn xs lightbox-cover">${isCover ? 'Quitar portada' : 'Usar como portada'}</button>
             <button class="btn xs danger lightbox-delete">Borrar foto</button>
           </div>
         </div>
@@ -685,9 +683,6 @@ function wireLightbox(root, cardId) {
           if (originalOnclick) originalOnclick.call(img, ev);
         };
       }
-      // The cover is the photo the grid shows for the whole reprint group,
-      // over the best-condition rule. Toggling it reopens the card so every
-      // copy's strip reflects the one cover the group now has.
       overlay.querySelector('.lightbox-cover').onclick = async (ev) => {
         ev.stopPropagation();
         try {
@@ -697,10 +692,7 @@ function wireLightbox(root, cardId) {
           onChange();
           openCard(cardId);
         } catch (e) { toast(e.message, true); }
-      // Two clicks to delete: the first arms the button, the second sends the
-      // request. Closing the overlay disarms it. The modal reopens on the same
-      // card, which is where the remaining photos (and the re-elected primary)
-      // are read from.
+      };
       const delBtn = overlay.querySelector('.lightbox-delete');
       delBtn.onclick = async (ev) => {
         ev.stopPropagation();
