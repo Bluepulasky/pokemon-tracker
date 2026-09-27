@@ -53,15 +53,26 @@ class MarketImporter:
                 break
             page += 1
 
-        from .tcggo_catalog import resolve_collisions
-        code = (rows[0].get("card_code_number") or "").rsplit(" ", 1)[0] if rows else ""
+        from .tcggo_catalog import resolve_collisions, split_code
+        # The set's code, from the first card that carries one ("BS 4" -> BS).
+        # A set whose cards are numbered with no prefix at all (Southern
+        # Islands: "1", "14", …) falls back to the episode's own code, then to
+        # its tcggo id — the same fallback build_set uses for the set id, so
+        # the card ids and the set id agree (#97).
+        code = next((split_code(r.get("card_code_number"))[0] for r in rows
+                     if split_code(r.get("card_code_number"))[0]), "")
+        if not code and rows:
+            code = ((rows[0].get("episode") or {}).get("code") or "").strip() or str(episode_id)
         product_rows = [self._row(r, episode_id, code) for r in self._dedupe(rows)]
         # Split any different cards that upstream gave the same code+number onto
         # distinct card_ids before storing, so their products never merge.
         resolve_collisions(product_rows)
         stored = self.repo.upsert_market_products(product_rows)
+        # The set arrives whole, so whatever this import did not send is stale.
+        pruned = self.repo.prune_market_products(
+            episode_id, [(r["card_id"], r["version"]) for r in product_rows])
         return {"episode_id": episode_id, "fetched": len(rows), "stored": stored,
-                "requests": self._used() - spent_before}
+                "pruned": pruned, "requests": self._used() - spent_before}
 
     def import_sets(self, official_set_ids, episode_for_set) -> dict:
         """Import each set, stopping while there is still allowance to stop with.

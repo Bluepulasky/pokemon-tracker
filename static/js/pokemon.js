@@ -10,6 +10,16 @@ let META = null;
 let _collGrid = null;
 let _collLoaded = 0;
 
+document.addEventListener('keydown', (e) => {
+    if (!e.shiftKey) return;
+    if (e.key === 'ArrowLeft') {
+        document.querySelector('.set-nav-side.left .set-nav')?.click();
+    }
+    if (e.key === 'ArrowRight') {
+        document.querySelector('.set-nav-side.right .set-nav')?.click();
+    }
+});
+
 /* ------------------------------------------------------------------ boot */
 async function boot() {
   try {
@@ -113,7 +123,7 @@ async function dashboard() {
         <div class="missing-row" data-card="${esc(t.card_id)}">
           <span class="n">${esc(shortId(t.card_id))}</span>
           <span>${esc(t.name)}</span>
-          <span class="tag2">${esc(t.variant)} · ${esc(t.condition)}</span>
+          <span class="tag2">${esc(t.variant)} ${esc(t.condition)}</span>
           <span class="r">${esc(eur(t.value))}</span>
         </div>`).join('')
       : '<div class="empty">Todavía no hay precios. Ejecuta una actualización de precios.</div>'}</div>
