@@ -555,11 +555,14 @@ class PokemonRepo:
         marks = ",".join("?" * len(sources))
         return self._all(
             f"""SELECT c.id, c.name, c.number, c.number_sort, c.rarity,
+                       c.supertype, c.types_json,
                        c.image_small_url, c.image_local, c.official_set_id,
+                       COALESCE(cr.rating, 0) AS rating,
                        EXISTS (SELECT 1 FROM set_slot_cards m
                                 WHERE m.set_id = ? AND m.card_id = c.id) AS collecting,
                        {owned_expr} AS owned_qty
                   FROM cards c
+                  LEFT JOIN card_ratings cr ON cr.card_id = c.id
                  WHERE c.official_set_id IN ({marks})
                  ORDER BY c.number_sort, c.number""",
             (set_id, *sources))

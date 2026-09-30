@@ -218,6 +218,9 @@ async function setDetail(r) {
     official_set_id: c.official_set_id,
     owned: (c.owned_qty || 0) > 0, quantity: c.owned_qty || 0,
     collecting: !!c.collecting, holo: isHolo(c),
+    supertype: c.supertype || null,
+    types: JSON.parse(c.types_json || '[]'),
+    rating: c.rating || 0,
   }));
 
   const collecting = cards.filter((c) => c.collecting).length;
@@ -228,6 +231,9 @@ async function setDetail(r) {
     rar: new Set(rarities),
     owned: true, missing: true,
     collecting: true, notCollecting: false,
+    hof: new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]),
+    types: new Set(META.types),
+    colors: new Set(META.energy_types || []),
   };
 
   function applyFilters() {
@@ -244,6 +250,13 @@ async function setDetail(r) {
     if (!filters.collecting || !filters.notCollecting)
       shown = shown.filter(c =>
         (filters.collecting && c.collecting) || (filters.notCollecting && !c.collecting));
+    if (filters.hof.size < META.ratings.length + 1)
+      shown = shown.filter(c => filters.hof.has(String(c.rating || 0)));
+    if (filters.types.size < META.types.length)
+      shown = shown.filter(c => filters.types.has(c.supertype));
+    if (filters.colors.size < (META.energy_types || []).length)
+      shown = shown.filter(c =>
+        c.types.length === 0 || c.types.some(t => filters.colors.has(t)));
     shown = [...shown].sort(sorter(sort));
     view().querySelector('.card-grid').innerHTML = shown.map(cardCheckHtml).join('');
     wireCardClicks();
@@ -258,6 +271,8 @@ async function setDetail(r) {
         } catch (err) { toast(err.message, true); btn.disabled = false; }
       };
     });
+    const shownOwned = shown.filter(c => c.owned).length;
+    view().querySelector('#toolbar-count').textContent = `${shownOwned} / ${shown.length}`;
   }
 
   view().innerHTML = `
@@ -288,7 +303,7 @@ async function setDetail(r) {
     </div>
 
     <div class="toolbar" id="toolbar">
-      <div class="sub">${p.owned} / ${collecting}</div>
+      <div class="sub" id="toolbar-count">${p.owned} / ${collecting}</div>
       <button class="toolbar-toggle" id="toolbar-toggle" title="Filtros">🔍</button>
       <div class="toolbar-filters" id="toolbar-filters">
         <div class="toolbar-filters-inner">
@@ -306,13 +321,47 @@ async function setDetail(r) {
 
           <div class="filter-section">
             <div class="filter-label">Colección</div>
-            <div class="chips" id="f-own">
-              <span class="chip on" data-own="owned">Poseídas</span>
-              <span class="chip on" data-own="missing">Faltantes</span>
+            <div class="filter-row">
+              <div class="chips" id="f-own">
+                <span class="chip on" data-own="owned">Poseídas</span>
+                <span class="chip on" data-own="missing">Faltantes</span>
+              </div>
+              <div class="chips" id="f-col">
+                <span class="chip on" data-col="collecting">Coleccionando</span>
+                <span class="chip" data-col="notCollecting">No coleccionando</span>
+              </div>
             </div>
-            <div class="chips" id="f-col" style="margin-top:6px">
-              <span class="chip on" data-col="collecting">Coleccionando</span>
-              <span class="chip" data-col="notCollecting">No coleccionando</span>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Hall of Fame
+              <button class="chip-toggle-all" data-group="hof">✕ todo</button>
+            </div>
+            <div class="chips" id="f-hof">
+              <span class="chip on" data-hof="0">Sin rating</span>
+              ${META.ratings.filter(x => x.value > 0).map(x =>
+                `<span class="chip on" data-hof="${x.value}">${x.value}★</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Supertipo</div>
+            <div class="chips" id="f-type">
+              ${META.types.map(t =>
+                `<span class="chip on" data-type="${esc(t)}">${esc(t)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Color
+              <button class="chip-toggle-all" data-group="color">✕ todo</button>
+            </div>
+            <div class="chips" id="f-color">
+              ${(META.energy_types || []).map(t =>
+                `<span class="chip on" data-color="${esc(t)}">${esc(t)}</span>`
+              ).join('')}
             </div>
           </div>
 
@@ -404,6 +453,57 @@ async function setDetail(r) {
     };
   });
 
+  view().querySelectorAll('#f-hof .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.hof.add(c.dataset.hof);
+      else filters.hof.delete(c.dataset.hof);
+      applyFilters();
+    };
+  });
+
+  view().querySelectorAll('#f-type .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.types.add(c.dataset.type);
+      else filters.types.delete(c.dataset.type);
+      applyFilters();
+    };
+  });
+
+  view().querySelectorAll('#f-color .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.colors.add(c.dataset.color);
+      else filters.colors.delete(c.dataset.color);
+      applyFilters();
+    };
+  });
+  
+  view().querySelectorAll('.chip-toggle-all').forEach(btn => {
+    btn.onclick = () => {
+      const group = btn.dataset.group;
+      const chips = view().querySelectorAll(`#f-${group} .chip`);
+      const allOn = [...chips].every(c => c.classList.contains('on'));
+      chips.forEach(c => {
+        if (allOn) c.classList.remove('on');
+        else c.classList.add('on');
+      });
+      // sync filter state
+      if (group === 'hof') {
+        if (allOn) filters.hof.clear();
+        else filters.hof = new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]);
+      }
+      if (group === 'color') {
+        if (allOn) filters.colors.clear();
+        else filters.colors = new Set(META.energy_types || []);
+      }
+      btn.textContent = allOn ? '✓ todo' : '✕ todo';
+      applyFilters();
+    };
+  });
+
+  applyFilters();
   wireCardClicks();
 }
 
