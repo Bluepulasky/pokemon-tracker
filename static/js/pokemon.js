@@ -208,7 +208,7 @@ async function setDetail(r) {
   const prev = allSets[idx - 1] ?? null;
   const next = allSets[idx + 1] ?? null;
   const p = s.progress || { owned: 0, target: 0, completion_pct: 0 };
-  const sort = r.params.get('sort') || 'number';
+  let sort = r.params.get('sort') || 'number';
 
   const isHolo = (c) => /holo/i.test(c.rarity || '');
   const cards = (s.cards || []).map((c) => ({
@@ -369,26 +369,59 @@ async function setDetail(r) {
       </div>
     </div>
 
-    <div class="sort-fab">
-      <span>↕</span>
-      <select id="f-sort">
-        <option value="number"${sort==='number'?' selected':''}>Número</option>
-        <option value="name"${sort==='name'?' selected':''}>Nombre</option>
-        <option value="rarity"${sort==='rarity'?' selected':''}>Rareza</option>
-      </select>
+    <div class="sort-select">
+        <button type="button" id="sort-button">
+            <span id="sort-label">Por número</span>
+            <span class="sort-arrow">▴</span>
+        </button>
+
+        <div class="sort-options" id="sort-options">
+            <div class="sort-option ${sort === 'number' ? 'selected' : ''}" data-value="number">Por número</div>
+            <div class="sort-option ${sort === 'name' ? 'selected' : ''}" data-value="name">Por nombre</div>
+            <div class="sort-option ${sort === 'rarity' ? 'selected' : ''}" data-value="rarity">Por rareza</div>
+            <div class="sort-option ${sort === 'still_needed' ? 'selected' : ''}" data-value="still_needed">Por pendientes</div>
+        </div>
     </div>
 
     <div class="card-grid">${cards.filter(c => c.collecting).sort(sorter(sort)).map(cardCheckHtml).join('')}</div>`;
 
+    const sortSelect = view().querySelector('.sort-select');
+    const sortButton = view().querySelector('#sort-button');
+    const sortOptions = view().querySelector('#sort-options');
+    const sortLabel = view().querySelector('#sort-label');
+
+    sortLabel.textContent = {
+      number: 'Por número',
+      name: 'Por nombre',
+      rarity: 'Por rareza',
+      still_needed: 'Por pendientes'
+    }[sort] || 'Por número';
+
+    sortSelect.onclick = (e) => e.stopPropagation();
+
+    sortButton.onclick = () => {
+      sortSelect.classList.toggle('open');
+    };
+
+    sortOptions.onclick = (e) => {
+        const option = e.target.closest('.sort-option');
+        if (!option) return;
+
+        sort = option.dataset.value;
+
+        sortOptions.querySelectorAll('.sort-option').forEach(o => {
+            o.classList.toggle('selected', o === option);
+        });
+
+        sortLabel.textContent = option.textContent;
+        sortSelect.classList.remove('open');
+
+        applyFilters();
+    };
+
   view().querySelectorAll('.set-nav').forEach((btn) => {
     btn.onclick = () => { location.hash = `#/set/${btn.dataset.set}`; };
   });
-
-  const nav = (over) => {
-    const q = new URLSearchParams({ sort, ...over });
-    location.hash = `#/set/${r.id}?${q.toString()}`;
-  };
-  view().querySelector('#f-sort').onchange = (e) => nav({ sort: e.target.value });
 
   view().querySelector('#loose-toggle').onchange = async (e) => {
     e.target.disabled = true;

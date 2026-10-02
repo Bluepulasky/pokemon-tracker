@@ -154,7 +154,6 @@ details { padding: 8px 20px; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   margin: 12px 0 8px;
-  gap: 8px;
 }
 
 .toolbar > .sub { flex: 1; }
@@ -888,9 +887,76 @@ input[type="range"]::-moz-range-thumb {
   font-size: 14px;
 }
 
+.sort-select {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 1000;
+}
+
+#sort-button {
+    min-width: 150px;
+    padding: 7px 11px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg-3);
+
+    border: 1px solid var(--line);
+    border-radius: 7px;
+
+    cursor: pointer;
+}
+
+.sort-arrow {
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+/* cuando está abierto, la flecha apunta arriba */
+.sort-options {
+    position: absolute;
+
+    left: 0;
+    bottom: calc(100% + 5px);
+
+    min-width: 100%;
+
+    padding: 4px;
+
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+
+    display: none;
+}
+
+.sort-option.selected {
+    color: var(--accent);
+}
+
+.sort-select.open .sort-options {
+    display: block;
+}
+
+.sort-option {
+    padding: 7px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sort-option:hover {
+    background: var(--bg-2);
+}
+
 @media (max-width: 600px) {
   .toolbar {
-    gap: 5px;
     font-size: 9px;
   }
   
@@ -1254,28 +1320,4 @@ input[type="range"]::-moz-range-thumb {
     flex-direction: column;
     gap: 8px;
   }
-}
-
-.sort-fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 100;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.2);
-}
-
-.sort-fab select {
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--fg);
-  font-size: 13px;
-  cursor: pointer;
 }
