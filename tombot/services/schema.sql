@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS cards (
     id               TEXT PRIMARY KEY,        -- 'base1-4'
     official_set_id  TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
     name             TEXT NOT NULL,
+    name_key         TEXT,                    -- name reduced for matching: 'pokemoncenter' (#102)
     number           TEXT NOT NULL,           -- '4', 'H12', 'SH1' — string on purpose
     number_sort      REAL,                    -- derived; lexical sort puts #10 before #2
     rarity           TEXT,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS cards (
 
 CREATE INDEX IF NOT EXISTS idx_cards_set    ON cards(official_set_id, number_sort);
 CREATE INDEX IF NOT EXISTS idx_cards_name   ON cards(name);
+CREATE INDEX IF NOT EXISTS idx_cards_name_key ON cards(name_key, artist);
 CREATE INDEX IF NOT EXISTS idx_cards_rarity ON cards(rarity);
 
 -- ---------------------------------------------------------------------------
