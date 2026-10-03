@@ -48,7 +48,7 @@ SLOT_HELD_CTE = """
                        SELECT 1 FROM set_slot_cards m2
                        JOIN cards c2 ON c2.id = m2.card_id
                       WHERE m2.slot_id = sl.id
-                        AND c2.name = ci.name
+                        AND c2.name_key = ci.name_key
                         AND IFNULL(c2.artist,'') = IFNULL(ci.artist,'')))
                ELSE
                  (SELECT COALESCE(SUM(i.quantity), 0)
@@ -172,7 +172,9 @@ class PokemonRepo:
             self._retire_product_keyed_market_products(c)
             self._keep_one_primary_photo_per_item(c)
             self._add_cover_column_to_photos(c)
+            self._add_name_key_column_to_cards(c)
             c.executescript(SCHEMA_PATH.read_text())
+            self._fill_missing_name_keys(c)
             cols = {r["name"] for r in c.execute("PRAGMA table_info(collection_items)")}
             if "first_edition" not in cols:
                 c.execute("ALTER TABLE collection_items ADD COLUMN first_edition INTEGER NOT NULL DEFAULT 0")
@@ -240,6 +242,36 @@ class PokemonRepo:
             c.execute("ALTER TABLE collection_photos ADD COLUMN is_cover INTEGER NOT NULL DEFAULT 0")
 
     @staticmethod
+    def _add_name_key_column_to_cards(c) -> None:
+        """Add cards.name_key to a database from before it (#102).
+
+        Runs before schema.sql for the same reason `_add_cover_column_to_photos`
+        does: schema.sql indexes the column, and CREATE INDEX fails with "no
+        such column" on a table that predates it. The values are filled in
+        afterwards by `_fill_missing_name_keys`, once the table surely exists.
+        """
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE name='cards'").fetchone():
+            return
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(cards)")}
+        if "name_key" not in cols:
+            c.execute("ALTER TABLE cards ADD COLUMN name_key TEXT")
+
+    @staticmethod
+    def _fill_missing_name_keys(c) -> None:
+        """Compute name_key for every card that has none.
+
+        The key is `normalized_name` of the card name, and that is Python
+        (unicode decomposition), not something SQLite can derive for itself —
+        so a database that got the column from the ALTER above still has to be
+        filled here. Idempotent: a card with a key is not touched.
+        """
+        from .tcggo_catalog import normalized_name
+        rows = c.execute("SELECT id, name FROM cards WHERE name_key IS NULL").fetchall()
+        if rows:
+            c.executemany("UPDATE cards SET name_key = ? WHERE id = ?",
+                          [(normalized_name(r["name"]), r["id"]) for r in rows])
+
+    @staticmethod
     def _keep_one_primary_photo_per_item(c) -> None:
         """Leave each item with exactly one primary photo (#93).
 
@@ -302,12 +334,14 @@ class PokemonRepo:
         The same goes for types_json: tcggo never sends an energy type, so it is
         filled locally (the card-meta CSV) and an import carrying an empty list
         must leave the filled one in place."""
+        from .tcggo_catalog import normalized_name
         rows = []
         for c in cards:
             rows.append({
                 "id": c["id"],
                 "official_set_id": c["official_set_id"],
                 "name": c["name"],
+                "name_key": normalized_name(c["name"]),
                 "number": str(c.get("number") or ""),
                 "number_sort": _number_sort(str(c.get("number") or "")),
                 "rarity": c.get("rarity"),
@@ -325,14 +359,15 @@ class PokemonRepo:
         with self.tx() as conn:
             conn.executemany(
                 """INSERT INTO cards
-                     (id,official_set_id,name,number,number_sort,rarity,supertype,
+                     (id,official_set_id,name,name_key,number,number_sort,rarity,supertype,
                       subtypes_json,types_json,artist,image_small_url,image_large_url,
                       external_ids_json,source)
-                   VALUES (:id,:official_set_id,:name,:number,:number_sort,:rarity,:supertype,
+                   VALUES (:id,:official_set_id,:name,:name_key,:number,:number_sort,:rarity,:supertype,
                            :subtypes_json,:types_json,:artist,:image_small_url,:image_large_url,
                            :external_ids_json,:source)
                    ON CONFLICT(id) DO UPDATE SET
                      official_set_id=excluded.official_set_id, name=excluded.name,
+                     name_key=excluded.name_key,
                      number=excluded.number, number_sort=excluded.number_sort,
                      rarity=excluded.rarity, supertype=excluded.supertype,
                      subtypes_json=excluded.subtypes_json,
@@ -348,7 +383,7 @@ class PokemonRepo:
         # arrived unranked. Catching that here rather than leaving it to the
         # next start is what stops an import re-opening the split (#76); scoped
         # to the names just written, so it costs nothing on a big catalogue.
-        self.unify_reprint_ratings([r["name"] for r in rows])
+        self.unify_reprint_ratings([r["name_key"] for r in rows])
         return len(rows)
 
     def set_card_image_local(self, card_id: str, rel_path: str) -> None:
@@ -546,7 +581,7 @@ class PokemonRepo:
         if self.is_loose_completion(set_id):
             owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
                           "JOIN cards ci ON ci.id = i.card_id "
-                          "WHERE ci.name = c.name "
+                          "WHERE ci.name_key = c.name_key "
                           "AND IFNULL(ci.artist,'') = IFNULL(c.artist,'')), 0)")
         else:
             owned_expr = ("COALESCE((SELECT SUM(i.quantity) FROM collection_items i "
@@ -805,8 +840,8 @@ class PokemonRepo:
         from the Sets page must not list a reprint, which would read as owning
         the card you are looking at.
         """
-        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
-        name = ref["name"] if ref else None
+        ref = self._one("SELECT name_key, artist FROM cards WHERE id = ?", (card_id,))
+        name = ref["name_key"] if ref else None
         artist = ref["artist"] if ref else None
         loose = "1" if include_reprints else (
             "EXISTS (SELECT 1 FROM set_slot_cards ssc "
@@ -829,7 +864,7 @@ class PokemonRepo:
             "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id "
             "WHERE i.card_id = ? "
             f"   OR ({loose} "
-            "       AND c.name = ? AND IFNULL(c.artist,'') = IFNULL(?,'')) "
+            "       AND c.name_key = ? AND IFNULL(c.artist,'') = IFNULL(?,'')) "
             f"ORDER BY is_reprint, {self._CONDITION_RANK}, i.variant",
             (card_id, card_id, *gate_params, name, artist),
         )
@@ -869,7 +904,7 @@ class PokemonRepo:
                 "EXISTS (SELECT 1 FROM set_slot_cards m JOIN cards mc ON mc.id=m.card_id "
                 " WHERE m.set_id=? AND (mc.id = i.card_id "
                 "   OR (EXISTS (SELECT 1 FROM set_loose_completion lc WHERE lc.set_id=?) "
-                "       AND mc.name = c.name "
+                "       AND mc.name_key = c.name_key "
                 "       AND IFNULL(mc.artist,'') = IFNULL(c.artist,''))))")
             params += [set_id, set_id]
         for col, val in (("condition", condition), ("variant", variant),
@@ -904,7 +939,7 @@ class PokemonRepo:
             where.append(
                 "(SELECT COALESCE(SUM(q.quantity), 0) FROM collection_items q "
                 "   JOIN cards qc ON qc.id = q.card_id "
-                "  WHERE qc.name = c.name "
+                "  WHERE qc.name_key = c.name_key "
                 "    AND IFNULL(qc.artist,'') = IFNULL(c.artist,'')) >= ?")
             params.append(int(min_quantity))
         # COALESCE because an unranked card has no card_ratings row at all.
@@ -1180,7 +1215,7 @@ class PokemonRepo:
         held_elsewhere = (
             "EXISTS (SELECT 1 FROM collection_items ri "
             "          JOIN cards rc ON rc.id = ri.card_id "
-            "         WHERE rc.name = c.name "
+            "         WHERE rc.name_key = c.name_key "
             "           AND IFNULL(rc.artist,'') = IFNULL(c.artist,''))")
         asks = ("1" if unique_reprints else
                 "EXISTS (SELECT 1 FROM set_loose_completion lc "
@@ -1300,7 +1335,7 @@ class PokemonRepo:
     # 3 and the Celebrations one 4 is two answers to one question (#76). This
     # matches every reprint: same name, same illustrator, the definition the
     # version picker and loose completion already use.
-    _REPRINTS_OF = ("SELECT id FROM cards WHERE name = ? "
+    _REPRINTS_OF = ("SELECT id FROM cards WHERE name_key = ? "
                     "AND IFNULL(artist,'') = IFNULL(?,'')")
 
     def set_card_rating(self, card_id: str, rating: int) -> None:
@@ -1310,11 +1345,11 @@ class PokemonRepo:
         saying so is indistinguishable from no row while making every average
         and count query carry a `rating > 0` guard.
         """
-        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
+        ref = self._one("SELECT name_key, artist FROM cards WHERE id = ?", (card_id,))
         # A card the catalogue does not know has no findable reprints, so it
         # ranks alone rather than silently ranking nothing.
-        where, args = (("name = ? AND IFNULL(artist,'') = IFNULL(?,'')",
-                        (ref["name"], ref["artist"])) if ref
+        where, args = (("name_key = ? AND IFNULL(artist,'') = IFNULL(?,'')",
+                        (ref["name_key"], ref["artist"])) if ref
                        else ("id = ?", (card_id,)))
         with self.tx() as c:
             if int(rating) <= 0:
@@ -1342,21 +1377,22 @@ class PokemonRepo:
         printing. Idempotent: rows already holding the winning value are not
         rewritten, so the timestamps that decide the winner stay put.
 
-        `names` scopes the pass to the cards just imported. Without it the
-        whole catalogue is checked, which is what `init_db` wants.
+        `names` scopes the pass to the cards just imported, as name keys
+        (`cards.name_key`). Without it the whole catalogue is checked, which is
+        what `init_db` wants.
         """
         scope, args = "", []
         if names is not None:
             uniq = list(dict.fromkeys(names))
             if not uniq:
                 return {"cards_ranked": 0, "groups": 0}
-            scope = f" WHERE c.name IN ({','.join('?' * len(uniq))})"
+            scope = f" WHERE c.name_key IN ({','.join('?' * len(uniq))})"
             args = uniq
         groups = self._all(
-            f"""SELECT c.name, c.artist
+            f"""SELECT c.name_key, c.artist
                   FROM cards c LEFT JOIN card_ratings r ON r.card_id = c.id
                   {scope}
-                 GROUP BY c.name, IFNULL(c.artist,'')
+                 GROUP BY c.name_key, IFNULL(c.artist,'')
                 HAVING COUNT(r.card_id) > 0
                    AND (COUNT(r.card_id) <> COUNT(*)
                         OR COUNT(DISTINCT r.rating) > 1)""", args)
@@ -1367,9 +1403,9 @@ class PokemonRepo:
             for g in groups:
                 winner = c.execute(
                     "SELECT r.rating FROM card_ratings r JOIN cards k ON k.id = r.card_id "
-                    "WHERE k.name = ? AND IFNULL(k.artist,'') = IFNULL(?,'') "
+                    "WHERE k.name_key = ? AND IFNULL(k.artist,'') = IFNULL(?,'') "
                     "ORDER BY r.updated_at DESC, r.card_id DESC LIMIT 1",
-                    (g["name"], g["artist"])).fetchone()[0]
+                    (g["name_key"], g["artist"])).fetchone()[0]
                 changed += c.execute(
                     "INSERT INTO card_ratings(card_id, rating) "
                     f"SELECT id, ? FROM ({self._REPRINTS_OF}) AS k "
@@ -1377,7 +1413,7 @@ class PokemonRepo:
                     "                     WHERE r.card_id = k.id AND r.rating = ?) "
                     "ON CONFLICT(card_id) DO UPDATE SET rating=excluded.rating, "
                     "updated_at=datetime('now')",
-                    (winner, g["name"], g["artist"], winner)).rowcount
+                    (winner, g["name_key"], g["artist"], winner)).rowcount
         log.info("unified the Hall of Fame rank across %d reprint group(s), "
                  "%d printing(s) changed", len(groups), changed)
         return {"cards_ranked": changed, "groups": len(groups)}
@@ -1923,7 +1959,7 @@ class PokemonRepo:
         Magneton, which only shares the name. Each row keeps its own card_id and
         set, so a pick records the printing it actually is.
         """
-        ref = self._one("SELECT name, artist FROM cards WHERE id = ?", (card_id,))
+        ref = self._one("SELECT name_key, artist FROM cards WHERE id = ?", (card_id,))
         if not ref:
             return []
         return self._all(
@@ -1932,10 +1968,10 @@ class PokemonRepo:
                  FROM market_products mp
                  JOIN cards c ON c.id = mp.card_id
                  JOIN official_sets os ON os.id = c.official_set_id
-                WHERE c.name = ?
+                WHERE c.name_key = ?
                   AND IFNULL(c.artist,'') = IFNULL(?,'')
                 ORDER BY os.release_date, mp.code, mp.version""",
-            (ref["name"], ref["artist"]))
+            (ref["name_key"], ref["artist"]))
 
     def market_products_for_name(self, name: str) -> list[dict]:
         """Every product of a card by name, across every set already imported.
@@ -1948,15 +1984,16 @@ class PokemonRepo:
         carries its own card_id and set, so a pick records the printing it is,
         not the card the modal happened to be opened on.
         """
+        from .tcggo_catalog import normalized_name
         return self._all(
             """SELECT mp.*, os.name AS set_name, os.release_date AS set_release,
                       c.official_set_id AS set_id
                  FROM market_products mp
                  JOIN cards c ON c.id = mp.card_id
                  JOIN official_sets os ON os.id = c.official_set_id
-                WHERE c.name = ?
+                WHERE c.name_key = ?
                 ORDER BY os.release_date, mp.code, mp.version""",
-            (name,))
+            (normalized_name(name),))
 
     def get_market_product(self, product_id: int) -> dict | None:
         """One printing, by our own id (not Cardmarket's — see schema.sql)."""

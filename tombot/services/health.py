@@ -182,10 +182,10 @@ def check_reprint_ratings(repo) -> list[dict]:
     a card that sorts in two different places in the Hall of Fame.
     """
     rows = repo._all(
-        """SELECT c.name, c.artist, COUNT(DISTINCT r.rating) AS ranks,
+        """SELECT MIN(c.name) AS name, c.artist, COUNT(DISTINCT r.rating) AS ranks,
                   COUNT(r.card_id) AS rated, COUNT(*) AS printings
              FROM cards c JOIN card_ratings r ON r.card_id = c.id
-            GROUP BY c.name, IFNULL(c.artist,'')
+            GROUP BY c.name_key, IFNULL(c.artist,'')
            HAVING COUNT(DISTINCT r.rating) > 1""")
     if not rows:
         return []
