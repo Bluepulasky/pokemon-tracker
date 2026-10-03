@@ -596,19 +596,31 @@ async function collection(r) {
   const page = Number(r.params.get('page') || 1);
   const isAppend = page > 1 && _collGrid;
 
+  const SET_CODES = {
+    'bs-completo':  'BS',  'ju-completo':  'JU',  'wp-completo':  'WP',
+    'fo-completo':  'FO',  'tr-completo':  'TR',  'gh-completo':  'GH',
+    'gc-completo':  'GC',  'ng-completo':  'NG',  'nd-completo':  'ND',
+    '161-completo': 'SI',  'nr-completo':  'NR',  'nde-completo': 'NDE',
+    'trr-completo': 'TRR',
+  };
+
+  const SET_IDS = {
+    'bs-completo': 'bs',
+    'ju-completo': 'ju',
+    'wp-completo': 'wp',
+    'fo-completo': 'fo',
+    'tr-completo': 'tr',
+    'gh-completo': 'b2',
+    'gc-completo': 'gc',
+    'ng-completo': 'lc',
+    'nd-completo': 'sw',
+    '161-completo': 'blw',
+    'nr-completo': 'evo',
+    'nde-completo': 'cel',
+    'trr-completo': 'crz',
+  };
+
   const f = {
-    set: r.params.get('set') || '',
-    condition: r.params.get('condition') || '',
-    variant: r.params.get('variant') || '',
-    language: r.params.get('language') || '',
-    rarity: r.params.get('rarity') || '',
-    q: r.params.get('q') || '',
-    rating: r.params.get('rating') || '',
-    rating_min: r.params.get('rating_min') || '',
-    type: r.params.get('type') || '',
-    color: r.params.get('color') || '',
-    edition: r.params.get('edition') || '',
-    min_quantity: r.params.get('min_quantity') || '',
     sort: r.params.get('sort') || 'set',
     page_size: 150,
     page,
@@ -622,7 +634,6 @@ async function collection(r) {
   const t = res.totals;
 
   if (isAppend) {
-    // solo appendeamos cards al grid existente
     _collGrid.insertAdjacentHTML('beforeend', res.data.map(itemHtml).join(''));
     _collLoaded += res.data.length;
     const wrap = view().querySelector('#load-more-wrap');
@@ -636,90 +647,350 @@ async function collection(r) {
     return;
   }
 
-  // render completo
   _collGrid = null;
   _collLoaded = res.data.length;
 
-  const sel = (id, label, options, cur) => `
-    <select id="${id}"><option value="">${label}</option>${options.map((o) =>
-      `<option value="${esc(o.key)}"${o.key === cur ? ' selected' : ''}>${esc(o.label)}</option>`
-    ).join('')}</select>`;
+  // Filter state — all on by default
+  const allSets = setList.data.map(s => String(s.id));
+  const allConditions = META.conditions.map(c => c.key);
+  const allLanguages = META.languages.map(l => l.key);
+
+  const filters = {
+    q: '',
+    sets: new Set(allSets),
+    conditions: new Set(allConditions),
+    languages: new Set(allLanguages),
+    showAll,
+    uniqueReprints,
+    rar: new Set(META.rarities),
+    hof: new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]),
+    types: new Set(META.types),
+    colors: new Set(META.energy_types || []),
+    sort: f.sort,
+  };
+
+  let sort = f.sort;
+  let allData = res.data;
+
+  function applyFilters() {
+    let shown = allData;
+
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      shown = shown.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.number || '').toLowerCase().includes(q));
+    }
+    console.log('SET IDS:', allSets);
+    console.log('CARD SET IDS:', [...new Set(allData.map(c => c.official_set_id))]);
+    if (filters.sets.size < allSets.length)
+      shown = shown.filter(c =>
+        filters.sets.has(
+          Object.keys(SET_IDS).find(key => SET_IDS[key] === c.official_set_id)
+        )
+      );
+    if (filters.conditions.size < allConditions.length)
+      shown = shown.filter(c => filters.conditions.has(c.condition));
+    if (filters.languages.size < allLanguages.length)
+      shown = shown.filter(c => filters.languages.has(c.language));
+    if (filters.rar.size < META.rarities.length)
+      shown = shown.filter(c => filters.rar.has(c.rarity));
+    if (filters.hof.size < META.ratings.length + 1)
+      shown = shown.filter(c => filters.hof.has(String(c.rating || 0)));
+    if (filters.types.size < META.types.length)
+      shown = shown.filter(c => filters.types.has(c.supertype));
+    if (filters.colors.size < (META.energy_types || []).length)
+      shown = shown.filter(c =>
+        !c.types?.length || c.types.some(t => filters.colors.has(t)));
+
+    const physicalCards = shown.reduce((sum, c) => sum + (c.quantity || 0), 0);
+
+    view().querySelector('#toolbar-count').textContent = showAll
+      ? `${shown.length} cartas diferentes · ${physicalCards} físicas`
+      : `${shown.length} cartas diferentes · ${physicalCards} físicas · ${shown.length} registros`;
+
+    view().querySelector('.card-grid').innerHTML = shown.map(itemHtml).join('');
+    wireCardClicks();
+  }
 
   view().innerHTML = `
     <h1>Cartas</h1>
-    <p class="sub">${showAll
+
+    <div class="toolbar" id="toolbar">
+      <div class="sub" id="toolbar-count">${showAll
       ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${t.physical_cards} físicas`
-      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${t.item_rows} registros`}</p>
+      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${t.item_rows} registros`}</div>
+      <button class="toolbar-toggle" id="toolbar-toggle" title="Filtros">🔍</button>
+      <div class="toolbar-filters" id="toolbar-filters">
+        <div class="toolbar-filters-inner">
 
-    <div class="mode-toggles">
-      <div class="mode-toggle">
-        <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
-        <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
+          <div class="filter-section">
+            <input type="search" id="f-q" placeholder="Buscar por nombre o número…">
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Set
+              <button class="chip-toggle-all" data-group="set">✕ todo</button>
+            </div>
+            <div class="chips" id="f-set">
+              ${setList.data.map(s =>
+                `<span class="chip on" data-set="${s.id}">${SET_CODES[s.id] || s.id}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Vista</div>
+            <div class="filter-row">
+              <div class="chips">
+                <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
+                <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
+              </div>
+              ${showAll ? `<div class="chips">
+                <span class="chip${!uniqueReprints ? ' on' : ''}" data-uniq="">Todas las versiones</span>
+                <span class="chip${uniqueReprints ? ' on' : ''}" data-uniq="1">Reprints únicos</span>
+              </div>` : ''}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Rareza
+              <button class="chip-toggle-all" data-group="rar">✕ todo</button>
+            </div>
+            <div class="chips" id="f-rar">
+              ${META.rarities.map(rr =>
+                `<span class="chip on" data-rar="${esc(rr)}">${esc(rr)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Condición
+              <button class="chip-toggle-all" data-group="cond">✕ todo</button>
+            </div>
+            <div class="chips" id="f-cond">
+              ${META.conditions.map(c =>
+                `<span class="chip on" data-cond="${esc(c.key)}">${esc(c.label)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Idioma
+              <button class="chip-toggle-all" data-group="lang">✕ todo</button>
+            </div>
+            <div class="chips" id="f-lang">
+              ${META.languages.map(l =>
+                `<span class="chip on" data-lang="${esc(l.key)}">${esc(l.label)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Hall of Fame
+              <button class="chip-toggle-all" data-group="hof">✕ todo</button>
+            </div>
+            <div class="chips" id="f-hof">
+              <span class="chip on" data-hof="0">Sin rating</span>
+              ${META.ratings.filter(x => x.value > 0).map(x =>
+                `<span class="chip on" data-hof="${x.value}">${x.value}★</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Supertipo</div>
+            <div class="chips" id="f-type">
+              ${META.types.map(t =>
+                `<span class="chip on" data-type="${esc(t)}">${esc(t)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Color
+              <button class="chip-toggle-all" data-group="color">✕ todo</button>
+            </div>
+            <div class="chips" id="f-color">
+              ${(META.energy_types || []).map(t =>
+                `<span class="chip on" data-color="${esc(t)}">${esc(t)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+        </div>
       </div>
-      <div class="mode-toggle">
-        ${[['', 'Todas'], ['1', 'En Hall of Fame']]
-          .map(([v, label]) => `<span class="chip${f.rating_min === v ? ' on' : ''}"
-            data-qmin="${v}">${label}</span>`).join('')}
-      </div>
-      ${showAll ? `<div class="mode-toggle">
-        ${[['', 'Todas las versiones'], ['1', 'Reprints únicos']]
-          .map(([v, label]) => `<span class="chip${(uniqueReprints ? '1' : '') === v ? ' on' : ''}"
-            data-uniq="${v}" title="${v
-              ? 'Una sola entrada por carta: la impresión más vieja de cada una'
-              : 'Cada reimpresión por separado'}">${label}</span>`).join('')}
-      </div>` : ''}
     </div>
 
-    <div class="toolbar">
-      <input id="f-q" type="search" placeholder="Buscar…" value="${esc(f.q)}">
-      ${sel('f-set', 'Todos los sets', setList.data.map((s) => ({ key: s.id, label: s.name })), f.set)}
-      ${sel('f-condition', 'Condición', META.conditions, f.condition)}
-      ${sel('f-variant', 'Variante', META.variants, f.variant)}
-      ${sel('f-language', 'Idioma', META.languages, f.language)}
-      ${sel('f-rarity', 'Rareza', META.rarities.map((x) => ({ key: x, label: x })), f.rarity)}
-      ${sel('f-rating', 'Hall of Fame',
-        [{ key: '0', label: 'Sin rating' }].concat(META.ratings.filter((x) => x.value > 0)
-          .map((x) => ({ key: String(x.value), label: `★ ${x.value}` }))), f.rating)}
-      ${sel('f-type', 'Supertipo', META.types.map((t) => ({ key: t, label: t })), f.type)}
-      ${sel('f-color', 'Color', (META.energy_types || []).map((t) => ({ key: t, label: t })), f.color)}
-      ${sel('f-edition', 'Edición', META.editions, f.edition)}
-      ${sel('f-min_quantity', 'Cantidad',
-        [1, 2, 3, 4, 5].map((n) => ({ key: String(n), label: `${n} o más` })), f.min_quantity)}
-      ${sel('f-sort', '', [
-        { key: 'set', label: 'Por set' }, { key: 'name', label: 'Por nombre' },
-        { key: 'number', label: 'Por número' }, { key: 'rarity', label: 'Por rareza' },
-        { key: 'quantity', label: 'Por cantidad' }, { key: 'rating', label: 'Por Hall of Fame' },
-        { key: 'recent', label: 'Más recientes' },
-      ], f.sort)}
+    <div class="sort-select">
+      <button type="button" id="sort-button">
+        <span id="sort-label">${{
+          set: 'Por set', name: 'Por nombre', number: 'Por número',
+          rarity: 'Por rareza', quantity: 'Por cantidad',
+          rating: 'Por Hall of Fame', recent: 'Más recientes'
+        }[sort] || 'Por set'}</span>
+        <span class="sort-arrow">▴</span>
+      </button>
+      <div class="sort-options" id="sort-options">
+        ${[
+          ['set','Por set'],['name','Por nombre'],['number','Por número'],
+          ['rarity','Por rareza'],['quantity','Por cantidad'],
+          ['rating','Por Hall of Fame'],['recent','Más recientes'],
+        ].map(([v, l]) =>
+          `<div class="sort-option${sort === v ? ' selected' : ''}" data-value="${v}">${l}</div>`
+        ).join('')}
+      </div>
     </div>
 
-    ${res.data.length
-      ? `<div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>
-         ${res.total > res.data.length ? `<div id="load-more-wrap">
-           <button id="load-more">Mostrando ${res.data.length} de ${res.total} - Cargar más</button>
-         </div>` : ''}`
-      : '<div class="empty">No hay cartas con estos filtros.</div>'}`;
+    <div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>
+    ${res.total > res.data.length ? `<div id="load-more-wrap">
+      <button id="load-more">Mostrando ${res.data.length} de ${res.total} - Cargar más</button>
+    </div>` : ''}`;
 
   _collGrid = view().querySelector('.collection-grid');
 
-  const apply = (overrides = {}) => {
-    _collGrid = null;  // reset al cambiar filtros
-    _collLoaded = 0;
-    const p = new URLSearchParams();
-    for (const k of ['q', 'set', 'condition', 'variant', 'language', 'rarity',
-                     'rating', 'type', 'color', 'edition', 'min_quantity', 'sort']) {
-      const v = view().querySelector(`#f-${k}`).value;
-      if (v) p.set(k, v);
-    }
-    if (f.rating_min && !('rating_min' in overrides)) p.set('rating_min', f.rating_min);
-    if (showAll && !('show_all' in overrides)) p.set('show_all', '1');
-    if (uniqueReprints && !('unique_reprints' in overrides)) p.set('unique_reprints', '1');
-    for (const [k, v] of Object.entries(overrides)) {
-      if (v) p.set(k, v); else p.delete(k);
-    }
-    location.hash = `#/cartas?${p}`;
+  // sort
+  const sortSelectEl = view().querySelector('.sort-select');
+  const sortButton = view().querySelector('#sort-button');
+  const sortOptions = view().querySelector('#sort-options');
+  const sortLabel = view().querySelector('#sort-label');
+  sortSelectEl.onclick = (e) => e.stopPropagation();
+  sortButton.onclick = () => sortSelectEl.classList.toggle('open');
+  sortOptions.onclick = (e) => {
+    const option = e.target.closest('.sort-option');
+    if (!option) return;
+
+    sort = option.dataset.value;
+
+    sortOptions.querySelectorAll('.sort-option').forEach(o =>
+      o.classList.toggle('selected', o === option));
+
+    sortLabel.textContent = option.textContent;
+    sortSelectEl.classList.remove('open');
+
+    applyFilters();
   };
 
+  // toolbar toggle
+  view().querySelector('#toolbar-toggle').onclick = () => {
+    const panel = view().querySelector('#toolbar-filters');
+    const toggle = view().querySelector('#toolbar-toggle');
+    const open = panel.classList.toggle('open');
+    toggle.classList.toggle('active', open);
+  };
+
+  // mode toggles (these still need reload — they change what the API returns)
+  view().querySelectorAll('[data-mode]').forEach(chip => {
+    chip.onclick = () => {
+      const p = new URLSearchParams();
+      p.set('show_all', chip.dataset.mode === 'all' ? '1' : '');
+      location.hash = `#/cartas?${p}`;
+    };
+  });
+  view().querySelectorAll('[data-uniq]').forEach(chip => {
+    chip.onclick = () => {
+      const p = new URLSearchParams(location.hash.split('?')[1] || '');
+      p.set('unique_reprints', chip.dataset.uniq);
+      location.hash = `#/cartas?${p}`;
+    };
+  });
+  view().querySelectorAll('[data-qmin]').forEach(chip => {
+    chip.onclick = () => {
+      const p = new URLSearchParams(location.hash.split('?')[1] || '');
+      p.set('rating_min', chip.dataset.qmin);
+      location.hash = `#/cartas?${p}`;
+    };
+  });
+
+  // chip filters
+  view().querySelectorAll('#f-set .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.sets.add(c.dataset.set);
+      else filters.sets.delete(c.dataset.set);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-rar .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.rar.add(c.dataset.rar);
+      else filters.rar.delete(c.dataset.rar);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-cond .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.conditions.add(c.dataset.cond);
+      else filters.conditions.delete(c.dataset.cond);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-lang .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.languages.add(c.dataset.lang);
+      else filters.languages.delete(c.dataset.lang);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-hof .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.hof.add(c.dataset.hof);
+      else filters.hof.delete(c.dataset.hof);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-type .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.types.add(c.dataset.type);
+      else filters.types.delete(c.dataset.type);
+      applyFilters();
+    };
+  });
+  view().querySelectorAll('#f-color .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('on');
+      if (c.classList.contains('on')) filters.colors.add(c.dataset.color);
+      else filters.colors.delete(c.dataset.color);
+      applyFilters();
+    };
+  });
+
+  // search
+  let searchTimer;
+  view().querySelector('#f-q').oninput = (e) => {
+    filters.q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 250);
+  };
+
+  // toggle-all buttons
+  const toggleAllDefs = {
+    set:   { filterKey: 'sets',       allFn: () => new Set(allSets) },
+    rar:   { filterKey: 'rar',        allFn: () => new Set(META.rarities) },
+    cond:  { filterKey: 'conditions', allFn: () => new Set(allConditions) },
+    lang:  { filterKey: 'languages',  allFn: () => new Set(allLanguages) },
+    hof:   { filterKey: 'hof',        allFn: () => new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]) },
+    color: { filterKey: 'colors',     allFn: () => new Set(META.energy_types || []) },
+  };
+  view().querySelectorAll('.chip-toggle-all').forEach(btn => {
+    const group = btn.dataset.group;
+    btn.onclick = () => {
+      const chips = view().querySelectorAll(`#f-${group} .chip`);
+      const allOn = [...chips].every(c => c.classList.contains('on'));
+      chips.forEach(c => allOn ? c.classList.remove('on') : c.classList.add('on'));
+      const def = toggleAllDefs[group];
+      if (def) filters[def.filterKey] = allOn ? new Set() : def.allFn();
+      btn.textContent = allOn ? '✓ todo' : '✕ todo';
+      applyFilters();
+    };
+  });
+
+  // load more
   const loadMoreBtn = view().querySelector('#load-more');
   if (loadMoreBtn) {
     loadMoreBtn.onclick = () => {
@@ -729,25 +1000,9 @@ async function collection(r) {
     };
   }
 
-  view().querySelectorAll('[data-mode]').forEach((chip) => {
-    chip.onclick = () => apply({ show_all: chip.dataset.mode === 'all' ? '1' : '',
-                                 unique_reprints: '' });
-  });
-  view().querySelectorAll('[data-uniq]').forEach((chip) => {
-    chip.onclick = () => apply({ unique_reprints: chip.dataset.uniq });
-  });
-  view().querySelectorAll('[data-qmin]').forEach((chip) => {
-    chip.onclick = () => {
-      view().querySelector('#f-rating').value = '';
-      apply({ rating_min: chip.dataset.qmin, rating: '' });
-    };
-  });
-  view().querySelectorAll('.toolbar select').forEach((s) => { s.onchange = apply; });
-  const q = view().querySelector('#f-q');
-  q.onchange = apply;
-  q.onkeydown = (e) => { if (e.key === 'Enter') apply(); };
   wireCardClicks();
 }
+
 function itemHtml(i) {
   /* Prefer the user's own photo, then the catalog image.
      In "All" mode an unowned slot has no physical copy, so it renders as the

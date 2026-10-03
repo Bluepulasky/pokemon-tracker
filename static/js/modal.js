@@ -24,6 +24,7 @@ export function initModal(meta, changeHandler) {
 
 export function closeModal() {
   const root = document.getElementById('modal-root');
+  document.querySelector('.sort-select')?.style.setProperty('display', '');
   root.hidden = true;
   root.innerHTML = '';
 }
@@ -39,6 +40,7 @@ export async function openCard(cardId, opts = {}) {
   const root = document.getElementById('modal-root');
   root.hidden = false;
   root.innerHTML = '<div class="modal"><div class="loading">Cargando…</div></div>';
+  document.querySelector('.sort-select')?.style.setProperty('display', 'none');
 
   let card, items;
   try {
