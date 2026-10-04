@@ -592,9 +592,40 @@ function slotHtml(slot) {
 }
 
 /* ------------------------------------------------------------ collection */
+const RARITY_GROUP = {
+  'Rare Holo':                 'Rare',
+  'Radiant Rare':              'Rares+',
+  'Rare BREAK':                'Rares+',
+  'Rare Holo EX':              'Rares+',
+  'Rare Holo LV.X':            'Rares+',
+  'Rare Holo Star':            'Rares+',
+  'Rare Holo V':               'Rares+',
+  'Rare Holo VMAX':            'Rares+',
+  'Rare Holo VSTAR':           'Rares+',
+  'Rare Ultra':                'Rares+',
+  'Trainer Gallery Rare Holo': 'Rares+',
+  'Rare Secret':               'Secret Rare',
+  'Rare Shining':              'Shining Rare',
+};
+const rarityGroup = r => RARITY_GROUP[r] || r;
+
+// orden en el que querés ver los chips; lo que no esté acá va al final
+const RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Rares+', 'Secret Rare',
+                      'Shining Rare', 'Promo', 'Classic Collection'];
+
 async function collection(r) {
-  const page = Number(r.params.get('page') || 1);
-  const isAppend = page > 1 && _collGrid;
+  async function fetchAllCollection(f) {
+    const first = await api.collection({ ...f, page: 1 });
+    const size = first.data.length;             // tamaño real de página (por si el backend lo limita)
+    const pages = size ? Math.ceil(first.total / size) : 1;
+    if (pages <= 1) return first;
+
+    const rest = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, i) => api.collection({ ...f, page: i + 2 }))
+    );
+    return { ...first, data: first.data.concat(...rest.map(r => r.data)) };
+  }
+  const _collCache = new Map();
 
   const SET_CODES = {
     'bs-completo':  'BS',  'ju-completo':  'JU',  'wp-completo':  'WP',
@@ -612,57 +643,73 @@ async function collection(r) {
     'tr-completo': 'tr',
     'gh-completo': 'b2',
     'gc-completo': 'gc',
-    'ng-completo': 'lc',
-    'nd-completo': 'sw',
-    '161-completo': 'blw',
-    'nr-completo': 'evo',
-    'nde-completo': 'cel',
-    'trr-completo': 'crz',
+    'ng-completo': 'ng',
+    'nd-completo': 'nd',
+    '161-completo': 'si',
+    'nr-completo': 'nr',
+    'nde-completo': 'nde',
+    'trr-completo': 'trr',
   };
+  const OFFICIAL_TO_SET = Object.fromEntries(
+    Object.entries(SET_IDS).map(([key, id]) => [id, key])
+  );
 
   const f = {
     sort: r.params.get('sort') || 'set',
     page_size: 150,
-    page,
   };
-  const showAll = r.params.get('show_all') === '1';
+  let showAll = r.params.get('show_all') === '1';
   if (showAll) f.show_all = '1';
-  const uniqueReprints = showAll && r.params.get('unique_reprints') === '1';
+  let uniqueReprints = showAll && r.params.get('unique_reprints') === '1';
   if (uniqueReprints) f.unique_reprints = '1';
 
-  const [res, setList] = await Promise.all([api.collection(f), api.sets()]);
-  const t = res.totals;
-
-  if (isAppend) {
-    _collGrid.insertAdjacentHTML('beforeend', res.data.map(itemHtml).join(''));
-    _collLoaded += res.data.length;
-    const wrap = view().querySelector('#load-more-wrap');
-    if (_collLoaded >= res.total) {
-      wrap?.remove();
-    } else {
-      wrap.querySelector('#load-more').textContent =
-        `Mostrando ${_collLoaded} de ${res.total} - Cargar más`;
-    }
-    wireCardClicks();
-    return;
-  }
+  const [res, setList] = await Promise.all([fetchAllCollection(f), api.sets()]);
+  _collCache.set(`${showAll}|${uniqueReprints}|${f.sort}`, res);
 
   _collGrid = null;
   _collLoaded = res.data.length;
+
+  async function loadCollection() {
+  const key = `${showAll}|${uniqueReprints}|${sort}`;
+  if (!_collCache.has(key)) {
+    view().querySelector('#toolbar-count').textContent = 'Cargando…';
+    const f2 = { sort, page_size: 500 };
+    if (showAll) f2.show_all = '1';
+    if (uniqueReprints) f2.unique_reprints = '1';
+    _collCache.set(key, await fetchAllCollection(f2));
+  }
+  allData = _collCache.get(key).data;
+  applyFilters();
+}
+
+function syncUrl() {
+  const p = new URLSearchParams();
+  if (showAll) p.set('show_all', '1');
+  if (uniqueReprints) p.set('unique_reprints', '1');
+  if (sort !== 'set') p.set('sort', sort);
+  const qs = p.toString();
+  history.replaceState(null, '', `#/cartas${qs ? '?' + qs : ''}`);
+}
 
   // Filter state — all on by default
   const allSets = setList.data.map(s => String(s.id));
   const allConditions = META.conditions.map(c => c.key);
   const allLanguages = META.languages.map(l => l.key);
+  const allRarities = [...new Set(META.rarities.map(rarityGroup))]
+  .sort((a, b) => {
+    const ia = RARITY_ORDER.indexOf(a), ib = RARITY_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
 
   const filters = {
     q: '',
     sets: new Set(allSets),
+    reprints: true,
     conditions: new Set(allConditions),
     languages: new Set(allLanguages),
     showAll,
     uniqueReprints,
-    rar: new Set(META.rarities),
+    rar: new Set(allRarities),
     hof: new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]),
     types: new Set(META.types),
     colors: new Set(META.energy_types || []),
@@ -671,6 +718,9 @@ async function collection(r) {
 
   let sort = f.sort;
   let allData = res.data;
+  const PAGE_SIZE = 150;
+  let filtered = [];
+  let visible = PAGE_SIZE;
 
   function applyFilters() {
     let shown = allData;
@@ -681,20 +731,12 @@ async function collection(r) {
         (c.name || '').toLowerCase().includes(q) ||
         (c.number || '').toLowerCase().includes(q));
     }
-    console.log('SET IDS:', allSets);
-    console.log('CARD SET IDS:', [...new Set(allData.map(c => c.official_set_id))]);
-    if (filters.sets.size < allSets.length)
-      shown = shown.filter(c =>
-        filters.sets.has(
-          Object.keys(SET_IDS).find(key => SET_IDS[key] === c.official_set_id)
-        )
-      );
     if (filters.conditions.size < allConditions.length)
       shown = shown.filter(c => filters.conditions.has(c.condition));
     if (filters.languages.size < allLanguages.length)
       shown = shown.filter(c => filters.languages.has(c.language));
-    if (filters.rar.size < META.rarities.length)
-      shown = shown.filter(c => filters.rar.has(c.rarity));
+    if (filters.rar.size < allRarities.length)
+      shown = shown.filter(c => filters.rar.has(rarityGroup(c.rarity)));
     if (filters.hof.size < META.ratings.length + 1)
       shown = shown.filter(c => filters.hof.has(String(c.rating || 0)));
     if (filters.types.size < META.types.length)
@@ -702,24 +744,45 @@ async function collection(r) {
     if (filters.colors.size < (META.energy_types || []).length)
       shown = shown.filter(c =>
         !c.types?.length || c.types.some(t => filters.colors.has(t)));
+    shown = shown.filter(c => {
+      const setKey = OFFICIAL_TO_SET[c.official_set_id];
+      if (!setKey) return filters.reprints;   // es un reprint
+      return filters.sets.has(setKey);        // es de un set propio
+    });
 
-    const physicalCards = shown.reduce((sum, c) => sum + (c.quantity || 0), 0);
+    filtered = shown;
+    visible = PAGE_SIZE;
+    renderGrid();
+  }
 
-    view().querySelector('#toolbar-count').textContent = showAll
-      ? `${shown.length} cartas diferentes · ${physicalCards} físicas`
-      : `${shown.length} cartas diferentes · ${physicalCards} físicas · ${shown.length} registros`;
+  function renderGrid() {
+    const physicalCards = filtered.reduce((sum, c) => sum + (c.quantity || 0), 0);
+    view().querySelector('#toolbar-count').textContent =
+      `${filtered.length} cartas · ${physicalCards} cartas físicas`;
 
-    view().querySelector('.card-grid').innerHTML = shown.map(itemHtml).join('');
+    view().querySelector('.collection-grid').innerHTML =
+      filtered.slice(0, visible).map(itemHtml).join('');
+
+    const wrap = view().querySelector('#load-more-wrap');
+    const btn = view().querySelector('#load-more');
+    if (visible >= filtered.length) {
+      wrap.style.display = 'none';
+    } else {
+      wrap.style.display = '';
+      btn.textContent = `Mostrando ${visible} de ${filtered.length} - Cargar más`;
+    }
     wireCardClicks();
   }
 
+  const shown = res.data;
+  const physicalCards = shown.reduce((sum, c) => sum + (c.quantity || 0), 0);
   view().innerHTML = `
     <h1>Cartas</h1>
 
     <div class="toolbar" id="toolbar">
-      <div class="sub" id="toolbar-count">${showAll
-      ? `${t.owned_slots ?? 0} / ${t.slots ?? 0} cartas conseguidas · ${t.physical_cards} físicas`
-      : `${t.unique_cards} cartas diferentes · ${t.physical_cards} cartas físicas · ${t.item_rows} registros`}</div>
+      <div class="sub" id="toolbar-count">
+        ${shown.length} cartas · ${physicalCards} cartas físicas
+      </div>
       <button class="toolbar-toggle" id="toolbar-toggle" title="Filtros">🔍</button>
       <div class="toolbar-filters" id="toolbar-filters">
         <div class="toolbar-filters-inner">
@@ -736,20 +799,21 @@ async function collection(r) {
               ${setList.data.map(s =>
                 `<span class="chip on" data-set="${s.id}">${SET_CODES[s.id] || s.id}</span>`
               ).join('')}
+              <span class="chip on" data-reprints="1">Reprints</span>
             </div>
           </div>
 
           <div class="filter-section">
             <div class="filter-label">Vista</div>
             <div class="filter-row">
-              <div class="chips">
+              <div class="chips" id="f-mode">
                 <span class="chip${showAll ? '' : ' on'}" data-mode="owned">En colección</span>
                 <span class="chip${showAll ? ' on' : ''}" data-mode="all">Todas las del set</span>
               </div>
-              ${showAll ? `<div class="chips">
+              <div class="chips" id="f-uniq" style="${showAll ? '' : 'display:none'}">
                 <span class="chip${!uniqueReprints ? ' on' : ''}" data-uniq="">Todas las versiones</span>
                 <span class="chip${uniqueReprints ? ' on' : ''}" data-uniq="1">Reprints únicos</span>
-              </div>` : ''}
+              </div>
             </div>
           </div>
 
@@ -758,7 +822,7 @@ async function collection(r) {
               <button class="chip-toggle-all" data-group="rar">✕ todo</button>
             </div>
             <div class="chips" id="f-rar">
-              ${META.rarities.map(rr =>
+              ${allRarities.map(rr =>
                 `<span class="chip on" data-rar="${esc(rr)}">${esc(rr)}</span>`
               ).join('')}
             </div>
@@ -842,10 +906,8 @@ async function collection(r) {
       </div>
     </div>
 
-    <div class="card-grid collection-grid">${res.data.map(itemHtml).join('')}</div>
-    ${res.total > res.data.length ? `<div id="load-more-wrap">
-      <button id="load-more">Mostrando ${res.data.length} de ${res.total} - Cargar más</button>
-    </div>` : ''}`;
+    <div class="card-grid collection-grid"></div>
+    <div id="load-more-wrap"><button id="load-more"></button></div>`;
 
   _collGrid = view().querySelector('.collection-grid');
 
@@ -879,19 +941,26 @@ async function collection(r) {
     toggle.classList.toggle('active', open);
   };
 
-  // mode toggles (these still need reload — they change what the API returns)
   view().querySelectorAll('[data-mode]').forEach(chip => {
-    chip.onclick = () => {
-      const p = new URLSearchParams();
-      p.set('show_all', chip.dataset.mode === 'all' ? '1' : '');
-      location.hash = `#/cartas?${p}`;
+    chip.onclick = async () => {
+      showAll = chip.dataset.mode === 'all';
+      if (!showAll) uniqueReprints = false;
+
+      view().querySelectorAll('[data-mode]').forEach(c => c.classList.toggle('on', c === chip));
+      view().querySelectorAll('[data-uniq]').forEach(c =>
+        c.classList.toggle('on', c.dataset.uniq === (uniqueReprints ? '1' : '')));
+      view().querySelector('#f-uniq').style.display = showAll ? '' : 'none';
+
+      syncUrl();
+      await loadCollection();
     };
   });
   view().querySelectorAll('[data-uniq]').forEach(chip => {
-    chip.onclick = () => {
-      const p = new URLSearchParams(location.hash.split('?')[1] || '');
-      p.set('unique_reprints', chip.dataset.uniq);
-      location.hash = `#/cartas?${p}`;
+    chip.onclick = async () => {
+      uniqueReprints = chip.dataset.uniq === '1';
+      view().querySelectorAll('[data-uniq]').forEach(c => c.classList.toggle('on', c === chip));
+      syncUrl();
+      await loadCollection();
     };
   });
   view().querySelectorAll('[data-qmin]').forEach(chip => {
@@ -903,7 +972,7 @@ async function collection(r) {
   });
 
   // chip filters
-  view().querySelectorAll('#f-set .chip').forEach(c => {
+  view().querySelectorAll('#f-set .chip[data-set]').forEach(c => {
     c.onclick = () => {
       c.classList.toggle('on');
       if (c.classList.contains('on')) filters.sets.add(c.dataset.set);
@@ -959,6 +1028,11 @@ async function collection(r) {
       applyFilters();
     };
   });
+  view().querySelector('[data-reprints]').onclick = e => {
+    e.currentTarget.classList.toggle('on');
+    filters.reprints = e.currentTarget.classList.contains('on');
+    applyFilters();
+  };
 
   // search
   let searchTimer;
@@ -971,7 +1045,7 @@ async function collection(r) {
   // toggle-all buttons
   const toggleAllDefs = {
     set:   { filterKey: 'sets',       allFn: () => new Set(allSets) },
-    rar:   { filterKey: 'rar',        allFn: () => new Set(META.rarities) },
+    rar: { filterKey: 'rar',          allFn: () => new Set(allRarities) },
     cond:  { filterKey: 'conditions', allFn: () => new Set(allConditions) },
     lang:  { filterKey: 'languages',  allFn: () => new Set(allLanguages) },
     hof:   { filterKey: 'hof',        allFn: () => new Set(['0', ...META.ratings.filter(x => x.value > 0).map(x => String(x.value))]) },
@@ -982,25 +1056,26 @@ async function collection(r) {
     btn.onclick = () => {
       const chips = view().querySelectorAll(`#f-${group} .chip`);
       const allOn = [...chips].every(c => c.classList.contains('on'));
-      chips.forEach(c => allOn ? c.classList.remove('on') : c.classList.add('on'));
+      chips.forEach(c => c.classList.toggle('on', !allOn));
+
       const def = toggleAllDefs[group];
       if (def) filters[def.filterKey] = allOn ? new Set() : def.allFn();
+
+      // el chip de Reprints vive dentro de #f-set, así que se sincroniza con el grupo
+      if (group === 'set') filters.reprints = !allOn;
+
       btn.textContent = allOn ? '✓ todo' : '✕ todo';
       applyFilters();
     };
   });
 
   // load more
-  const loadMoreBtn = view().querySelector('#load-more');
-  if (loadMoreBtn) {
-    loadMoreBtn.onclick = () => {
-      const p = new URLSearchParams(location.hash.split('?')[1] || '');
-      p.set('page', page + 1);
-      collection({ params: p });
-    };
-  }
+  view().querySelector('#load-more').onclick = () => {
+    visible += PAGE_SIZE;
+    renderGrid();
+  };
 
-  wireCardClicks();
+  applyFilters();
 }
 
 function itemHtml(i) {
