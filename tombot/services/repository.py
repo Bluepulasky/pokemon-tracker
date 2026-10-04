@@ -976,9 +976,10 @@ class PokemonRepo:
         src = ("FROM collection_items i JOIN cards c ON c.id = i.card_id "
                "LEFT JOIN card_ratings cr ON cr.card_id = i.card_id")
         cols = """i.id, i.card_id, i.variant, i.condition, i.language, i.quantity, i.printing_id, i.market_product_id, i.notes, i.first_edition, i.created_at, i.updated_at, c.name, c.number, c.rarity, c.official_set_id,
-                       c.image_small_url, c.image_local, c.external_ids_json,
-                       os.name AS set_name, os.name AS printing_name,
-                       COALESCE(cr.rating, 0) AS rating"""
+                    c.image_small_url, c.image_local, c.external_ids_json,
+                    c.supertype, c.types_json,
+                    os.name AS set_name, os.name AS printing_name,
+                    COALESCE(cr.rating, 0) AS rating"""
         if not group:
             # There is no group to count, so "por cantidad" is the row's own.
             if sort == "quantity":
@@ -1244,7 +1245,7 @@ class PokemonRepo:
                        cs.id AS personal_set_id, cs.name AS personal_set_name,
                        c.id AS card_id, c.name, c.number, c.number_sort, c.rarity,
                        c.official_set_id, c.image_small_url, c.image_local,
-                       c.external_ids_json, os.name AS set_name,
+                       c.external_ids_json, c.supertype, c.types_json, os.name AS set_name,
                        i.id AS id, i.variant, i.condition, i.language,
                        i.quantity, i.notes,
                        COALESCE(cr.rating, 0) AS rating,

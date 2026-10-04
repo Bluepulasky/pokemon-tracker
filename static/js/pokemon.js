@@ -627,6 +627,17 @@ async function collection(r) {
   }
   const _collCache = new Map();
 
+  const parseTypes = s => {
+    try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  };
+
+  const normalizeCard = c => ({
+    ...c,
+    supertype: c.supertype || null,
+    types: Array.isArray(c.types) ? c.types : parseTypes(c.types_json),
+  });
+
   const SET_CODES = {
     'bs-completo':  'BS',  'ju-completo':  'JU',  'wp-completo':  'WP',
     'fo-completo':  'FO',  'tr-completo':  'TR',  'gh-completo':  'GH',
@@ -666,19 +677,18 @@ async function collection(r) {
   const [res, setList] = await Promise.all([fetchAllCollection(f), api.sets()]);
   _collCache.set(`${showAll}|${uniqueReprints}|${f.sort}`, res);
 
-  _collGrid = null;
-  _collLoaded = res.data.length;
-
   async function loadCollection() {
   const key = `${showAll}|${uniqueReprints}|${sort}`;
   if (!_collCache.has(key)) {
     view().querySelector('#toolbar-count').textContent = 'Cargando…';
-    const f2 = { sort, page_size: 500 };
+    const f2 = { sort, page_size: 150 };
     if (showAll) f2.show_all = '1';
     if (uniqueReprints) f2.unique_reprints = '1';
     _collCache.set(key, await fetchAllCollection(f2));
   }
-  allData = _collCache.get(key).data;
+  allData = _collCache.get(key).data.map(normalizeCard);
+  console.log('modo:', { showAll, uniqueReprints }, allData[0]);
+  applyFilters();
   applyFilters();
 }
 
@@ -717,7 +727,7 @@ function syncUrl() {
   };
 
   let sort = f.sort;
-  let allData = res.data;
+  let allData = res.data.map(normalizeCard);
   const PAGE_SIZE = 150;
   let filtered = [];
   let visible = PAGE_SIZE;
@@ -743,7 +753,7 @@ function syncUrl() {
       shown = shown.filter(c => filters.types.has(c.supertype));
     if (filters.colors.size < (META.energy_types || []).length)
       shown = shown.filter(c =>
-        !c.types?.length || c.types.some(t => filters.colors.has(t)));
+        c.types.length === 0 || c.types.some(t => filters.colors.has(t)));
     shown = shown.filter(c => {
       const setKey = OFFICIAL_TO_SET[c.official_set_id];
       if (!setKey) return filters.reprints;   // es un reprint
@@ -909,8 +919,6 @@ function syncUrl() {
     <div class="card-grid collection-grid"></div>
     <div id="load-more-wrap"><button id="load-more"></button></div>`;
 
-  _collGrid = view().querySelector('.collection-grid');
-
   // sort
   const sortSelectEl = view().querySelector('.sort-select');
   const sortButton = view().querySelector('#sort-button');
@@ -918,19 +926,18 @@ function syncUrl() {
   const sortLabel = view().querySelector('#sort-label');
   sortSelectEl.onclick = (e) => e.stopPropagation();
   sortButton.onclick = () => sortSelectEl.classList.toggle('open');
-  sortOptions.onclick = (e) => {
+  sortOptions.onclick = async (e) => {
     const option = e.target.closest('.sort-option');
     if (!option) return;
 
     sort = option.dataset.value;
-
     sortOptions.querySelectorAll('.sort-option').forEach(o =>
       o.classList.toggle('selected', o === option));
-
     sortLabel.textContent = option.textContent;
     sortSelectEl.classList.remove('open');
 
-    applyFilters();
+    syncUrl();
+    await loadCollection();
   };
 
   // toolbar toggle
