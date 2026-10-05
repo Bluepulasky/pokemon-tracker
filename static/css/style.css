@@ -889,7 +889,7 @@ input[type="range"]::-moz-range-thumb {
 .sort-select {
     position: fixed;
     right: 20px;
-    bottom: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     z-index: 1000;
 }
 
@@ -1065,10 +1065,42 @@ input[type="range"]::-moz-range-thumb {
 .missing-row .m { font-variant-numeric: tabular-nums; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: -6px; }
 .missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
 .missing-row .missing-name { display: flex; flex-direction: column; min-width: 0; }
+.missing-name.have { color: var(--accent); }
 .missing-row .missing-note { font-size: 12px; color: var(--fg-dim); }
+
+@media (max-width: 640px) {
+  .missing-row {
+    display: grid;
+    grid-template-columns: 4.5em auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "n m name r"
+      ".  note note note";
+    column-gap: 10px;
+    row-gap: 0;
+    align-items: center;
+  }
+  .missing-row .n { grid-area: n; }
+  .missing-row .m { grid-area: m; }
+  .missing-row .missing-name {
+    grid-area: name;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .missing-row .r { grid-area: r; }
+  .missing-row .tag2 {
+    grid-area: note;
+    justify-self: start;
+    max-width: 100%;
+    margin-top: 4px;
+    white-space: normal;
+  }
+}
+
 .card-note { margin-top: 10px; }
 .tag2 { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px;
-       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); color: var(--accent);  }
+       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); color: var(--accent); margin-left: 10px; }
 
 /* --------------------------------------------------------------- chart */
 .chart { width: 100%; height: auto; display: block; }

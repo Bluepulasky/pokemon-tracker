@@ -1587,56 +1587,296 @@ function pollJob() {
 
 /* --------------------------------------------------------------- missing */
 async function missing(r) {
-  const { data: setList } = await api.sets();
-  const setId = r.id || r.params.get('set') || setList[0]?.id;
-  const sort = r.params.get('sort') || 'number';
-  const onlyNoted = r.params.get('note') === '1';
-  if (!setId) { view().innerHTML = '<div class="empty">No hay sets.</div>'; return; }
-  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
-  const [rows, s] = await Promise.all([api.missing(setId, sort), api.set(setId)]);
-  const p = s.progress || {};
-  const shown = onlyNoted ? rows.data.filter((m) => m.note) : rows.data;
 
+  const SET_CODES = {
+    'bs-completo':  'BS',  'ju-completo':  'JU',  'wp-completo':  'WP',
+    'fo-completo':  'FO',  'tr-completo':  'TR',  'gh-completo':  'GH',
+    'gc-completo':  'GC',  'ng-completo':  'NG',  'nd-completo':  'ND',
+    '161-completo': 'SI',  'nr-completo':  'NR',  'nde-completo': 'NDE',
+    'trr-completo': 'TRR',
+  };
+
+  const SET_IDS = {
+    'bs-completo': 'bs',
+    'ju-completo': 'ju',
+    'wp-completo': 'wp',
+    'fo-completo': 'fo',
+    'tr-completo': 'tr',
+    'gh-completo': 'b2',
+    'gc-completo': 'gc',
+    'ng-completo': 'ng',
+    'nd-completo': 'nd',
+    '161-completo': 'si',
+    'nr-completo': 'nr',
+    'nde-completo': 'nde',
+    'trr-completo': 'trr',
+  };
+  const OFFICIAL_TO_SET = Object.fromEntries(
+    Object.entries(SET_IDS).map(([key, id]) => [id, key])
+  );
+  const { data: setList } = await api.sets();
+  if (!setList.length) { view().innerHTML = '<div class="empty">No hay sets.</div>'; return; }
+
+  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
+  const QTY = ['1', '2', '3', '4+'];
+  const qtyKey = (m) => {
+    const n = Math.min(Math.max(m.still_needed || 1, 1), 4);
+    return n === 4 ? '4+' : String(n);
+  };
+  const rarityRank = (g) => {
+    const i = RARITY_ORDER.indexOf(g);
+    return i === -1 ? 99 : i;
+  };
+
+  // un request por set; después todo es local
+  const results = await Promise.all(setList.map((s) => api.missing(s.id, 'number')));
+  const allRows = results.flatMap((res, i) =>
+    res.data.map((m) => ({ ...m, set_id: setList[i].id })));
+
+  const setOrder = new Map(setList.map((s, i) => [String(s.id), i]));
+  const allRarities = [...new Set(allRows.map((m) => rarityGroup(m.rarity)).filter(Boolean))]
+    .sort((a, b) => rarityRank(a) - rarityRank(b));
+
+  // si venís con un set en la ruta (#/missing/xx) arranca solo con ese prendido
+  const startSet = r.id || r.params.get('set');
+  const hasStart = startSet && setList.some((s) => String(s.id) === String(startSet));
+
+  const filters = {
+    q: '',
+    sets: new Set(hasStart ? [String(startSet)] : setList.map((s) => String(s.id))),
+    rar: new Set(allRarities),
+    qty: new Set(QTY),
+    noted: r.params.get('note') === '1',
+    none: false,
+  };
+  let sort = r.params.get('sort') || 'number';
+
+  // ---------- orden ----------
+  const numOf = (m) => {
+    const n = parseFloat(String(m.card_id).split('-')[1]);
+    return Number.isNaN(n) ? 1e9 : n;
+  };
+  const byNumber = (a, b) =>
+    (setOrder.get(String(a.set_id)) - setOrder.get(String(b.set_id))) || (numOf(a) - numOf(b));
+  const SORTERS = {
+    number: byNumber,
+    name: (a, b) => (a.label || '').localeCompare(b.label || '') || byNumber(a, b),
+    rarity: (a, b) =>
+      (rarityRank(rarityGroup(a.rarity)) - rarityRank(rarityGroup(b.rarity))) || byNumber(a, b),
+    still_needed: (a, b) => ((b.still_needed || 0) - (a.still_needed || 0)) || byNumber(a, b),
+  };
+  const SORT_LABELS = {
+    number: 'Por número', name: 'Por nombre',
+    rarity: 'Por rareza', still_needed: 'Por pendientes',
+  };
+
+  // ---------- render ----------
+  const rowHtml = (m) => `
+    <div class="missing-row" data-card="${esc(m.card_id)}">
+      <span class="n">${esc(shortId(m.card_id))}</span>
+      <span class="m">x${m.still_needed}</span>
+      <span class="missing-name${m.missing_entirely ? '' : ' have'}">${esc(m.label || '')}</span>
+      ${m.note ? `<small class="tag2">${esc(m.note)}</small>` : ''}
+      <span class="r">${esc(m.rarity || '')}</span>
+    </div>`;
+
+  function applyFilters() {
+    const picked = allRows.filter((m) => filters.sets.has(String(m.set_id)));
+    const q = filters.q.trim().toLowerCase();
+    const shown = picked
+      .filter((m) => !q ||
+        (m.label || '').toLowerCase().includes(q) ||
+        String(m.card_id).toLowerCase().includes(q) ||
+        shortId(m.card_id).toLowerCase().includes(q) ||
+        (m.note || '').toLowerCase().includes(q))
+      .filter((m) => { const g = rarityGroup(m.rarity); return !g || filters.rar.has(g); })
+      .filter((m) => filters.qty.has(qtyKey(m)))
+      .filter((m) => !filters.noted || m.note)
+      .filter((m) => !filters.none || m.missing_entirely)
+      .sort(SORTERS[sort] || byNumber);
+
+    const target = setList
+      .filter((s) => filters.sets.has(String(s.id)))
+      .reduce((a, s) => a + (s.target || 0), 0);
+    const uniq = shown.filter((m) => m.missing_entirely).length;
+    const copies = shown.reduce((a, m) => a + Math.max(0, m.still_needed || 0), 0);
+
+    view().querySelector('#toolbar-count').textContent =
+      `${uniq} de ${target} únicas · faltan ${copies} copias`;
+
+    const msg = !picked.length ? '🎉 Completo.' : 'Ninguna carta con estos filtros.';
+    view().querySelector('#missing-wrap').innerHTML = shown.length
+      ? `<div class="missing-list">${shown.map(rowHtml).join('')}</div>`
+      : `<div class="empty">${msg}</div>`;
+    wireCardClicks();
+  }
+
+  function syncUrl() {
+    const p = new URLSearchParams();
+    if (sort !== 'number') p.set('sort', sort);
+    if (filters.noted) p.set('note', '1');
+    const qs = p.toString();
+    history.replaceState(null, '', `${location.hash.split('?')[0]}${qs ? '?' + qs : ''}`);
+  }
+
+  function refreshToggleAll(group) {
+    const btn = view().querySelector(`.chip-toggle-all[data-group="${group}"]`);
+    if (!btn) return;
+    const chips = view().querySelectorAll(`#f-${group} .chip`);
+    btn.textContent = [...chips].every((c) => c.classList.contains('on')) ? '✕ todo' : '✓ todo';
+  }
+
+  // ---------- template ----------
   view().innerHTML = `
     <h1>Cartas faltantes</h1>
-    <p class="sub">${esc(s.name)} · ${
-      rows.data.filter((m) => m.missing_entirely).length} de ${p.target} únicas · faltan ${
-      rows.data.reduce((a, m) => a + Math.max(0, m.still_needed || 0), 0)} copias</p>
 
-    <div class="toolbar">
-      <select id="f-set">${setList.map((x) => `<option value="${esc(x.id)}"${
-        x.id === setId ? ' selected' : ''}>${esc(x.name)} (${x.target - x.owned})</option>`).join('')}</select>
-      <select id="f-sort">
-        <option value="number"${sort === 'number' ? ' selected' : ''}>Por número</option>
-        <option value="name"${sort === 'name' ? ' selected' : ''}>Por nombre</option>
-        <option value="rarity"${sort === 'rarity' ? ' selected' : ''}>Por rareza</option>
-        <option value="still_needed"${sort === 'still_needed' ? ' selected' : ''}>Por pendientes</option>
-      </select>
-      <div class="chips seg" id="f-note">
-        ${[['', 'Todas'], ['1', 'Con nota']]
-          .map(([k, l]) => `<span class="chip${(onlyNoted ? '1' : '') === k ? ' on' : ''}" data-note="${k}">${l}</span>`).join('')}
+    <div class="toolbar" id="toolbar">
+      <div class="sub" id="toolbar-count"></div>
+      <button class="toolbar-toggle" id="toolbar-toggle" title="Filtros">🔍</button>
+      <div class="toolbar-filters" id="toolbar-filters">
+        <div class="toolbar-filters-inner">
+          <div class="filter-section">
+              <input type="search" id="f-q" placeholder="Buscar por nombre o número…">
+          </div>
+          <div class="filter-section">
+            <div class="filter-label">Vista</div>
+            <div class="chips" id="f-note">
+              <span class="chip${filters.noted ? ' on' : ''}" data-note="1">Solo con nota</span>
+              <span class="chip${filters.none ? ' on' : ''}" data-none="1">Sin ninguna copia</span>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Set
+              <button class="chip-toggle-all" data-group="set">✕ todo</button>
+            </div>
+            <div class="chips" id="f-set">
+              ${setList.map((s) =>
+                `<span class="chip${filters.sets.has(String(s.id)) ? ' on' : ''}" data-set="${esc(String(s.id))}">${esc(SET_CODES[s.id] || s.id)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Rareza
+              <button class="chip-toggle-all" data-group="rar">✕ todo</button>
+            </div>
+            <div class="chips" id="f-rar">
+              ${allRarities.map((rr) =>
+                `<span class="chip on" data-rar="${esc(rr)}">${esc(rr)}</span>`
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="filter-label">Cantidad que faltan</div>
+            <div class="chips" id="f-qty">
+              ${QTY.map((q) => `<span class="chip on" data-qty="${q}">${q}</span>`).join('')}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
 
-    ${shown.length ? `<div class="missing-list">${shown.map((m) => `
-      <div class="missing-row" data-card="${esc(m.card_id)}">
-        <span class="n">${esc(shortId(m.card_id))}</span>
-        <span class="m">x${m.still_needed}</span>
-        <span class="missing-name">${esc(m.label || '')}</span>
-        ${m.note ? `<small class="tag2">${esc(m.note)}</small>` : ''}</span>
-        <span class="r">${esc(m.rarity || '')}</span>
-      </div>`).join('')}</div>`
-      : `<div class="empty">${onlyNoted ? 'Ninguna faltante con nota.' : '🎉 Set completo.'}</div>`}`;
+    <div class="sort-select">
+      <button type="button" id="sort-button">
+        <span id="sort-label">${SORT_LABELS[sort] || SORT_LABELS.number}</span>
+        <span class="sort-arrow">▴</span>
+      </button>
+      <div class="sort-options" id="sort-options">
+        ${Object.entries(SORT_LABELS).map(([v, l]) =>
+          `<div class="sort-option${sort === v ? ' selected' : ''}" data-value="${v}">${l}</div>`
+        ).join('')}
+      </div>
+    </div>
 
-  const nav = (note = onlyNoted ? '1' : '') => {
-    const q = new URLSearchParams({ sort: view().querySelector('#f-sort').value });
-    if (note) q.set('note', '1');
-    location.hash = `#/missing/${view().querySelector('#f-set').value}?${q}`;
+    <div id="missing-wrap"></div>`;
+
+  // ---------- handlers ----------
+  let searchTimer;
+  view().querySelector('#f-q').oninput = (e) => {
+    filters.q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 250);
   };
-  view().querySelector('#f-set').onchange = () => nav();
-  view().querySelector('#f-sort').onchange = () => nav();
-  view().querySelectorAll('#f-note .chip').forEach((c) => { c.onclick = () => nav(c.dataset.note); });
-  wireCardClicks();
+  const sortSelectEl = view().querySelector('.sort-select');
+  const sortOptions = view().querySelector('#sort-options');
+  const sortLabel = view().querySelector('#sort-label');
+  sortSelectEl.onclick = (e) => e.stopPropagation();
+  view().querySelector('#sort-button').onclick = () => sortSelectEl.classList.toggle('open');
+  sortOptions.onclick = (e) => {
+    const option = e.target.closest('.sort-option');
+    if (!option) return;
+    sort = option.dataset.value;
+    sortOptions.querySelectorAll('.sort-option').forEach((o) =>
+      o.classList.toggle('selected', o === option));
+    sortLabel.textContent = option.textContent;
+    sortSelectEl.classList.remove('open');
+    syncUrl();
+    applyFilters();
+  };
+
+  view().querySelector('#toolbar-toggle').onclick = () => {
+    const panel = view().querySelector('#toolbar-filters');
+    const toggle = view().querySelector('#toolbar-toggle');
+    const open = panel.classList.toggle('open');
+    toggle.classList.toggle('active', open);
+  };
+
+  view().querySelector('#f-note .chip').onclick = (e) => {
+    filters.noted = e.currentTarget.classList.toggle('on');
+    syncUrl();
+    applyFilters();
+  };
+
+  view().querySelector('#f-note [data-note]').onclick = (e) => {
+    filters.noted = e.currentTarget.classList.toggle('on');
+    syncUrl();
+    applyFilters();
+  };
+
+  view().querySelector('#f-note [data-none]').onclick = (e) => {
+    filters.none = e.currentTarget.classList.toggle('on');
+    applyFilters();
+  };
+
+  const bindChips = (group, key, set) => {
+    view().querySelectorAll(`#f-${group} .chip`).forEach((c) => {
+      c.onclick = () => {
+        const on = c.classList.toggle('on');
+        if (on) set.add(c.dataset[key]);
+        else set.delete(c.dataset[key]);
+        refreshToggleAll(group);
+        applyFilters();
+      };
+    });
+  };
+  bindChips('set', 'set', filters.sets);
+  bindChips('rar', 'rar', filters.rar);
+  bindChips('qty', 'qty', filters.qty);
+
+  const toggleAllDefs = {
+    set: { set: filters.sets, all: () => setList.map((s) => String(s.id)) },
+    rar: { set: filters.rar,  all: () => allRarities },
+  };
+  view().querySelectorAll('.chip-toggle-all').forEach((btn) => {
+    btn.onclick = () => {
+      const group = btn.dataset.group;
+      const chips = view().querySelectorAll(`#f-${group} .chip`);
+      const allOn = [...chips].every((c) => c.classList.contains('on'));
+      chips.forEach((c) => c.classList.toggle('on', !allOn));
+      const def = toggleAllDefs[group];
+      def.set.clear();
+      if (!allOn) def.all().forEach((v) => def.set.add(v));
+      refreshToggleAll(group);
+      applyFilters();
+    };
+  });
+
+  refreshToggleAll('set');
+  refreshToggleAll('rar');
+  applyFilters();
 }
 
 /* ----------------------------------------------------------------- glue */
