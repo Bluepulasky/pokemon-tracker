@@ -201,3 +201,50 @@ def test_meta_vocabularies_match_the_validator(client):
     assert [l["key"] for l in meta["languages"]] == LANGUAGES
     assert [v["key"] for v in meta["variants"]] == VARIANTS
     assert [r["value"] for r in meta["ratings"]] == list(range(9))
+
+
+# ------------------------------------------------------------- search (#104)
+def _muk_catalogue(repo):
+    """Muk four times: Fossil holo + non-holo (one artwork), a Legendary
+    Collection reprint of it, and a Secret Wonders Muk with other art."""
+    for sid, name, rd in [("fo", "Fossil", "1999/10/10"),
+                          ("lc", "Legendary Collection", "2002/05/24"),
+                          ("sw", "Secret Wonders", "2007/11/07")]:
+        repo.upsert_official_set({"id": sid, "name": name, "series": "",
+                                  "printed_total": 1, "total": 1, "release_date": rd,
+                                  "ptcgo_code": sid.upper(), "logo_url": None,
+                                  "symbol_url": None})
+    repo.upsert_cards([
+        {"id": "fo-13", "official_set_id": "fo", "name": "Muk", "number": "13",
+         "rarity": "Rare Holo", "artist": "Mitsuhiro Arita"},
+        {"id": "fo-28", "official_set_id": "fo", "name": "Muk", "number": "28",
+         "rarity": "Rare", "artist": "Mitsuhiro Arita"},
+        {"id": "lc-16", "official_set_id": "lc", "name": "Muk", "number": "16",
+         "rarity": "Rare", "artist": "Mitsuhiro Arita"},
+        {"id": "sw-56", "official_set_id": "sw", "name": "Muk", "number": "56",
+         "rarity": "Rare", "artist": "Kagemaru Himeno"},
+    ])
+
+
+def test_search_groups_reprints_as_their_original_printing(client, app):
+    _muk_catalogue(app.repo)
+    app.repo.upsert_collection_item({"card_id": "lc-16"})
+    cards = client.get("/api/search?q=muk").get_json()["cards"]
+    assert [(c["id"], c["set_name"], c["owned"]) for c in cards] == [
+        ("fo-13", "Fossil", True),      # the three Arita Muks, shown as the first
+        ("sw-56", "Secret Wonders", False),  # other artwork: a different card
+    ], "one row per logical card; owned via the Legendary Collection reprint"
+
+
+def test_search_leaves_out_cards_from_hidden_sets(client, app):
+    _muk_catalogue(app.repo)
+    app.repo.upsert_collection_set({"id": "sw-goal", "name": "Secret Wonders",
+                                    "rules_json": '{"include_sets": ["sw"]}'})
+    app.repo.set_hidden("sw-goal", True)
+    cards = client.get("/api/search?q=muk").get_json()["cards"]
+    assert [c["id"] for c in cards] == ["fo-13"]
+    # A visible goal on the same set keeps it in the results.
+    app.repo.upsert_collection_set({"id": "sw-goal-2", "name": "SW again",
+                                    "rules_json": '{"include_sets": ["sw"]}'})
+    cards = client.get("/api/search?q=muk").get_json()["cards"]
+    assert [c["id"] for c in cards] == ["fo-13", "sw-56"]
