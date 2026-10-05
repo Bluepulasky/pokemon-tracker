@@ -1308,28 +1308,56 @@ class PokemonRepo:
         """Unique logical cards vs physical copies: 67 cartas / 94 físicas."""
         return self._one(
             """
-            WITH base_names AS (
-                SELECT DISTINCT
-                    CASE
-                        WHEN c.name GLOB "*'s *"
-                            THEN SUBSTR(c.name, INSTR(c.name, "'s ") + 3)
-                        WHEN c.name LIKE 'Dark %'    THEN SUBSTR(c.name, 6)
-                        WHEN c.name LIKE 'Light %'   THEN SUBSTR(c.name, 7)
-                        WHEN c.name LIKE 'Shining %' THEN SUBSTR(c.name, 9)
-                        ELSE c.name
-                    END AS pokemon_name
-                FROM collection_items ci
-                JOIN cards c ON c.id = ci.card_id
+            WITH stage1 AS (
+                SELECT c.id AS card_id,
+                       CASE
+                           WHEN c.name LIKE 'Unown%'    THEN 'Unown'
+                           WHEN c.name LIKE '%Pikachu%' THEN 'Pikachu'
+                           WHEN c.name GLOB '*Nidoran*♀*'
+                             OR c.name GLOB '*Nidoran*F*' THEN 'Nidoran ♀'
+                           WHEN c.name LIKE '%Nidoran%' THEN 'Nidoran ♂'
+                           WHEN c.name GLOB "*'s *"
+                               THEN SUBSTR(c.name, INSTR(c.name, "'s ") + 3)
+                           WHEN c.name LIKE 'Dark %'    THEN SUBSTR(c.name, 6)
+                           WHEN c.name LIKE 'Light %'   THEN SUBSTR(c.name, 7)
+                           WHEN c.name LIKE 'Shining %' THEN SUBSTR(c.name, 9)
+                           WHEN c.name LIKE 'Cool %'    THEN SUBSTR(c.name, 6)
+                           ELSE c.name
+                       END AS n
+                FROM cards c
                 WHERE c.supertype = 'Pokémon'
+                  AND c.name NOT LIKE '%Energy%'
+                  AND c.name NOT LIKE '%★'
+            ),
+            names AS (
+                SELECT card_id,
+                       CASE WHEN n LIKE '% ex'
+                            THEN SUBSTR(n, 1, LENGTH(n) - 3) ELSE n END
+                       AS pokemon_name
+                FROM stage1
+            ),
+            base_names AS (
+                SELECT DISTINCT n.pokemon_name
+                FROM collection_items ci
+                JOIN names n ON n.card_id = ci.card_id
+            ),
+            target_names AS (
+                SELECT DISTINCT n.pokemon_name
+                FROM set_slots sl
+                JOIN names n ON n.card_id = sl.display_card_id
+                WHERE NOT EXISTS (SELECT 1 FROM set_hidden h
+                                   WHERE h.set_id = sl.set_id)
             )
             SELECT
-                COUNT(DISTINCT card_id)           AS unique_cards,
-                COALESCE(SUM(quantity), 0)        AS physical_cards,
-                COUNT(*)                          AS item_rows,
-                (SELECT COUNT(*) FROM base_names) AS unique_pokemon
+                COUNT(DISTINCT card_id)    AS unique_cards,
+                COALESCE(SUM(quantity), 0) AS physical_cards,
+                COUNT(*)                   AS item_rows,
+                (SELECT COUNT(*) FROM base_names)   AS unique_pokemon,
+                (SELECT COUNT(*) FROM target_names) AS unique_pokemon_target
             FROM collection_items
             """
-        ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0, "unique_pokemon": 0}
+        ) or {"unique_cards": 0, "physical_cards": 0, "item_rows": 0,
+              "unique_pokemon": 0, "unique_pokemon_target": 0}
 
     # A rank is a judgement about the card, and every printing of it is the
     # same card — same artwork, same power level. Ranking the Base Set Blastoise

@@ -92,7 +92,11 @@ async function dashboard() {
         ${v.unpriced_items ? `<div class="note">${v.unpriced_items} sin precio conocido</div>` : ''}</div>
       <div class="stat"><div class="k">Cartas únicas</div><div class="v">${d.unique_cards}</div></div>
       <div class="stat"><div class="k">Cartas físicas</div><div class="v">${d.physical_cards}</div></div>
-      <div class="stat"><div class="k">Pokémon únicos</div><div class="v">${d.unique_pokemon}</div></div>
+      <div class="stat">
+        <div class="k">Pokémon únicos</div>
+        <div class="v">${d.unique_pokemon}<small> / ${d.unique_pokemon_target}</small></div>
+        ${progressBar(d.unique_pokemon, d.unique_pokemon_target)}
+      </div>
       <div class="stat"><div class="k">Sets completos</div>
         <div class="v">${d.sets_complete}<small> / ${d.sets_total}</small></div>
         ${progressBar(d.sets_complete, d.sets_total)}
