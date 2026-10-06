@@ -195,8 +195,13 @@ class PokemonRepo:
         # a rarity stored two ways is a live error on the maintenance page — a
         # rule excluding one spelling silently keeps the other. Cheap and
         # idempotent: one DISTINCT over a column that has a handful of values.
-        from .tcggo_catalog import canonicalise_stored_rarities
+        from .tcggo_catalog import (canonicalise_stored_rarities,
+                                    rederive_stored_rarities)
         canonicalise_stored_rarities(self)
+        # A rarity decided by whichever print run had stock on import day is
+        # re-decided from the runs themselves (#105), free, since the products
+        # are already here.
+        rederive_stored_rarities(self)
         # Same shape of problem: ranks were stored per printing, so one card
         # could hold two of them. Resolving it on start is what clears the
         # Blastoise that is a 3 in Base and a 4 in Celebrations (#76).

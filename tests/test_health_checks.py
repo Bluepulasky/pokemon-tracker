@@ -119,3 +119,26 @@ def test_a_pokemon_with_no_colour_is_reported(repo):
 
     repo.fill_card_fields({"types_json": [('["Fire"]', "bs-4"), ('["Fighting"]', "bs-7")]})
     assert _levels(run_checks(repo, CONDITIONS), "card_types") == []
+
+
+def test_a_secret_rare_numbered_inside_the_set_is_reported(repo):
+    """TR 15 arrived as Rare Secret; secret rares sit past the printed total (#105)."""
+    with repo.tx() as c:
+        c.execute("UPDATE official_sets SET printed_total=10 WHERE id='bs'")
+        c.execute("UPDATE cards SET rarity='Rare Secret' WHERE id='bs-4'")
+    found = _levels(run_checks(repo, CONDITIONS), "secret_rare_numbers")
+    assert found and found[0]["level"] == "warning"
+    assert found[0]["detail"] == ["bs-4 Charizard (4/10)"]
+
+
+def test_a_real_secret_rare_past_the_total_is_not_reported(repo):
+    repo.upsert_cards([{"id": "bs-3", "official_set_id": "bs", "name": "Dark Raichu",
+                        "number": "3", "rarity": "Rare Secret"}])
+    assert not _levels(run_checks(repo, CONDITIONS), "secret_rare_numbers")
+
+
+def test_a_set_with_no_printed_total_says_nothing(repo):
+    with repo.tx() as c:
+        c.execute("UPDATE official_sets SET printed_total=NULL WHERE id='bs'")
+        c.execute("UPDATE cards SET rarity='Rare Secret' WHERE id='bs-4'")
+    assert not _levels(run_checks(repo, CONDITIONS), "secret_rare_numbers")

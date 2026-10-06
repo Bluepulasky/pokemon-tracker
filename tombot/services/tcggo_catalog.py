@@ -170,6 +170,73 @@ def canonical_rarity(value: str | None) -> str | None:
     return RARITY_CANON.get(value.strip().lower(), value.strip())
 
 
+def _print_run_rank(version: str | None) -> int:
+    """Print runs in the order their records are trusted: first run first."""
+    v = (version or "").lower()
+    if "1st edition" in v or "first edition" in v:
+        return 0
+    if "shadowless" in v:
+        return 1
+    if "unlimited" in v:
+        return 2
+    if not v.strip():
+        return 3                      # a set with one run has no version at all
+    return 4                          # reverse holo and the like
+
+
+def card_rarity(products: list[dict]) -> str | None:
+    """One rarity for a card from the products of its print runs.
+
+    tcggo files each print run as its own product, and the runs disagree on
+    rarity more than they should: Team Rocket's TR 15 is "Rare Holo" as 1st
+    Edition and "SECRET RARE" as Unlimited, Dark Muk (TR 41) "Uncommon" and
+    "rare". Letting the run with the most sellers supply it — what the image
+    is chosen by — made the rarity depend on that day's market (#105). The
+    first print run's record wins instead: 1st Edition, then Shadowless, then
+    Unlimited, then an unversioned single run. Among runs of one rank, one with
+    a rarity beats one without, and a real offer behind it breaks the tie.
+    """
+    ranked = sorted(
+        products,
+        key=lambda r: (_print_run_rank(r.get("version")),
+                       not canonical_rarity(r.get("rarity")),
+                       r.get("price_low") is None,
+                       -(r.get("available") or 0)))
+    for r in ranked:
+        rarity = canonical_rarity(r.get("rarity"))
+        if rarity:
+            return rarity
+    return None
+
+
+def rederive_stored_rarities(repo) -> dict:
+    """Re-decide every card's rarity from the products already imported.
+
+    The print-run rule in `card_rarity` only helps the next import on its own,
+    and a reimport costs metered requests. The products are already here, so
+    the same decision can be taken again from them for free. Only a card whose
+    stored rarity differs from the one its runs give is written.
+    """
+    by_card: dict[str, list[dict]] = {}
+    for p in repo._all("SELECT card_id, version, rarity, price_low, available "
+                       "FROM market_products WHERE card_id IS NOT NULL"):
+        by_card.setdefault(p["card_id"], []).append(p)
+    if not by_card:
+        return {"cards": 0}
+    stored = {r["id"]: r["rarity"]
+              for r in repo._all("SELECT id, rarity FROM cards")}
+    changes = [(card_rarity(group), cid) for cid, group in by_card.items()
+               if cid in stored and card_rarity(group)
+               and card_rarity(group) != stored[cid]]
+    if changes:
+        with repo.tx() as c:
+            c.executemany("UPDATE cards SET rarity=? WHERE id=?", changes)
+        log.info("re-derived the rarity of %d card(s) from their print runs: %s",
+                 len(changes), ", ".join(f"{cid} -> {r}" for r, cid in changes[:10]))
+    return {"cards": len(changes),
+            "detail": [f"{cid} → {r}" for r, cid in changes]}
+
+
 def canonicalise_stored_rarities(repo) -> dict:
     """Rewrite rarities already in the database to their canonical spelling.
 
@@ -250,10 +317,11 @@ class TcggoCatalog:
         cards = []
         for card_id, group in by_card.items():
             _, number = split_code(group[0]["code"])
-            # Every printing of a card shows the same picture and rarity, so any
-            # of them can supply the display data — but a print run with nothing
-            # for sale tends to carry the emptier record, so prefer one with a
-            # real offer behind it.
+            # Every printing of a card shows the same picture, so any of them
+            # can supply the display data — but a print run with nothing for
+            # sale tends to carry the emptier record, so prefer one with a real
+            # offer behind it. Rarity is the exception: the runs disagree on it,
+            # so it is decided by `card_rarity`, not by who has stock today.
             best = max(group, key=lambda r: (r["price_low"] is not None,
                                              r["available"] or 0))
             cards.append({
@@ -262,7 +330,7 @@ class TcggoCatalog:
                 "name": best["name"],
                 "number": number,
                 "number_sort": number_sort(number),
-                "rarity": canonical_rarity(best["rarity"]),
+                "rarity": card_rarity(group),
                 "image_small_url": best["image"],
                 "image_large_url": best["image"],
                 # The illustrator, used as the reprint-group key: a reprint reuses

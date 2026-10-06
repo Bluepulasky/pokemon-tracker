@@ -131,6 +131,34 @@ def check_card_numbers(repo) -> list[dict]:
         [f"{r['id']} -> {r['number']!r}" for r in rows[:10]])]
 
 
+def check_secret_rare_numbers(repo) -> list[dict]:
+    """A secret rare numbered inside the set is almost certainly mis-rated.
+
+    A secret rare sits past the printed total — Team Rocket's Dark Raichu is
+    83/82 — so "Rare Secret" on a card numbered within it (TR 15, #105) is a
+    rarity that arrived wrong from the import, and it files the card under the
+    secret-rare filter beside the real ones. Only sets whose printed total is
+    known can be checked; a blank total says nothing either way.
+    """
+    rows = repo._all(
+        """SELECT c.id, c.name, c.number, os.printed_total
+             FROM cards c JOIN official_sets os ON os.id = c.official_set_id
+            WHERE c.rarity = 'Rare Secret'
+              AND os.printed_total IS NOT NULL
+              AND c.number_sort IS NOT NULL
+              AND c.number_sort <= os.printed_total
+            ORDER BY c.official_set_id, c.number_sort""")
+    if not rows:
+        return []
+    return [_finding(
+        "warning", "secret_rare_numbers",
+        f"{len(rows)} carta(s) figuran como Rare Secret con un número dentro del "
+        f"total impreso del set. Una secret rare va después del total (83/82), "
+        f"así que esa rareza seguramente llegó mal del import.",
+        [f"{r['id']} {r['name']} ({r['number']}/{r['printed_total']})"
+         for r in rows[:10]])]
+
+
 def check_products(repo) -> list[dict]:
     """A set with no products imported answers the version picker from the network."""
     try:
@@ -204,6 +232,7 @@ def run_checks(repo, conditions) -> dict:
                      (check_rarities, (repo,)),
                      (check_set_dates, (repo,)),
                      (check_card_numbers, (repo,)),
+                     (check_secret_rare_numbers, (repo,)),
                      (check_products, (repo,)),
                      (check_card_types, (repo,)),
                      (check_reprint_ratings, (repo,))):
