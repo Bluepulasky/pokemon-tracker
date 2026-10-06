@@ -122,11 +122,11 @@ async function dashboard() {
     <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
 
     <h2 style="margin-top: 16px;">Cartas de mayor valor</h2>
-    <div class="missing-list">${
+    <div class="missing-list aligned">${
       d.top_value.length ? d.top_value.map((t) => `
         <div class="missing-row" data-card="${esc(t.card_id)}">
           <span class="n">${esc(shortId(t.card_id))}</span>
-          <span>${esc(t.name)}</span>
+          <span class="top-name">${esc(t.name)}</span>
           <span class="tag2">${esc(t.variant)} ${esc(t.condition)}</span>
           <span class="r">${esc(eur(t.value))}</span>
         </div>`).join('')
@@ -1676,11 +1676,11 @@ async function missing(r) {
 
   // ---------- render ----------
   const rowHtml = (m) => `
-    <div class="missing-row" data-card="${esc(m.card_id)}">
+    <div class="missing-row2" data-card="${esc(m.card_id)}">
       <span class="n">${esc(shortId(m.card_id))}</span>
       <span class="m">x${m.still_needed}</span>
       <span class="missing-name${m.missing_entirely ? '' : ' have'}">${esc(m.label || '')}</span>
-      ${m.note ? `<small class="tag2">${esc(m.note)}</small>` : ''}
+      ${m.note ? `<small class="tag3">${esc(m.note)}</small>` : ''}
       <span class="r">${esc(m.rarity || '')}</span>
     </div>`;
 

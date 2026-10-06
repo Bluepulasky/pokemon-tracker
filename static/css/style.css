@@ -1056,20 +1056,57 @@ input[type="range"]::-moz-range-thumb {
 
 /* ------------------------------------------------------------- missing */
 .missing-list { display: grid; gap: 6px; }
-.missing-row { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+.missing-row, .missing-row2 { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
                background: var(--bg-2); border: 1px solid var(--line);
                border-radius: var(--radius-sm); cursor: pointer; }
-.missing-row:hover { border-color: var(--accent-2); }
-.missing-row .n { color: var(--fg-faint); font-variant-numeric: tabular-nums;
+.missing-row:hover, .missing-row2:hover { border-color: var(--accent-2); }
+.missing-row .n, .missing-row2 .n { color: var(--fg-faint); font-variant-numeric: tabular-nums;
                   min-width: 44px; font-size: 13px; }
-.missing-row .m { font-variant-numeric: tabular-nums; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: -6px; }
-.missing-row .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
-.missing-row .missing-name { display: flex; flex-direction: column; min-width: 0; }
+.missing-row .m, .missing-row2 .m { font-variant-numeric: tabular-nums; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: -6px; }
+.missing-row .r, .missing-row2 .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
+.missing-row .missing-name, .missing-row2 .missing-name { display: flex; flex-direction: column; min-width: 0; }
 .missing-name.have { color: var(--accent); }
 .missing-row .missing-note { font-size: 12px; color: var(--fg-dim); }
+.card-note { margin-top: 10px; }
+.tag2 { margin-left: 10px; color: var(--fg-faint);}
+.tag2::first-letter {
+  text-transform: uppercase;
+}
+.tag3 { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px;
+       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); color: var(--accent); margin-left: 10px; }
+@media (min-width: 641px) {
+  .missing-list.aligned {
+    display: grid;
+    grid-template-columns: auto minmax(0, max-content) auto 1fr;
+    row-gap: 8px;
+  }
+  .missing-list.aligned .missing-row {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    column-gap: 12px;
+    align-items: center;
+  }
+  .missing-list.aligned .missing-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .missing-list.aligned .tag2 {
+    margin-left: 0;
+    justify-self: start;
+  }
+  .missing-list.aligned .r {
+    margin-left: 0;
+    justify-self: end;
+  }
+  .missing-list.aligned .top-name {
+      padding-right: 24px;
+  }
+}
 
 @media (max-width: 640px) {
-  .missing-row {
+  .missing-row2 {
     display: grid;
     grid-template-columns: 4.5em auto minmax(0, 1fr) auto;
     grid-template-areas:
@@ -1079,28 +1116,27 @@ input[type="range"]::-moz-range-thumb {
     row-gap: 0;
     align-items: center;
   }
-  .missing-row .n { grid-area: n; }
-  .missing-row .m { grid-area: m; }
-  .missing-row .missing-name {
+  .missing-row2 .n { grid-area: n; }
+  .missing-row2 .m { grid-area: m; }
+  .missing-row2 .missing-name {
     grid-area: name;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .missing-row .r { grid-area: r; }
-  .missing-row .tag2 {
+  .missing-row2 .r { grid-area: r; }
+  .missing-row2 .tag3 {
     grid-area: note;
     justify-self: start;
     max-width: 100%;
     margin-top: 4px;
     white-space: normal;
+    margin-left: 0;
   }
+  .missing-row .tag2 { margin-left: 0; border-radius: 999px;
+       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; color: var(--accent); }
 }
-
-.card-note { margin-top: 10px; }
-.tag2 { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px;
-       background: rgba(246, 212, 59, 0.1); border: 1px solid rgba(246, 227, 59, 0.35); color: var(--accent); margin-left: 10px; }
 
 /* --------------------------------------------------------------- chart */
 .chart { width: 100%; height: auto; display: block; }
