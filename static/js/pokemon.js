@@ -1914,13 +1914,14 @@ function wireSearch() {
     timer = setTimeout(async () => {
       try {
         const res = await api.search(q);
-        const owned = new Set(res.collection.map((c) => c.card_id));
+        // One row per logical card, shown as its original set; `owned` covers
+        // every printing, so the tag does not depend on which one is held.
         box.innerHTML = res.cards.length ? res.cards.map((c) => `
           <div class="row" data-card="${esc(c.id)}">
             <img src="${esc(cardArt(c))}" alt="" loading="lazy">
             <div><div>${esc(c.name)}</div>
-              <div class="meta">${esc(c.set_name)} #${esc(c.number)}${
-                owned.has(c.id) ? ' · en colección' : ''}</div></div>
+              <div class="meta">${esc(c.set_name)}${
+                c.owned ? ' · en colección' : ''}</div></div>
           </div>`).join('') : '<div class="meta" style="padding:10px">Sin resultados</div>';
         box.hidden = false;
         box.querySelectorAll('[data-card]').forEach((n) => {

@@ -158,6 +158,9 @@ def set_card_rating(card_id):
 def search():
     """Global search across catalog and collection.
 
+    The catalog half lists one row per logical card, shown as its earliest
+    printing, with `owned` set when any printing is held (#104).
+
     A rating filter narrows the collection half only — the catalog has no ranks,
     and silently dropping catalog hits when one is set would look like the search
     was broken.
@@ -171,7 +174,10 @@ def search():
     rating_min = _rating_arg("rating_min")
     rating_max = _rating_arg("rating_max")
 
-    cards, _ = repo().search_cards(q=q, page=1, page_size=25)
+    cards = repo().search_cards_grouped(q, limit=25)
+    for c in cards:
+        c["owned"] = bool(c.pop("owned"))
+        c.pop("rn", None)
     items, _ = repo().list_collection(
         q=q, rating=rating, rating_min=rating_min, rating_max=rating_max,
         page=1, page_size=25)

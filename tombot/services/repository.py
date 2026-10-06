@@ -464,6 +464,50 @@ class PokemonRepo:
         )
         return rows, total
 
+    def search_cards_grouped(self, q: str, limit: int = 25) -> list[dict]:
+        """Catalogue hits for the global search, one per logical card (#104).
+
+        A card printed in four sets is one answer, not four: the hits are
+        grouped by reprint — same name key and illustrator, the definition the
+        version picker uses — and the group is shown as its earliest printing,
+        the set the card is originally from. Each row says whether any printing
+        of it is in the collection, so the "en colección" tag does not depend
+        on which printing happens to be held.
+
+        A card from a hidden set is left out. Hidden is a fact about a
+        collecting goal, so a catalogue set counts as hidden when some hidden
+        goal is built on it and no visible goal is.
+        """
+        like = f"%{q}%"
+        return self._all(
+            """WITH hits AS (
+                    SELECT c.*, os.name AS set_name, os.release_date AS set_release,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY c.name_key, IFNULL(c.artist, '')
+                               ORDER BY os.release_date, c.number_sort, c.id) AS rn,
+                           EXISTS (SELECT 1 FROM collection_items i
+                                     JOIN cards oc ON oc.id = i.card_id
+                                    WHERE oc.name_key = c.name_key
+                                      AND IFNULL(oc.artist,'') = IFNULL(c.artist,'')) AS owned
+                      FROM cards c
+                      JOIN official_sets os ON os.id = c.official_set_id
+                     WHERE (c.name LIKE ? OR c.number LIKE ? OR c.id LIKE ?)
+                       AND NOT (
+                           EXISTS (SELECT 1 FROM set_hidden h
+                                     JOIN collection_sets s ON s.id = h.set_id
+                                     JOIN json_each(s.rules_json, '$.include_sets') j
+                                    WHERE j.value = c.official_set_id)
+                           AND NOT EXISTS (SELECT 1 FROM collection_sets s
+                                     JOIN json_each(s.rules_json, '$.include_sets') j
+                                    WHERE j.value = c.official_set_id
+                                      AND NOT EXISTS (SELECT 1 FROM set_hidden h
+                                                       WHERE h.set_id = s.id)))
+                )
+                SELECT * FROM hits WHERE rn = 1
+                 ORDER BY set_release, number_sort
+                 LIMIT ?""",
+            (like, f"{q}%", like, limit))
+
     def count_cards(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM cards") or 0
 
