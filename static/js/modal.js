@@ -22,9 +22,27 @@ export function initModal(meta, changeHandler) {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 }
 
+function lockScroll(on) {
+  document.documentElement.classList.toggle('modal-open', on);
+}
+
+let keyNavHandler = null;
+
+function clearKeyNav() {
+  if (keyNavHandler) {
+    document.removeEventListener('keydown', keyNavHandler);
+    keyNavHandler = null;
+  }
+}
+
+let openToken = 0;
+
 export function closeModal() {
+  openToken++;
   const root = document.getElementById('modal-root');
   document.querySelector('.sort-select')?.style.setProperty('display', '');
+  clearKeyNav();
+  lockScroll(false);
   root.hidden = true;
   root.innerHTML = '';
 }
@@ -34,18 +52,25 @@ const opts = (list, sel) => list
   .join('');
 
 export async function openCard(cardId, opts = {}) {
+  const token = ++openToken;
   const { navList = [], navIdx = -1 } = opts;
   const prev = navIdx > 0 ? navList[navIdx - 1] : null;
   const next = navIdx < navList.length - 1 ? navList[navIdx + 1] : null;
   const root = document.getElementById('modal-root');
+  clearKeyNav();   // el handler anterior tiene prev/next viejos en su closure
   root.hidden = false;
+  lockScroll(true);
   root.innerHTML = '<div class="modal"><div class="loading">Cargando…</div></div>';
   document.querySelector('.sort-select')?.style.setProperty('display', 'none');
 
   let card, items;
   try {
-    [card, items] = await Promise.all([api.card(cardId), api.byCard(cardId, opts)]);
-  } catch (e) { toast(e.message, true); closeModal(); return; }
+      [card, items] = await Promise.all([api.card(cardId), api.byCard(cardId, opts)]);
+    } catch (e) {
+      if (token !== openToken) return;
+      toast(e.message, true); closeModal(); return;
+    }
+    if (token !== openToken) return;  // se cerró o se abrió otra carta mientras cargaba
   items = items.data;
   const totalOwned = items.reduce((a, i) => a + i.quantity, 0);
   const targetMet = totalOwned >= (Number(card.target) || 1);
@@ -159,24 +184,14 @@ export async function openCard(cardId, opts = {}) {
   if (next) root.querySelector('.modal-nav.right').onclick =
     () => openCard(next.id, { ...opts, navIdx: navIdx + 1 });
 
-  function handleKeyNav(e) {
-    if (e.key === 'ArrowLeft' && prev) document.querySelector('.modal-nav.left')?.click();
-    if (e.key === 'ArrowRight' && next) document.querySelector('.modal-nav.right')?.click();
-  }
-
-  document.addEventListener('keydown', handleKeyNav);
-
-  root.querySelector('.close').addEventListener('click', () => {
-    document.removeEventListener('keydown', handleKeyNav);
-  }, { once: true });
-
-  // click fuera del modal — el root mismo es el overlay
-  root.addEventListener('click', (e) => {
-    if (e.target === root) {
-      document.removeEventListener('keydown', handleKeyNav);
-      closeModal();
-    }
-  }, { once: true });
+  keyNavHandler = (e) => {
+    // no robarle las flechas a sliders, inputs ni al lightbox
+    if (e.target.closest('input, select, textarea')) return;
+    if (document.querySelector('.lightbox')) return;
+    if (e.key === 'ArrowLeft' && prev) root.querySelector('.modal-nav.left')?.click();
+    if (e.key === 'ArrowRight' && next) root.querySelector('.modal-nav.right')?.click();
+  };
+  document.addEventListener('keydown', keyNavHandler);
 }
 
 function variantCard(item) {

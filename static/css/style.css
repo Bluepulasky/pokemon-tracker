@@ -20,7 +20,14 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; scrollbar-gutter: stable;  }
+html.modal-open,
+html.modal-open body { overflow: hidden; }
+
+#modal-root,
+.modal,
+.lightbox { overscroll-behavior: contain; }   /* el scroll interno no "se escapa" al fondo */
+
 body {
   background: var(--bg);
   color: var(--fg);
@@ -301,7 +308,7 @@ details { padding: 8px 20px; }
 
 .modal {
   width: min(90%, 1400px);
-  height: 90vh;
+  height: 92vh;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1065,11 +1072,10 @@ input[type="range"]::-moz-range-thumb {
 .missing-row .m, .missing-row2 .m { font-variant-numeric: tabular-nums; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: -6px; }
 .missing-row .r, .missing-row2 .r { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
 .missing-row .missing-name, .missing-row2 .missing-name { display: flex; flex-direction: column; min-width: 0; }
-.missing-name.have { color: var(--accent); }
+.missing-name.have { color: var(--accent-2); }
 .missing-row .missing-note { font-size: 12px; color: var(--fg-dim); }
 .card-note { margin-top: 10px; }
-.tag2 { margin-left: 10px; color: var(--fg-faint);}
-.tag3 { margin-left: 10px; color: var(--accent);}
+.tag2, .tag3 { margin-left: 10px; color: var(--fg-faint);}
 .tag2::first-letter, .tag3::first-letter {
   text-transform: uppercase;
 }
