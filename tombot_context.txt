@@ -1,0 +1,1191 @@
+=== CLAUDE.md
+# TomBot — Pokémon card collection tracker
+
+Self-hosted, single-user web app to track a Pokémon card collection: which cards
+you own, which you still need to complete a set, and what the collection is worth.
+
+## Architecture
+
+- **Flask app factory** (`tombot/__init__.py`) wiring blueprints under `tombot/api/`.
+- **`PokemonRepo`** (`tombot/services/repository.py`) is the **only** place that
+  writes SQL. Everything else goes through it.
+- **SQLite** (`tombot/services/schema.sql`). WAL, `foreign_keys=ON`, thread-local
+  connections, re-entrant `tx()`.
+- **Frontend** is a small vanilla-JS SPA in `static/js/` (no build step). It is
+  loaded as ES modules — validate with `node --check` on a `.mjs` copy, because
+  `node --check file.js` parses as CommonJS and hides a missing brace.
+
+## The one data source: tcggo
+
+Catalogue, card images, Cardmarket versions **and** prices all come from **tcggo**
+(CardMarket API TCG on RapidAPI). There is no other source — the old pokemontcg.io
+and TCGdex adapters were removed because each mapped a card to one price for all
+its printings, mispricing every reprint.
+
+tcggo is **metered**: the plan bills per request past a daily allowance. Every
+call goes through `RequestBudget` (`services/budget.py`), which counts requests in
+the database over a rolling 24h window and refuses to send one past the cap
+(`TCGGO_DAILY_LIMIT`, default 40). Set the key in `.env` as `TCGGO_API_KEY`.
+
+Sets are imported **one at a time from the Mantenimiento → Sets tab**. There is no
+bootstrap: a fresh install is an empty schema, and importing a set is what fills
+it. Importing stores the set's cards and its Cardmarket products (with prices) in
+`market_products`, and creates a collecting goal for it.
+
+**tcggo quirks worth knowing:**
+- Its names disagree with common ones — it calls Base Set **"Base"**. So the
+  add-set search caches the whole catalogue once (`list_all_episodes`) and then
+  matches **locally and bidirectionally** (a set matches when its name contains
+  the query *or the query contains its name*), which is how "Base Set" finds
+  "Base". `search_episodes` (its raw search) alone misses it.
+- Its `series` field is sparse/inconsistent (blank on most sets) — don't group by
+  it; use the release-date era (`tcg_series.py`).
+- It omits the set `logo` on a few sets at import; the Sets card falls back to the
+  cached episode logo (`COALESCE(NULLIF(os.logo_url,''), me.logo)`).
+- The version picker lists **reprints across all imported sets** by card name;
+  picking one records the item against that reprint's own card/set.
+
+## Data model
+
+- **`official_sets` + `cards`** — the catalogue, from a tcggo import. Card ids are
+  `{setcode}-{number}` (e.g. `bs-4`). Always the whole set. `supertype`
+  (Pokémon / Trainer / Energy) comes from tcggo; `types_json` (the energy type /
+  colour: Fire, Water, …) does **not** — tcggo has no such field, bulk or detail —
+  so it is filled only by the card-meta CSV (`tombot/data/card_meta.csv`, applied
+  from Mantenimiento or `flask fix-card-meta`), and a reimport must not blank it.
+  The Cartas view filters on both axes independently (`type` and `color`).
+- **`market_products`** — one row per **printing** of a card in an imported set,
+  with its price and its own Cardmarket URL. A card's versions are its printings.
+  Keyed `(episode_id, card_id, version)` on an id of our own; **Cardmarket's
+  `cardmarket_id` is an attribute, nullable and not unique**. It has to be: tcggo
+  stamps different print runs with one id (Base Set Charizard's 1st Edition
+  Shadowless and its Shadowless are both product 660224, at 50,000 and 2,000 EUR)
+  and sends no id at all on others. Keyed on that id, Base Set stored 193 of the
+  307 printings tcggo sends, and 11 Base Set 2 cards vanished from the catalogue
+  because a card with no product is not built (#68). Note the key is `card_id`,
+  not `code`: Celebrations files two different cards under "CEL 2".
+- **`collection_sets` + `set_slots` + `set_slot_cards`** — a *collecting goal*: a
+  **rule** over one or more catalogue sets. A slot is one completion target,
+  satisfied by owning any member card. Rules live in `collection_sets.rules_json`
+  and are materialised into slots by `SetBuilder`. The catalogue stays whole while
+  what you *collect* changes: rarity rules (`exclude_rarities` etc.) plus per-card
+  overrides (`include_cards` / `exclude_cards`) — the ★ toggle and the quick-select
+  bar on the set detail page both write these. A slot's `source` is `rule` or
+  `manual`; a rebuild leaves manual ones alone.
+- **`collection_items`** — what you physically own: `(card_id, variant, condition,
+  language)` unique, plus `market_product_id` — the exact **printing** chosen in
+  the add-card modal, i.e. a `market_products.id`, not a Cardmarket product id.
+- **`card_targets`** — per card: how many copies count as complete (`target`)
+  and a free-text `note` (which printing to chase, #94). The default (1, no
+  note) is stored as absence. `note` is a column added by `init_db`'s
+  `ALTER TABLE` self-heal, the same way `collection_items.first_edition` was.
+- **`price_cache`** — the resolved price per owned printing.
+- **`price_modifiers`** — condition/language/variant multipliers, editable.
+- **`market_episodes`** — the tcggo set catalogue (all ~180 sets), filled by the
+  Mantenimiento "Sincronizar lista de sets" button so the add-set search is local.
+  **`set_episodes`** maps a catalogue set → its tcggo episode (for the logo, etc.).
+- **`set_hidden`** — sets hidden from the Sets page and completion totals (kept,
+  not deleted; un-hide from Mantenimiento). **`set_loose_completion`** — the
+  experimental per-set "any owned printing counts" flag. Both are presence tables.
+
+## Sets view & completion
+
+- The set detail page shows the **whole set** (every card, via
+  `set_cards_with_state`), each tagged `collecting` (is it a slot?) and `owned`.
+  Filters (holo / owned / collecting) are client-side; the ★ per-card toggle and
+  the quick-select bar (`PUT /sets/<id>/collect`) mutate the rule.
+- **`set_progress()` is the single source of completion** — the Sets page,
+  the dashboard totals, and the monthly snapshot all sum it. So changing what
+  counts (hidden, loose) in that one query changes all three at once. Listing all
+  sets (`set_id=None`) skips hidden sets; a single-set query returns one anyway.
+- The Sets page groups by **TCG era**, derived from each set's `release_date`
+  against a small era timeline in `services/tcg_series.py` — **not** tcggo's own
+  `series` field, which is too sparse to group by (it left most sets blank).
+
+## Pricing
+
+Prices are read **locally** from `market_products` by the printing id on each
+owned row — no per-card network call, no guessing which printing a variant is. A row
+with no chosen product is left unpriced (a wrong number is worse than none).
+Re-importing a set is what refreshes its prices. See `services/pricing.py`.
+
+## Conventions
+
+- **`schema.sql` is the single source of truth. There are no migrations.** A
+  schema change is an edit to `schema.sql`; `init_db` just runs it and is
+  idempotent. **Gotcha:** every statement is `CREATE ... IF NOT EXISTS`, so a new
+  **table** appears on an already-populated database on next `init-db`, but a new
+  **column** on an existing table does **not**. To add per-set state that must
+  survive without recreating the DB (e.g. `set_hidden`, `set_loose_completion`),
+  use a small **new table**, not a column. A column is fine only when losing the
+  old DB is acceptable (it is rebuilt from imports). A change to a table's **key**
+  is the one thing `init_db` cannot deliver at all — the old table simply
+  survives — so it needs an explicit drop, and `market_products` is the only
+  table where that is safe (it holds nothing the user typed and a re-import
+  rebuilds it in full; see `_retire_product_keyed_market_products`).
+  A column that an **index** in `schema.sql` depends on (`is_cover`) has to be
+  added by an `ALTER TABLE` that runs **before** `executescript`, or
+  `CREATE INDEX` fails with "no such column" on an existing database; the
+  other `ALTER`s run after it (see `_add_cover_column_to_photos`).
+- **After a schema.sql change, restart runs `init_db` only via the Docker
+  entrypoint.** Running `waitress`/`flask run` directly does not — run
+  `flask init-db` once yourself, or the new table is missing ("no such table").
+- **Silent fallbacks are the enemy.** Most bugs here came from a lookup that missed
+  and returned something plausible (a missing multiplier → 1.00, an unknown set id
+  → "modern set"). Prefer failing or warning over guessing. `services/health.py`
+  (Mantenimiento → Revisión de datos) actively looks for these mismatches.
+- **One local instance.** Run one server, one database; switch branches by
+  checkout + restart. The tcggo key is metered per-key, so several instances
+  against one key overspend it.
+- **CLAUDE reviewers:** the API budget is real money past the daily cap. Do not
+  make live tcggo calls casually; the version picker and pricing read from
+  already-imported local data.
+
+## Commands & run
+
+```
+flask init-db     # create the schema (idempotent). Startup runs this; no bootstrap.
+flask prices      # re-price the collection from imported products (local, no network)
+flask snapshot    # write a collection snapshot for the history charts
+flask monthly     # prices + snapshot (what cron calls)
+flask scheduler   # run monthly on a schedule, blocking (its own container)
+```
+
+Docker: `docker compose up -d`. Config is `.env` (see `.env.example`). Port maps
+`8090:8080`. `pytest` runs the suite.
+
+=== tombot/services/schema.sql
+-- TOMBOT POKEMON TRACKER — schema
+-- Every connection must set foreign_keys=ON (SQLite defaults it OFF).
+
+PRAGMA foreign_keys = ON;
+
+-- ---------------------------------------------------------------------------
+-- CATALOG  (external source of truth; safe to overwrite on re-import)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS official_sets (
+    id             TEXT PRIMARY KEY,          -- 'base1'
+    name           TEXT NOT NULL,             -- 'Base'
+    series         TEXT,                      -- 'Base'
+    printed_total  INTEGER,
+    total          INTEGER,
+    release_date   TEXT,                      -- 'YYYY/MM/DD' from source
+    ptcgo_code     TEXT,
+    logo_url       TEXT,
+    symbol_url     TEXT,
+    source         TEXT NOT NULL DEFAULT 'tcggo',
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cards (
+    id               TEXT PRIMARY KEY,        -- 'base1-4'
+    official_set_id  TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    name_key         TEXT,                    -- name reduced for matching: 'pokemoncenter' (#102)
+    number           TEXT NOT NULL,           -- '4', 'H12', 'SH1' — string on purpose
+    number_sort      REAL,                    -- derived; lexical sort puts #10 before #2
+    rarity           TEXT,
+    supertype        TEXT,                    -- Pokémon / Trainer / Energy
+    subtypes_json    TEXT,
+    types_json       TEXT,
+    artist           TEXT,
+    image_small_url  TEXT,
+    image_large_url  TEXT,
+    image_local      TEXT,                    -- cached path under media/catalog
+    external_ids_json TEXT,                   -- {"pokemontcgio": "...", "cardmarket_url": "..."}
+    source           TEXT NOT NULL DEFAULT 'tcggo',
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cards_set    ON cards(official_set_id, number_sort);
+CREATE INDEX IF NOT EXISTS idx_cards_name   ON cards(name);
+CREATE INDEX IF NOT EXISTS idx_cards_name_key ON cards(name_key, artist);
+CREATE INDEX IF NOT EXISTS idx_cards_rarity ON cards(rarity);
+
+-- ---------------------------------------------------------------------------
+-- PERSONAL SETS  (user-owned; a catalog re-import must never touch these)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_sets (
+    id           TEXT PRIMARY KEY,            -- 'base-set', 'jungle-no-holos'
+    name         TEXT NOT NULL,
+    description  TEXT,
+    group_name   TEXT,                        -- 'Gen1' / 'Gen 2' / 'Gen 3'
+    position     INTEGER NOT NULL DEFAULT 0,
+    rules_json   TEXT,                        -- declarative rule
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Sets hidden from the collection. The set stays fully imported — its cards,
+-- products and goal are untouched — it just drops off the Sets page and out of
+-- the completion totals, for sets added by accident or while testing. A row
+-- here means hidden; un-hiding is deleting it (done from Mantenimiento). It is
+-- its own table on purpose: a new column would not appear on an already-created
+-- database, but this CREATE ... IF NOT EXISTS does — so it ships without a
+-- migration and without recreating anything.
+CREATE TABLE IF NOT EXISTS set_hidden (
+    set_id     TEXT PRIMARY KEY REFERENCES collection_sets(id) ON DELETE CASCADE,
+    hidden_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Loose completion (experimental): a row here means "any owned printing of a
+-- card counts toward this set's copy of it" — a Jungle Pikachu you hold fills
+-- the Base Set Pikachu slot. Off (no row) is the strict default, where only the
+-- set's own printing counts. Its own table for the same reason as set_hidden:
+-- ships as CREATE ... IF NOT EXISTS, no migration.
+CREATE TABLE IF NOT EXISTS set_loose_completion (
+    set_id     TEXT PRIMARY KEY REFERENCES collection_sets(id) ON DELETE CASCADE,
+    set_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A slot is ONE completion target. Owning any member card completes it.
+-- This is what lets reprints/variants collapse to a single logical card.
+CREATE TABLE IF NOT EXISTS set_slots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    set_id          TEXT NOT NULL REFERENCES collection_sets(id) ON DELETE CASCADE,
+    position        INTEGER NOT NULL,
+    label           TEXT,                     -- display name; defaults to primary card name
+    display_card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
+    source          TEXT NOT NULL DEFAULT 'rule',   -- 'rule' | 'manual'
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_slots_set ON set_slots(set_id, position);
+
+CREATE TABLE IF NOT EXISTS set_slot_cards (
+    slot_id  INTEGER NOT NULL REFERENCES set_slots(id) ON DELETE CASCADE,
+    card_id  TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    set_id   TEXT NOT NULL REFERENCES collection_sets(id) ON DELETE CASCADE,  -- denormalised
+    PRIMARY KEY (slot_id, card_id)
+);
+
+-- A catalog card may belong to at most one slot within a given personal set.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_slotcards_unique ON set_slot_cards(set_id, card_id);
+CREATE INDEX IF NOT EXISTS idx_slotcards_card ON set_slot_cards(card_id);
+
+-- Catalog printings of one logical card.
+--
+-- pokemontcg.io exposes no reprint relationship, and no name/number heuristic
+-- reconstructs one reliably: Jynx #31 exists in Base Set and Neo Revelation as
+-- entirely different cards. So groups come from two sources, recorded in
+-- `source` so the weaker one can be told apart and overridden:
+--
+--   'slot'   the user grouped these cards in a personal set slot. Authoritative
+--            -- it is a direct statement that they are the same logical card.
+--   'auto'   the importer matched name + number + supertype. A hint only.
+--   'manual' entered by hand.
+--
+-- print_group is the card_id of the earliest-released member, so it is stable
+-- across re-imports.
+CREATE TABLE IF NOT EXISTS card_printings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    print_group     TEXT NOT NULL,
+    card_id         TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    official_set_id TEXT NOT NULL REFERENCES official_sets(id) ON DELETE CASCADE,
+    is_reprint      INTEGER NOT NULL DEFAULT 0,
+    display_name    TEXT,
+    -- Physical variants this edition can come in, as a JSON list. Derived from
+    -- the set era and the card's rarity: a WOTC holo rare exists as 1st Edition,
+    -- Shadowless and Unlimited, a modern card does not.
+    variants_json   TEXT,
+    source          TEXT NOT NULL DEFAULT 'auto',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (print_group, card_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_printings_card  ON card_printings(card_id);
+CREATE INDEX IF NOT EXISTS idx_printings_group ON card_printings(print_group);
+
+-- ---------------------------------------------------------------------------
+-- COLLECTION  (user-owned; the source of truth on what is physically held)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id    TEXT NOT NULL REFERENCES cards(id) ON DELETE RESTRICT,
+    variant    TEXT NOT NULL DEFAULT 'normal',   -- normal|holo|reverse|first_edition|shadowless|other
+    condition  TEXT NOT NULL DEFAULT 'M/NM',     -- see config.CONDITIONS
+    language   TEXT NOT NULL DEFAULT 'es',       -- es|en|pt|other
+    quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    -- Which catalog printing this physical card is. Nullable: most cards exist
+    -- in one printing, and card_id already identifies it.
+    printing_id INTEGER REFERENCES card_printings(id) ON DELETE SET NULL,
+    -- The Cardmarket product this row IS. Chosen in the modal from the real
+    -- version list, so pricing becomes a lookup rather than a guess: no
+    -- variant to translate, no printing to resolve, no field to pick.
+    market_product_id INTEGER,
+    notes      TEXT,
+    first_edition INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Without this, two rows of the same combination silently double the physical count.
+    UNIQUE (card_id, variant, condition, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_items_card ON collection_items(card_id);
+
+-- N photos per item. The spec's single image column could not
+-- satisfy "one photo per variant, swipe through them in the modal".
+CREATE TABLE IF NOT EXISTS collection_photos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id        INTEGER NOT NULL REFERENCES collection_items(id) ON DELETE CASCADE,
+    filename       TEXT NOT NULL,             -- under media/collection/
+    thumb_filename TEXT,                      -- under media/thumbs/
+    width          INTEGER,
+    height         INTEGER,
+    bytes          INTEGER,
+    is_primary     INTEGER NOT NULL DEFAULT 0,
+    -- The photo that represents the card's whole reprint group in a grid,
+    -- chosen by hand. Overrides the best-condition rule in _attach_group and
+    -- best_photos_for_cards; 0 everywhere means "automatic". Added by
+    -- init_db's ALTER TABLE on a database from before it.
+    is_cover       INTEGER NOT NULL DEFAULT 0,
+    position       INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_photos_item ON collection_photos(item_id, position);
+-- At most one primary photo per item. init_db demotes any extras before this
+-- index is created, so it also applies to a database that already has some.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_one_primary
+    ON collection_photos(item_id) WHERE is_primary = 1;
+-- At most one cover per item. set_cover_photo also clears the flag across
+-- the item's reprint group, which the index cannot express.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_one_cover
+    ON collection_photos(item_id) WHERE is_cover = 1;
+
+-- Hall of Fame rank, 0-8, per logical card.
+--
+-- Deliberately its own table rather than a column on cards: the rank is the
+-- user's judgement and must survive a catalog re-import, which overwrites
+-- everything in `cards`.
+--
+-- It is keyed by card and NOT by collection row. The rank answers "how much do I
+-- like this card", which has nothing to do with which physical copy is in hand —
+-- ranking the holo and the non-holo Ninetales separately is busywork that says
+-- the same thing twice.
+CREATE TABLE IF NOT EXISTS card_ratings (
+    card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+    rating     INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 8),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_ratings_rating ON card_ratings(rating);
+
+-- How many copies of a card count as "done".
+--
+-- Its own table for the same reason as card_ratings: it is the user's intent, not
+-- catalog data, so a re-import must not touch it. Absent means 1, so the default
+-- costs no rows and behaves exactly as before this existed.
+CREATE TABLE IF NOT EXISTS card_targets (
+    card_id    TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+    target     INTEGER NOT NULL CHECK (target >= 1),
+    note       TEXT,                          -- free text: which printing to chase, etc. (#94)
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ---------------------------------------------------------------------------
+-- PRICES
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS price_cache (
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    source      TEXT NOT NULL DEFAULT 'cardmarket',
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,                         -- the chosen basis (see config PRICE_BASIS)
+    price_low   REAL,
+    price_trend REAL,
+    price_avg30 REAL,
+    raw_json    TEXT,                         -- full upstream payload, for later re-derivation
+    -- Which printing this price describes, e.g. 'holo:shadowless'. Recorded so a
+    -- price can be traced back to the exact print run rather than guessed at.
+    variant_key TEXT,
+    market_product_id INTEGER,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (card_id, variant, source)
+);
+
+-- Every price we were quoted, from every provider and every market.
+--
+-- price_cache holds the ONE number a card is valued at. This holds all the
+-- others, because a single number hides the thing that matters: when two
+-- providers quoting the SAME market disagree by 4x, one of them is describing
+-- a different card. Keeping the quotes is what makes that visible instead of
+-- silently averaging into a number that is wrong in a plausible way.
+-- Requests spent against a metered API, per UTC day.
+--
+-- Persisted rather than held in memory: a restart must not hand back a fresh
+-- allowance, because the allowance is what keeps the card from being billed.
+-- Which tcggo episode a set is, resolved once and kept.
+--
+-- Set filtering is the only reliable way to reach every printing of a card:
+-- card numbers are stored inconsistently upstream ("BS 4" in Base Set, 19 in
+-- Jungle), so a number filter silently drops versions. Looking the episode up
+-- costs a request, so it is looked up once.
+-- Every Cardmarket product in a set we care about, imported in bulk.
+--
+-- Asking per card is what made the allowance the bottleneck: registering 150
+-- cards cost 150 requests, for products that all live in sets a handful of
+-- requests could have fetched whole. A set comes back 100 products at a time,
+-- so Base Set is four requests. After that the picker and the prices are
+-- local, and adding a card costs nothing.
+-- Sets the source knows about, remembered as we come across them.
+--
+-- Not fetched in bulk: the episode list pages twenty at a time and ignores a
+-- larger page size, so caching all of them costs about twenty requests to
+-- answer a question nobody asked. Searching costs one, and every set seen is
+-- kept, so the list fills in as it gets used.
+CREATE TABLE IF NOT EXISTS market_episodes (
+    episode_id   INTEGER PRIMARY KEY,
+    code         TEXT,
+    name         TEXT NOT NULL,
+    slug         TEXT,
+    released_at  TEXT,
+    logo         TEXT,
+    cards_total  INTEGER,
+    -- How many Cardmarket products tcggo holds for this set, from its own
+    -- `prices.cardmarket.total`. NOT the same as cards_total, and that is the
+    -- point (#75): tcggo lists "Celebrations: Classic Collection" as 25 cards
+    -- and 0 products, because those 25 cards are filed under Celebrations
+    -- itself. Importing it fetches nothing and costs a request to find out.
+    -- NULL means we have not been told — which is not the same as zero, so an
+    -- unknown set stays offered rather than being hidden on a guess.
+    products_total INTEGER,
+    seen_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per PRINTING, not per Cardmarket product (#68).
+--
+-- This was keyed on Cardmarket's own product id, which cannot hold the data:
+-- tcggo returns the same cardmarket_id for genuinely different print runs
+-- (Base Set Charizard comes back as "1st Edition Shadowless" at 50,000 EUR and
+-- "Shadowless" at 2,000 EUR, both stamped 660224), and sends no id at all on
+-- others (31 Base Set printings, and the 11 Base Set 2 cards that were missing
+-- from the catalogue entirely). Keyed that way, Base Set stored 193 of the 307
+-- printings tcggo sends and there was nowhere to put the rest.
+--
+-- The identity of a printing is where it sits: which set, which card, which
+-- print run. Note the key is card_id and not `code`: an episode can file two
+-- different cards under one code — Celebrations has Reshiram and Blastoise both
+-- at "CEL 2", both with no version — and resolve_collisions is what has already
+-- given those their own card ids. Cardmarket's id is kept as an attribute,
+-- nullable, because it is what the buy link and the price lookup need; it is
+-- not what the row IS.
+CREATE TABLE IF NOT EXISTS market_products (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,  -- our own printing id
+    cardmarket_id INTEGER,                -- Cardmarket's id: nullable, NOT unique
+    episode_id    INTEGER NOT NULL,
+    card_id     TEXT NOT NULL DEFAULT '', -- the card these are versions of; half the
+                                          -- key, so never NULL (see version below)
+    code        TEXT,                    -- "BS 4"
+    number      TEXT,
+    name        TEXT,
+    version     TEXT NOT NULL DEFAULT '', -- "Unlimited", "Shadowless", ... ('' when absent,
+                                          -- never NULL: SQLite treats NULLs as distinct and
+                                          -- the uniqueness below would stop holding)
+    rarity      TEXT,
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,
+    price_low   REAL,
+    price_avg30 REAL,
+    price_avg7  REAL,
+    available   INTEGER,
+    image       TEXT,
+    market_url  TEXT,
+    artist      TEXT,                    -- illustrator; part of the reprint key
+    supertype   TEXT,                    -- Pokémon / Trainer / Energy (the type filter)
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    -- What a printing IS. Re-importing a set updates these rows in place.
+    UNIQUE (episode_id, card_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_products_episode
+    ON market_products(episode_id, code);
+CREATE INDEX IF NOT EXISTS idx_market_products_cardmarket
+    ON market_products(cardmarket_id);
+
+CREATE TABLE IF NOT EXISTS set_episodes (
+    official_set_id TEXT PRIMARY KEY REFERENCES official_sets(id) ON DELETE CASCADE,
+    episode_id      INTEGER NOT NULL,
+    episode_name    TEXT,
+    episode_code    TEXT,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per request actually sent, so the allowance can be counted over a
+-- rolling window rather than a calendar day.
+--
+-- A per-day counter looks obedient and still overspends: the whole allowance
+-- at 23:00 and the whole allowance again at 01:00 is twice the cap inside two
+-- hours. RapidAPI reports usage as "Aug 27 - Aug 28", not per midnight, so a
+-- calendar day was measuring the wrong thing.
+CREATE TABLE IF NOT EXISTS api_requests (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    sent_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_requests_window
+    ON api_requests(provider, sent_at);
+
+CREATE TABLE IF NOT EXISTS api_budget (
+    provider TEXT NOT NULL,
+    day      TEXT NOT NULL,              -- YYYY-MM-DD, UTC
+    count    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (provider, day)
+);
+
+CREATE TABLE IF NOT EXISTS price_quotes (
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    provider    TEXT NOT NULL,               -- who told us: tcgdex | pokemontcgio
+    market      TEXT NOT NULL,               -- which market: cardmarket | tcgplayer
+    printing    TEXT NOT NULL DEFAULT '',    -- print run, e.g. 'holo:shadowless'
+    currency    TEXT NOT NULL,
+    price       REAL,                        -- the headline number for this quote
+    price_low   REAL,
+    price_mid   REAL,
+    price_high  REAL,
+    price_trend REAL,
+    price_avg30 REAL,
+    product_id  INTEGER,                     -- the market's own product id
+    -- 0 when this quote cannot be trusted, with the reason in distrust_reason.
+    trusted     INTEGER NOT NULL DEFAULT 1,
+    distrust_reason TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (card_id, variant, provider, market, printing)
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_quotes_card ON price_quotes(card_id, variant);
+
+CREATE TABLE IF NOT EXISTS price_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id     TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    variant     TEXT NOT NULL DEFAULT 'normal',
+    source      TEXT NOT NULL DEFAULT 'cardmarket',
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    price       REAL,
+    captured_on TEXT NOT NULL,                -- 'YYYY-MM-DD', one row per day max
+    UNIQUE (card_id, variant, source, captured_on)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricehist_card ON price_history(card_id, captured_on);
+
+-- Condition price multipliers. No source prices by condition, so the value of a
+-- played card is the near-mint product price scaled by an editable, local factor
+-- (M/NM 1.00, down to PO). The `kind` column is kept general, but only
+-- 'condition' is seeded, read and edited today.
+CREATE TABLE IF NOT EXISTS price_modifiers (
+    kind       TEXT NOT NULL,                 -- 'condition'
+    key        TEXT NOT NULL,
+    multiplier REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (kind, key)
+);
+
+-- ---------------------------------------------------------------------------
+-- HISTORY  (current state cannot answer "how many did I own in March" — §2.6)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS collection_snapshots (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    captured_on    TEXT NOT NULL UNIQUE,      -- 'YYYY-MM-DD'
+    unique_cards   INTEGER NOT NULL DEFAULT 0,
+    physical_cards INTEGER NOT NULL DEFAULT 0,
+    sets_total     INTEGER NOT NULL DEFAULT 0,
+    sets_complete  INTEGER NOT NULL DEFAULT 0,
+    completion_pct REAL NOT NULL DEFAULT 0,
+    value_eur      REAL NOT NULL DEFAULT 0,
+    breakdown_json TEXT,                      -- per-set detail
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+=== docker-compose.yml
+# TomBot Pokémon Tracker
+#
+#   docker compose up -d
+#
+# Everything configurable lives in .env — this file should not need editing.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        APP_VERSION: "${APP_VERSION:-unknown}"
+    image: tombot-tracker:latest
+    container_name: tombot-tracker
+    restart: unless-stopped
+
+    # BIND_ADDR decides who can reach it:
+    #   127.0.0.1  only this machine (default)
+    #   0.0.0.0    anything on your LAN  <- set APP_TOKEN if you do this
+    ports:
+      - "8090:8080"
+
+    volumes:
+      - ${DATA_PATH:-./data}:/srv/data
+      - ${MEDIA_PATH:-./media}:/srv/media
+      # Read-only, and only so the app can report which commit it serves.
+      # Mounting beats baking it in: it works with a plain `docker compose build`
+      # rather than only with the make target that passes a build argument, and
+      # an image reporting "unknown" cannot be told apart from one that was never
+      # rebuilt. Harmless if the deployment is not a checkout — it reads
+      # "unknown" again, which is the honest answer.
+      - ./.git:/srv/.git:ro
+
+    environment:
+      PORT: "8080"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-Europe/Madrid}"
+
+      WEB_THREADS: "${WEB_THREADS:-4}"
+      WEB_TIMEOUT: "${WEB_TIMEOUT:-120}"
+
+      APP_TOKEN: "${APP_TOKEN:-}"
+      # Metered: billed per request past the plan's daily allowance.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-40}"
+      CARDMARKET_LOCALE: "${CARDMARKET_LOCALE:-es}"
+      PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-25}"
+
+  # Monthly price refresh + collection snapshot.
+  # Its own container on purpose: an in-process scheduler would tie the monthly
+  # run to the web server's lifetime, and a restart mid-refresh would lose it.
+  # Turn it off with:  docker compose up -d app
+  scheduler:
+    build: .
+    image: tombot-tracker:latest
+    container_name: tombot-scheduler
+    restart: unless-stopped
+    command: ["scheduler"]
+    depends_on:
+      - app
+    # Inherits the image's HEALTHCHECK, which probes the web port. This container
+    # serves nothing, so without this it reports unhealthy forever.
+    healthcheck:
+      disable: true
+    volumes:
+      - ${DATA_PATH:-./data}:/srv/data
+      - ${MEDIA_PATH:-./media}:/srv/media
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-Europe/Madrid}"
+      RUN_ON_START: "${SCHEDULER_RUN_ON_START:-0}"
+      SCHEDULER_CRON_DAY: "${SCHEDULER_CRON_DAY:-1}"
+      SCHEDULER_CRON_HOUR: "${SCHEDULER_CRON_HOUR:-4}"
+      # Shares the same daily allowance as the app container: the count lives
+      # in the database, so the two cannot each spend a full cap.
+      TCGGO_API_KEY: "${TCGGO_API_KEY:-}"
+      TCGGO_DAILY_LIMIT: "${TCGGO_DAILY_LIMIT:-40}"
+      PRICE_STALE_DAYS: "${PRICE_STALE_DAYS:-25}"
+
+=== .env.example
+# ---------------------------------------------------------------------------
+# Network — the two you are most likely to change
+# ---------------------------------------------------------------------------
+
+# Port on the host AND inside the container. Change this one value only.
+APP_PORT=8080
+
+# Who can reach it.
+#   127.0.0.1  this machine only (default, safest)
+#   0.0.0.0    anything on your LAN — set APP_TOKEN below if you do this
+BIND_ADDR=127.0.0.1
+
+# ---------------------------------------------------------------------------
+# Access control
+# ---------------------------------------------------------------------------
+
+# The app has no login (single-user by design). Empty = no auth, which
+# is fine on 127.0.0.1. If BIND_ADDR is 0.0.0.0, set this to any random string:
+#   openssl rand -hex 24
+# The browser needs it once:  localStorage.setItem('app_token', '<value>')
+APP_TOKEN=
+
+# ---------------------------------------------------------------------------
+# Storage — where the database and photos live on the host
+# ---------------------------------------------------------------------------
+
+DATA_PATH=./data
+MEDIA_PATH=./media
+
+# Host user that should own those directories. `id -u` and `id -g`.
+# Wrong values mean root-owned files on your host, or permission errors.
+PUID=1000
+PGID=1000
+
+TZ=Europe/Madrid
+
+# ---------------------------------------------------------------------------
+# First run
+# ---------------------------------------------------------------------------
+
+# There is no bootstrap. A fresh install starts with an empty schema; you add
+# sets one at a time from Mantenimiento → Sets, which imports each set's cards,
+# its Cardmarket products and prices. Importing needs TCGGO_API_KEY (below).
+
+# ---------------------------------------------------------------------------
+# Scheduled price refresh (the `scheduler` container)
+# ---------------------------------------------------------------------------
+
+SCHEDULER_CRON_DAY=1          # day of month
+SCHEDULER_CRON_HOUR=4         # hour, local TZ
+SCHEDULER_RUN_ON_START=0      # 1 = also run once at container start
+
+# ---------------------------------------------------------------------------
+# Tuning — sensible defaults, rarely need changing
+# ---------------------------------------------------------------------------
+
+HTTP_MAX_BACKOFF=30           # longest a single retry will wait, seconds
+
+WEB_CONCURRENCY=2             # gunicorn workers; 2 is plenty for one user
+WEB_THREADS=4
+WEB_TIMEOUT=120
+
+CARDMARKET_LOCALE=es          # locale used in outbound Cardmarket links
+PRICE_STALE_DAYS=25
+MAX_UPLOAD_MB=25
+
+# ---------------------------------------------------------------------------
+# tcggo — CardMarket API TCG (RapidAPI)  — the one data source
+# ---------------------------------------------------------------------------
+# Catalogue, card images, versions and prices all come from tcggo. It maps one
+# Cardmarket product per printing, which is what the collection needs (a reprint
+# and a non-holo are priced as themselves, not as the Base Set holo).
+#
+# METERED. The plan allows a fixed number of requests per day and charges for
+# every one beyond that. TCGGO_DAILY_LIMIT is a hard stop enforced in code and
+# counted in the database, so a restart does not hand back a fresh allowance.
+# Keep it BELOW the plan's real limit — the gap absorbs retries and the day
+# boundary. Raising it spends money.
+TCGGO_API_KEY=
+TCGGO_DAILY_LIMIT=40
+
+=== git ls-files
+.cache/tcggo/005697f55639abbd84ed17932cab8db4.json
+.cache/tcggo/4c8abc784856ac1280b0ad736dd253d7.json
+.cache/tcggo/5a1af86b2fcc96ae430ea9d4f1f9a194.json
+.cache/tcggo/7bbbbf0058cbf4e5e36316aa1a0d9837.json
+.cache/tcggo/d03a5d5bc43ebafd20c991b75445ab78.json
+.cache/tcggo/d9a8f943aa2817691ca5487a465867bf.json
+.cache/tcggo/f4079233da236417ff6828f7f7aacda5.json
+.coverage
+.dockerignore
+.env.example
+.github/workflows/README.md
+.github/workflows/ci.yml
+.gitignore
+CLAUDE.md
+Dockerfile
+Makefile
+app.py
+data/.gitkeep
+docker-compose.yml
+docs/README.md
+docs/TOMBOT POKEMON TRACKER.pdf
+media/catalog/.gitkeep
+media/collection/.gitkeep
+media/thumbs/.gitkeep
+media/tombot_favicon_bg.psd
+requirements.txt
+scripts/check_js.sh
+scripts/demo_seed.py
+scripts/entrypoint.sh
+scripts/gen_card_meta_csv.py
+scripts/make-bundle.sh
+scripts/tcggo_live_check.py
+static/css/style.css
+static/favicon_32.png
+static/favicon_ios.png
+static/js/api.js
+static/js/modal-core.js
+static/js/modal-desktop.js
+static/js/modal-mobile.js
+static/js/modal.js
+static/js/pokemon.js
+static/js/ui.js
+static/manifest.json
+templates/index.html
+tests/fixtures/tcggo/charizard-1st-shadowless.json
+tests/fixtures/tcggo/charizard-shadowless.json
+tests/fixtures/tcggo/flareon-ju19.json
+tests/fixtures/tcggo/flareon-ju3.json
+tests/fixtures/tcggo_southern_islands.json
+tests/test_api_behaviour.py
+tests/test_bare_number_codes.py
+tests/test_bulk_collect.py
+tests/test_bulk_targets.py
+tests/test_card_filters.py
+tests/test_card_id_collision.py
+tests/test_card_meta.py
+tests/test_cardmarket_link_per_printing.py
+tests/test_cartas_view.py
+tests/test_collection_mode.py
+tests/test_completion.py
+tests/test_condition_rename.py
+tests/test_cover_photo.py
+tests/test_empty_episodes_and_rarity.py
+tests/test_episode_search.py
+tests/test_excluded_cards.py
+tests/test_grouped_cartas_view.py
+tests/test_hall_of_fame.py
+tests/test_health_checks.py
+tests/test_hide_sets.py
+tests/test_loose_completion.py
+tests/test_manual_price_per_printing.py
+tests/test_missing_view_loose.py
+tests/test_name_key_reprints.py
+tests/test_one_primary_photo.py
+tests/test_photo_display.py
+tests/test_pricing_controls.py
+tests/test_pricing_local.py
+tests/test_printing_code_tag.py
+tests/test_printings_not_products.py
+tests/test_rarity_from_print_runs.py
+tests/test_rate_limit.py
+tests/test_reprint_ratings.py
+tests/test_reprint_versions.py
+tests/test_reprints_by_artist.py
+tests/test_set_view.py
+tests/test_sets_by_series.py
+tests/test_single_version_selector.py
+tests/test_target_note.py
+tests/test_target_quantity.py
+tests/test_tcg_series.py
+tests/test_tcggo_budget.py
+tombot/__init__.py
+tombot/api/__init__.py
+tombot/api/catalog.py
+tombot/api/collection.py
+tombot/api/prices.py
+tombot/api/sets.py
+tombot/api/stats.py
+tombot/cli/__init__.py
+tombot/config.py
+tombot/data/card_meta.csv
+tombot/services/budget.py
+tombot/services/bulk.py
+tombot/services/card_meta.py
+tombot/services/catalog_backfill.py
+tombot/services/health.py
+tombot/services/httpcache.py
+tombot/services/images.py
+tombot/services/jobs.py
+tombot/services/market.py
+tombot/services/market_import.py
+tombot/services/pricing.py
+tombot/services/printing_variants.py
+tombot/services/repository.py
+tombot/services/schema.sql
+tombot/services/setbuilder.py
+tombot/services/sources/__init__.py
+tombot/services/sources/base.py
+tombot/services/sources/tcggo.py
+tombot/services/tcg_series.py
+tombot/services/tcggo_catalog.py
+tombot/version.py
+=== git log
+8136c83 2026-10-11 arreglado el bug de pisar fotos
+f5ffa68 2026-10-10 nuevo modal para cartas
+248e8e1 2026-10-09 arreglando algunas cositas de modal de UX y algunos bugs en el  handling del modal
+ed07882 2026-10-06 minor UI fixes
+b6b5e67 2026-10-06 formatos de texto arreglados en cartas de mayor valor y faltantes
+3ce004e 2026-10-06 Merge pull request #107 from Bluepulasky/fix/issue-105-secret-rare-check
+5cb020d 2026-10-06 Merge pull request #106 from Bluepulasky/fix/issue-104-search-reprints
+4757552 2026-10-05 Decide a card's rarity by its first print run, not by today's stock (#105)
+3e46edf 2026-10-05 Flag a Rare Secret numbered inside its set's printed total (#105)
+ac84be6 2026-10-05 Group global search hits by reprint and drop hidden sets (#104)
+c58d50b 2026-10-05 arreglado el tema de los pokemones unicos en el dash Y QUEDO MEJOR PUTO
+27d9e87 2026-10-05 pestaña faltantes reworked
+f323827 2026-10-04 final de arreglo de filtros en vista cartas y sort arreglao
+e21e431 2026-10-04 fixes en filtros de coleccion y handling del rendered
+31b25fe 2026-10-03 rework completo de function collection
+a9fa517 2026-10-03 Merge pull request #103 from Bluepulasky/fix/issue-102-name-key
+bada72b 2026-10-02 Match reprints on a normalised name key, not the literal spelling (#102)
+df50318 2026-10-02 arreglando mas estilos. fix pequeño en el sort
+7f536a9 2026-10-02 arreglado tema sort y estilo
+9ea50c0 2026-09-30 filters and UI / UX fixed for sets
+d86d4ca 2026-09-27 new toolbar concept
+6ffbb54 2026-09-27 Merge pull request #101 from Bluepulasky/feat/issue-99-cover-photo
+ad8888d 2026-09-27 Merge branch 'main' into feat/issue-99-cover-photo
+4ee86c7 2026-09-27 Merge pull request #100 from Bluepulasky/feat/issue-99-lightbox-delete
+a327fee 2026-09-27 Merge branch 'main' into feat/issue-99-lightbox-delete
+826f4e8 2026-09-27 A hand-picked cover photo for a card's reprint group (#99)
+897f4ec 2026-09-27 Delete a photo from the lightbox (#99)
+3092dd0 2026-09-27 fixes pequeños. y arreglo del wirelightbox
+c2daa33 2026-09-26 minor UI fixes
+9ac0e52 2026-09-26 fix test
+155c803 2026-09-26 fix test
+76c9a40 2026-09-25 fixes varios
+05f5781 2026-09-23 Merge pull request #98 from Bluepulasky/fix/issue-97-bare-number-codes
+c6a89a9 2026-09-22 Import a set whose card codes carry no prefix (#97)
+57bd643 2026-09-22 comportamiento cartas de mayor valor
+8bafda9 2026-09-22 estilos cartas faltantes. ordenar por cantidad de faltantes+
+114cc2d 2026-09-22 Merge pull request #95 from Bluepulasky/fix/issue-93-one-primary-photo
+a4f4362 2026-09-22 Merge pull request #96 from Bluepulasky/feat/issue-94-target-note
+e00dcf9 2026-09-21 A free-text note on a card's target (#94)
+173e50c 2026-09-21 One primary photo per item, even when uploads land at once (#93)
+2535f0f 2026-09-20 cambiamos el grid
+a0214b8 2026-09-20 marcar como principal en lightbox
+de8956a 2026-09-20 mas UI
+bc57dda 2026-09-19 boton cargar mas. cambios de como se identifican las cartas en vistas cartas de valor mas alto, en card grid y en los faltantas
+e474816 2026-09-19 arreglos varios en la UI del modal
+4e0d47d 2026-09-19 arreglo de dashboard y UI en general
+0baebd0 2026-09-17 mas UI
+048da2f 2026-09-15 borrando falopeadas de la UI que no sirven. y agrego stat de pokemon unicos en dashboard
+ed2bdcf 2026-09-13 retoques de front end
+b9f2159 2026-09-13 Merge pull request #89 from Bluepulasky/fix/issue-88-manual-price
+7116389 2026-09-13 A manual price belongs to the printing you are editing (#88)
+164fd5f 2026-09-13 pequeños arreglos de estilos
+c73f612 2026-09-13 Merge pull request #87 from Bluepulasky/fix/modal-edit-reads-data-not-positions
+6461877 2026-09-13 Merge pull request #86 from Bluepulasky/fix/issue-83-printing-code-tag
+fffe9ad 2026-09-13 Merge pull request #85 from Bluepulasky/fix/issue-82-loose-completion-everywhere
+1ec2614 2026-09-12 Read the edit form's starting values off the element, not the tag row
+b021e81 2026-09-12 Name the printing each copy is, in the modal tags (#83)
+f85494a 2026-09-12 One answer to "do I have this card?", on every screen (#82)
+f3e8842 2026-09-12 Merge pull request #84 from Bluepulasky/fix/ci-slashed-condition-key
+8ced0e7 2026-09-12 Test the M/NM route fix instead of the bug it removed
+19f2818 2026-09-12 fix por que el multiplicador de precio de M/NM no funcaba
+0ca572e 2026-09-12 favicon. mejora css para webapp en ios. default ingles en el modal de cartas
+7ec524d 2026-09-10 Merge pull request #81 from Bluepulasky/fix/issue-76-reprint-ratings
+e3a4778 2026-09-10 Merge pull request #79 from Bluepulasky/fix/issue-78-one-tile-per-card
+5a7f3db 2026-09-10 One card, one Hall of Fame rank, however often it was printed (#76)
+64c2835 2026-09-10 One tile per card in Cartas, worth every copy it stands for (#78)
+b547aff 2026-09-09 Merge pull request #77 from Bluepulasky/fix/issue-75-empty-sets-and-rarity
+ed4008b 2026-09-09 Refuse an empty set before asking whether tcggo is configured
+c124523 2026-09-09 Do not offer a set tcggo holds no cards for; canonicalise SECRET RARE (#75)
+d86c753 2026-09-08 UI changes modal cards
+d51108d 2026-09-08 Merge pull request #74 from Bluepulasky/fix/dedupe-must-not-merge-two-cards
+3528748 2026-09-08 Dedupe on the card, not the code: Celebrations lost 11 cards (#68)
+f4355fe 2026-09-08 Merge pull request #73 from Bluepulasky/fix/finish-the-reimport
+13bac92 2026-09-08 Finish the re-import: reattach owned rows, drop the leftovers (#68, #69)
+f05a28a 2026-09-08 Merge pull request #72 from Bluepulasky/fix/issue-68-printings-not-products
+680595b 2026-09-08 Key market_products on the printing, not the Cardmarket product (#68)
+c2a5f0c 2026-09-08 Merge pull request #71 from Bluepulasky/fix/issue-69-spelling-splits
+e7d3629 2026-09-08 Split colliding card ids on the illustrator, not the name (#69)
+4a8cb91 2026-09-08 Merge pull request #70 from Bluepulasky/fix/restore-card-meta-csv
+4bae77d 2026-09-08 Restore tombot/data/card_meta.csv, deleted by accident
+93996f9 2026-09-06 favicon y algunas porquerias de UI
+eb98d4a 2026-09-06 Merge pull request #67 from Bluepulasky/feat/energy-type-filter-and-csv
+1c8cffe 2026-09-06 Cartas: separate Supertipo and Color filters; card-meta CSV carries the energy type (#14)
+5a79a5a 2026-09-04 Merge pull request #66 from Bluepulasky/fix/reimport-rebuilds-goal-slots
+9ad8622 2026-09-03 Rebuild an existing set's goal slots on reimport (#63)
+35d8534 2026-09-03 Merge pull request #65 from Bluepulasky/feat/language-multiplier-and-live-preview
+b1050ad 2026-09-03 Language price multiplier + live preview recalc on Idioma/Cantidad (#64)
+745b0ed 2026-09-03 Merge pull request #62 from Bluepulasky/fix/first-edition-price-read-paths
+a21b1dd 2026-09-03 Fix first-edition ×2 not showing on modal and Cartas grid (#58)
+ec27bda 2026-09-01 Merge pull request #61 from Bluepulasky/feat/reimport-button
+21cca7c 2026-09-01 Add a "Reimportar" button for already-imported sets
+1bd5d06 2026-09-01 Merge pull request #60 from Bluepulasky/feat/per-minute-rate-limit
+722f268 2026-09-01 Throttle tcggo requests to stay under the per-minute cap (#50)
+2ea5e7b 2026-09-01 Merge pull request #59 from Bluepulasky/fix/card-id-collision
+94e068f 2026-09-01 Card-meta CSV: add an overwrite toggle and clearer copy
+f50b803 2026-09-01 Fix 500 on the card-meta CSV export: quote the `set` alias
+7db1985 2026-09-01 Fix card_id collisions: split different cards sharing a code+number
+1013033 2026-09-01 Merge pull request #57 from Bluepulasky/feat/card-meta-csv
+a4fd7e5 2026-09-01 fixing again dropdowns on card modal and auto calculate in real time price change while selecting variant
+b120639 2026-09-01 Add a CSV tool to fix card metadata, with a pre-baked fix file
+c5ba4cc 2026-09-01 Merge pull request #56 from Bluepulasky/restore/condition-multipliers
+42dbb64 2026-09-01 Merge pull request #55 from Bluepulasky/fix/type-filter-supertype
+a682a95 2026-09-01 Restore the condition price multipliers
+d173de6 2026-09-01 Fix the Cartas type filter: filter by supertype (#49)
+2b07875 2026-09-01 Merge pull request #54 from Bluepulasky/feat/reprints-by-artist
+c0ac4e5 2026-09-01 Merge main: drop DEFAULT_MODIFIERS from the new reprint test
+8b9dfaa 2026-09-01 Merge remote-tracking branch 'origin/main' into feat/reprints-by-artist
+a98e9cd 2026-09-01 Reflect loose reprint ownership in the modal and Cartas filter (#47.2, #47.3)
+bf1b32d 2026-09-01 Merge pull request #53 from Bluepulasky/feat/remove-price-multipliers
+a3d6d64 2026-09-01 Match reprints by name + artist, not name alone (#47)
+4f1235a 2026-09-01 saco descripcin v-name de las clases. es al pedo. nos damos cuenta por la fotito
+5a791cd 2026-09-01 Remove the price multipliers
+44ef01a 2026-09-01 Merge pull request #52 from Bluepulasky/feat/single-version-selector
+85d4f74 2026-09-01 Single version selector: drop the Edición/Variante dropdowns
+5577e08 2026-09-01 Merge pull request #51 from Bluepulasky/fix/issue-27-cardmarket-link-direct-match
+85709ef 2026-09-01 Fix #27: resolve Cardmarket links from the direct tcggo<->MKM match
+a4445fa 2026-08-31 reordenamiento UI tab mantenimiento
+e78131e 2026-08-29 mode toggles UI
+85cd089 2026-08-29 cambios menores en la UI para mejor navegación y modal más limpio
+6f8c52d 2026-08-29 Merge pull request #45 from Manwe-777/experiment/loose-completion
+dd10945 2026-08-29 Update CLAUDE.md
+1eda21a 2026-08-29 [experimental] Per-set loose completion: any owned printing counts
+1fe22e7 2026-08-29 filtro vista por default en sets. objetivos por lote, api de exportacion de csv arreglada con hidden sets
+586cfca 2026-08-29 Merge pull request #44 from Manwe-777/feat/sync-set-catalog
+f88cf41 2026-08-28 Sets: hide a set from the collection (keep the data)
+da6ea64 2026-08-28 Sets page: show each set's logo, like Mantenimiento
+3cd81bc 2026-08-28 Maintenance: sync the full set catalogue for local, complete search
+0c033fd 2026-08-28 Merge pull request #43 from Manwe-777/feat/sets-series-eras
+35d1a6e 2026-08-28 Sets view: group by TCG era derived from release date
+37240d2 2026-08-28 Merge pull request #42 from Manwe-777/feat/sets-by-series
+a5f3588 2026-08-28 Set view: quick-select bulk star + collecting filter
+ceb8b65 2026-08-28 Sets view: group by TCG series, ordered by release date
+1100a0c 2026-08-28 Merge pull request #41 from Manwe-777/refactor/tcggo-only
+beeaa9c 2026-08-28 CI/Docker: drop removed CLI commands and dead tcgdex/bootstrap refs
+da9ffb9 2026-08-28 Set view: whole-set grid, per-card toggle, cross-set reprint picker
+cdea442 2026-08-28 Editable set collection rules, CLAUDE.md, DRY cleanup (local review)
+d10773b 2026-08-28 Merge remote-tracking branch 'origin/main' into refactor/tcggo-only
+8a83d63 2026-08-28 WIP refactor: tcggo-only, no bootstrap, no migrations (local review)
+f91c85e 2026-08-28 Merge pull request #40 from Manwe-777/fix/cardmarket-link-per-printing
+a8fb88a 2026-08-28 Merge pull request #39 from Manwe-777/fix/health-messages-spanish
+ef672c9 2026-08-28 Merge pull request #38 from Manwe-777/fix/show-excluded-cards
+6841e91 2026-08-28 Link a collection row to its chosen Cardmarket product
+1e950b4 2026-08-28 Translate the data-review messages to Spanish
+d72fd67 2026-08-28 Show the cards a set's rule leaves out
+e7f7c60 2026-08-28 Merge pull request #37 from Bluepulasky/revert-36-feat/pin-card-to-set
+549d050 2026-08-28 Revert "Let a card be pinned into a set by hand"
+0d2eb77 2026-08-28 Merge pull request #36 from Manwe-777/feat/pin-card-to-set
+ad865c6 2026-08-28 Merge branch 'main' into feat/pin-card-to-set
+b618c1a 2026-08-28 Let a card be pinned into a set by hand
+adec888 2026-08-28 Merge pull request #33 from Manwe-777/feat/bulk-set-import
+57b7fe7 2026-08-28 Merge branch 'main' into feat/bulk-set-import
+3877bcc 2026-08-28 Merge pull request #32 from Manwe-777/fix/condition-rename-leftovers
+4bfc043 2026-08-27 Merge remote-tracking branch 'origin/main' into feat/bulk-set-import
+574430a 2026-08-27 wip: set picker creates a collecting goal
+f559276 2026-08-27 Merge branch 'feat/budget-counter' into feat/bulk-set-import
+383eaeb 2026-08-27 wip: health checks, bulk import, era by date
+538e68a 2026-08-27 Finish the condition rename in the places it did not reach
+3639785 2026-08-28 Merge pull request #31 from Manwe-777/feat/budget-counter
+d02136a 2026-08-27 Count requests over a rolling window, and show what is left
+674d48b 2026-08-28 Merge pull request #28 from Manwe-777/feat/tcggo-version-picker
+47f599d 2026-08-27 Use a live grade in the completion test too
+1d9de16 2026-08-27 Merge branch 'fix/tests-for-renamed-conditions' into feat/tcggo-version-picker
+acd0fe2 2026-08-28 Merge pull request #29 from Manwe-777/fix/tests-for-renamed-conditions
+0a0b5a9 2026-08-27 Take the condition-rename fixes onto this branch
+2e21930 2026-08-27 Carry the condition rename into the ordering and the tests
+7eeae86 2026-08-27 Merge remote-tracking branch 'origin/main' into feat/tcggo-version-picker
+955125b 2026-08-27 Update the tests for the renamed condition grades
+8bd2a3a 2026-08-27 Pick a Cardmarket version when registering a card
+dc14f4b 2026-08-27 cambio de condicion
+ffdd029 2026-08-27 Merge branch 'wip/uncommitted' into preview/local-test
+68389b2 2026-08-27 wip: waitress, http cache, tcggo param fix, budget race fix
+f638236 2026-08-27 Wire the tcggo key through .env, compose and the docs
+dc76ea7 2026-08-27 tcggo source, behind a hard daily request budget
+6b5208f 2026-08-27 Merge pull request #24 from Manwe-777/fix/price-collisions-and-quotes
+cd7c180 2026-08-27 Merge branch 'main' into fix/price-collisions-and-quotes
+d396eb6 2026-08-27 Merge pull request #25 from Manwe-777/feat/bulk-target-import
+a420719 2026-08-27 Bulk target quantities from a CSV
+59a361f 2026-08-27 Refuse a Cardmarket price that belongs to a different card
+d16bf34 2026-08-27 Merge pull request #22 from Manwe-777/fix/background-jobs-app-context
+37c5264 2026-08-27 Give background jobs an application context
+efdadab 2026-08-27 Merge pull request #20 from Manwe-777/fix/version-stamp-automatic
+b2269d3 2026-08-27 Merge pull request #21 from Manwe-777/feat/pricing-controls
+e68c604 2026-08-27 Pricing controls in the UI, and a maintenance tab
+cd5a4f2 2026-08-27 Stop the placeholder version shadowing the real one
+8d232b8 2026-08-27 ci: fix the diagnostic step's yaml
+66961c0 2026-08-27 ci: print what the container sees of .git while diagnosing the stamp
+0b88020 2026-08-27 Identify the build from a mounted .git rather than the image
+30ad5b0 2026-08-27 Stamp the build without needing a build argument
+94eca7a 2026-08-27 Merge pull request #19 from Manwe-777/fix/existing-cards-repricing
+db13cff 2026-08-26 Resolve the version per call rather than at import
+8260505 2026-08-26 Report which build is running
+94bb794 2026-08-26 Re-price cards entered before per-print-run pricing
+fdec790 2026-08-27 Merge pull request #18 from Manwe-777/feat/tcgdex-pricing
+8ae5ab7 2026-08-26 Price from tcgdex per print run, with manual override and 1st-edition multiplier
+f53fcef 2026-08-27 Merge pull request #17 from Manwe-777/feat/tcgdex-adapter
+834542a 2026-08-26 Add the reported Hitmonchan as a fixture
+e0e37fc 2026-08-26 tcgdex live check: install dependencies
+8fc65b6 2026-08-26 Add tcgdex adapter with per-print-run pricing
+a1d8000 2026-08-26 Merge pull request #16 from Manwe-777/feat/target-states-and-filters
+ac3c2be 2026-08-26 Target states, inverted quantity filter, dual completion
+cf4b6ef 2026-08-26 Merge pull request #15 from Manwe-777/feat/filters-and-target-quantity
+8d419b3 2026-08-26 Stop the modal header art stretching
+4bb3962 2026-08-26 Cartas filters and a per-card target quantity
+d52373f 2026-08-26 se borran docs originales -  completamente obsoletos ya. y se borran las preguntas colgadas en el plan.md
+9502c8c 2026-08-26 modificado de sin restriccion a todas en el boton filtro de hall of fame
+5e0ea12 2026-08-26 arregle el error del dropdown mostrando doble rating
+6a994e7 2026-08-26 Merge pull request #12 from Manwe-777/fix/hall-of-fame-cleanup
+f18a0ad 2026-08-26 Hall of Fame cleanup: fix the filter, drop the labels and the summary
+5ff0015 2026-08-26 Merge pull request #9 from Manwe-777/ci/github-actions
+87ca158 2026-08-26 Merge pull request #8 from Manwe-777/feat/printing-identity
+fdc3077 2026-08-26 Merge pull request #7 from Manwe-777/feat/photo-ux
+fda9771 2026-08-25 Replace API smoke tests with behavioural ones
+005f756 2026-08-25 Add GitHub Actions CI
+2a6e4e8 2026-08-25 Fix merge indentation; add app smoke tests
+cb5cab5 2026-08-25 Merge main: keep both the printing tree and the card-level rating
+2b9d595 2026-08-26 Merge pull request #6 from Manwe-777/fix/rating-per-card
+dd02aba 2026-08-25 Printing identity: per-edition variants and honest pricing
+8c865b1 2026-08-25 Photo UX: gallery-first upload, best-condition grid art, roomier modal
+31c809c 2026-08-25 Fix: Hall of Fame rank belongs to the card, not to a variant
+81672a3 2026-08-25 Merge pull request #5 from Manwe-777/feat/card-printings
+3208ada 2026-08-25 Merge branch 'main' into feat/card-printings
+fffd6b9 2026-08-25 Merge pull request #4 from Manwe-777/feat/cartas-view
+504057a 2026-08-25 Multi-edition mapping: record which printing of a card you own
+b36dcc4 2026-08-25 Cartas view: toggle between owned inventory and every card in the sets
+0e87978 2026-08-25 Merge pull request #3 from Manwe-777/feat/hall-of-fame
+3b74d3e 2026-08-25 Add Hall of Fame ranking (0-8) to collection items
+0db51f4 2026-08-25 Merge branch 'main' of github.com:Bluepulasky/pokemon-tracker
+9cb1fcc 2026-08-25 cambios en yml
+602bd94 2026-08-25 Merge pull request #1 from Manwe-777/fix/partial-catalog-bootstrap
+467683f 2026-08-25 Merge pull request #2 from Manwe-777/fix/api-rate-limits
+5dbb282 2026-08-25 Survive upstream API rate limits instead of half-importing
+3cd11f1 2026-08-25 Add make targets for running setup commands in the container
+b83c50b 2026-08-25 Add regression tests for partial-catalog detection
+f3a9591 2026-08-25 Fix bootstrap treating a partial catalog as complete
+0098d90 2026-08-25 Verify container; missing cards show faded art; owned/all toggle
+329e902 2026-08-25 Dockerize for home-server use; port and paths configurable via .env
+ead98dc 2026-08-25 Add Cardmarket product links; fix connection-per-query stall
+821a978 2026-08-25 Initial project: schema, catalog import, personal sets, API, SPA
+=== rutas
+tombot/api/collection.py:129:@bp.get("")
+tombot/api/collection.py:193:@bp.get("/<int:item_id>")
+tombot/api/collection.py:201:@bp.get("/by-card/<card_id>")
+tombot/api/collection.py:214:@bp.post("")
+tombot/api/collection.py:235:@bp.put("/<int:item_id>")
+tombot/api/collection.py:247:@bp.delete("/<int:item_id>")
+tombot/api/collection.py:257:@bp.post("/<int:item_id>/photos")
+tombot/api/collection.py:290:@bp.put("/photos/<int:photo_id>")
+tombot/api/collection.py:304:@bp.delete("/photos/<int:photo_id>")
+tombot/api/prices.py:10:@bp.get("/<card_id>")
+tombot/api/prices.py:19:@bp.get("/<card_id>/quotes")
+tombot/api/prices.py:34:@bp.post("/refresh")
+tombot/api/prices.py:45:@bp.post("/refresh-async")
+tombot/api/prices.py:57:@bp.get("/history")
+tombot/api/prices.py:65:@bp.put("/manual/<card_id>/<variant>")
+tombot/api/prices.py:93:@bp.get("/modifiers")
+tombot/api/prices.py:99:@bp.put("/modifiers/<kind>/<path:key>")
+tombot/api/prices.py:123:@bp.get("/versions")
+tombot/api/stats.py:8:@bp.get("/dashboard")
+tombot/api/stats.py:77:@bp.get("/stats/history")
+tombot/api/sets.py:18:@bp.get("")
+tombot/api/sets.py:32:@bp.get("/<set_id>")
+tombot/api/sets.py:47:@bp.get("/<set_id>/missing")
+tombot/api/sets.py:54:@bp.post("")
+tombot/api/sets.py:63:@bp.put("/<set_id>/loose")
+tombot/api/sets.py:74:@bp.put("/<set_id>/hidden")
+tombot/api/sets.py:90:@bp.put("/<set_id>")
+tombot/api/sets.py:112:@bp.delete("/<set_id>")
+tombot/api/sets.py:118:@bp.post("/<set_id>/rebuild")
+tombot/api/sets.py:136:@bp.put("/<set_id>/card/<card_id>")
+tombot/api/sets.py:188:@bp.put("/<set_id>/collect")
+tombot/api/sets.py:241:@bp.get("/<set_id>/mode")
+tombot/api/sets.py:265:@bp.put("/<set_id>/mode")
+tombot/api/catalog.py:13:@bp.get("/healthz")
+tombot/api/catalog.py:22:@bp.get("/meta")
+tombot/api/catalog.py:46:@bp.get("/cards")
+tombot/api/catalog.py:59:@bp.get("/cards/<card_id>")
+tombot/api/catalog.py:98:@bp.put("/cards/<card_id>/target")
+tombot/api/catalog.py:135:@bp.put("/cards/<card_id>/rating")
+tombot/api/catalog.py:157:@bp.get("/search")
+tombot/api/catalog.py:188:@bp.post("/maintenance/sync-catalog")
+tombot/api/catalog.py:213:@bp.get("/maintenance/targets/export")
+tombot/api/catalog.py:256:@bp.post("/maintenance/targets/import")
+tombot/api/catalog.py:305:@bp.post("/maintenance/card-meta/apply")
+tombot/api/catalog.py:320:@bp.post("/maintenance/card-meta/import")
+tombot/api/catalog.py:335:@bp.get("/maintenance/card-meta/export")
+tombot/api/catalog.py:354:@bp.get("/maintenance/episodes")
+tombot/api/catalog.py:390:@bp.post("/maintenance/episodes/<int:episode_id>/import")
+tombot/api/catalog.py:479:@bp.get("/maintenance/hidden-sets")
+tombot/api/catalog.py:489:@bp.get("/maintenance/health")
+tombot/api/catalog.py:504:@bp.get("/maintenance/status")
