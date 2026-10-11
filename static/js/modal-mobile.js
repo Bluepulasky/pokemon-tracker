@@ -26,6 +26,8 @@ export async function openCardMobile(cardId, openOpts = {}) {
   let card = null, items = [];
   let seq = 0, busy = false;
   let scan = null, flipped = false, flipBusy = false;   // reverso: foto escaneada
+  let mode = 'add', dirty = false, versionsStale = false;
+  const queues = new Map();   // guardados en curso por copia, para que no se pisen
   let picked = null, pendingPhoto = null;
   let condition = META.conditions[0].key;
 
@@ -40,8 +42,8 @@ export async function openCardMobile(cardId, openOpts = {}) {
       <button type="button" class="mm-pill mm-copies" aria-expanded="false">
         <b>–</b> copias <span class="mm-caret">▾</span>
       </button>
-      <span class="mm-pill mm-goal" title="Objetivo de copias">Obj <b>–</b></span>
-      <span class="mm-pill mm-hof" title="Hall of Fame">★ <b>–</b></span>
+      <span class="mm-pill mm-goal" title="Objetivo de copias">Target <b>–</b></span>
+      <span class="mm-pill mm-hof" title="Hall of Fame"><b>–</b>★</span>
       <div class="mm-popover" hidden></div>
     </header>
 
@@ -54,12 +56,13 @@ export async function openCardMobile(cardId, openOpts = {}) {
       <span class="mm-face-tag" hidden></span>
     </main>
 
-    <section class="mm-sheet" data-state="peek">
+    <section class="mm-sheet" data-state="peek" data-mode="add">
       <div class="mm-handle" role="button" aria-label="Añadir copia">
         <span class="mm-grip"></span>
         <span class="mm-handle-label">Añadir copia</span>
       </div>
       <div class="mm-sheet-body">
+        <div class="mm-add">
         <div class="mm-versions"><div class="mm-note">Buscando versiones…</div></div>
 
         <div class="mm-field">
@@ -86,6 +89,8 @@ export async function openCardMobile(cardId, openOpts = {}) {
           <button type="button" class="mm-btn mm-photo">Foto</button>
           <button type="button" class="mm-btn mm-cancel">Cancelar</button>
         </div>
+        </div>
+        <div class="mm-edit"></div>
       </div>
     </section>
 
@@ -122,16 +127,24 @@ export async function openCardMobile(cardId, openOpts = {}) {
           `<div class="mm-pop-row"><span>${esc(k)}</span><b>${q}</b></div>`).join('')
       : '<div class="mm-pop-row mm-dim">Sin copias</div>';
     setPop(false);
-    $('.mm-goal b').textContent = Number(card.target) || 1;
+    const target = Number(card.target) || 1;
+    $('.mm-goal b').textContent = target;
+    $('.mm-goal').classList.toggle('met', total >= target);    // objetivo cumplido o superado
     $('.mm-hof b').textContent = card.rating ? card.rating : '—';
+    $('.mm-hof').classList.toggle('hot', (Number(card.rating) || 0) > 1);
 
     // Reverso: la portada del grupo, si no hay la foto principal, si no la primera.
     const photos = items.flatMap((i) => i.photos || []);
     const p = photos.find((x) => x.is_cover) || photos.find((x) => x.is_primary) || photos[0];
     scan = p ? photoUrl(p, false) : null;
     if (scan) { const pre = new Image(); pre.src = scan; }   // precarga para que el giro no muestre un hueco
-    if (flipped && !scan) restoreFace();
-    else if (flipped) $('.mm-slide.cur').src = scan;
+    if (flipped && !items.length) restoreFace();
+    else if (flipped) {
+      const cur = $('.mm-slide.cur');
+      const want = scan || cardArt(list[idx]);
+      cur.classList.toggle('no-scan', !scan);
+      if (cur.getAttribute('src') !== want) cur.src = want;
+    }
     paintTag();
   }
 
@@ -161,6 +174,7 @@ export async function openCardMobile(cardId, openOpts = {}) {
 
   async function loadVersions(my) {
     const box = $('.mm-versions');
+    picked = null;
     box.innerHTML = '<div class="mm-note">Buscando versiones…</div>';
     let versions;
     try {
@@ -215,8 +229,9 @@ export async function openCardMobile(cardId, openOpts = {}) {
   /* ------------------------------------------------- swipe de la carta */
   function paintTag() {
     const tag = $('.mm-face-tag');
-    tag.hidden = !scan;
-    tag.textContent = flipped ? '⟲ Ver catálogo' : '⟲ Ver escaneo';
+    tag.hidden = !items.length;
+    tag.textContent = flipped ? '⟲ Ver catálogo' : (scan ? '⟲ Escaneo y copias' : '⟲ Copias');
+    setMode(flipped ? 'edit' : 'add');
   }
 
   // Vuelve la carta del centro a su arte de catálogo, sin animar.
@@ -224,6 +239,7 @@ export async function openCardMobile(cardId, openOpts = {}) {
     const cur = $('.mm-slide.cur');
     flipped = false; flipBusy = false;
     cur.style.transition = ''; cur.style.transform = '';
+    cur.classList.remove('no-scan');
     const art = list[idx] ? cardArt(list[idx]) : '';
     if (art) cur.src = art;
     paintTag();
@@ -231,8 +247,9 @@ export async function openCardMobile(cardId, openOpts = {}) {
 
   // Giro en dos tiempos: la carta se gira hasta quedar de canto, se cambia la
   // imagen y termina de girar. Con una sola <img> no hace falta un reverso aparte.
+  // Sin escaneo el reverso es el arte apagado: igual se puede entrar a editar copias.
   async function toggleFlip() {
-    if (flipBusy || busy || !scan) return;
+    if (flipBusy || busy || !items.length) return;
     flipBusy = true;
     const cur = $('.mm-slide.cur');
     const toScan = !flipped;
@@ -242,7 +259,8 @@ export async function openCardMobile(cardId, openOpts = {}) {
     if (isStale(token)) return;
     await new Promise((r) => {
       cur.onload = cur.onerror = () => r();
-      cur.src = toScan ? scan : cardArt(list[idx]);
+      cur.classList.toggle('no-scan', toScan && !scan);
+      cur.src = toScan ? (scan || cardArt(list[idx])) : cardArt(list[idx]);
       if (cur.complete) r();
     });
     flipped = toScan;
@@ -253,6 +271,208 @@ export async function openCardMobile(cardId, openOpts = {}) {
     cur.style.transition = ''; cur.style.transform = '';
     flipBusy = false;
   }
+
+  /* --------------------------- panel en modo "editar copias" (guardado en vivo) */
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m;
+    sheet.dataset.mode = m;
+    const label = m === 'edit' ? 'Editar copias' : 'Añadir copia';
+    $('.mm-handle-label').textContent = label;
+    $('.mm-handle').setAttribute('aria-label', label);
+    if (m === 'edit') renderEdit();
+    else if (versionsStale) { versionsStale = false; loadVersions(seq); }   // los ×N cambiaron
+  }
+
+  async function refetch() {
+    const my = seq;
+    try {
+      const it = await api.byCard(list[idx].id, openOpts);
+      if (isStale(token) || my !== seq) return false;
+      items = it.data;
+      return true;
+    } catch { return false; }
+  }
+
+  const lbl = (kind, key) => ((META[kind] || []).find((x) => x.key === key) || {}).label || key;
+
+  const thumbHtml = (it) => {
+    const ph = it.photos || [];
+    const p = ph.find((x) => x.is_primary) || ph[0];
+    return p ? `<img class="mm-ethumb" src="${esc(photoUrl(p, false))}" alt="" draggable="false">`
+             : '<span class="mm-ethumb mm-noimg"></span>';
+  };
+
+  function editRow(it) {
+    const v = it.value || {};
+    const code = it.set_code && it.number ? `${it.set_code}-${it.number}` : '';
+    return `<div class="mm-erow" data-item="${it.id}">
+      <div class="mm-erow-head">
+        ${thumbHtml(it)}
+        <div class="mm-erow-title">
+          <b>${esc(code || '—')}</b> <span>${esc(lbl('variants', it.variant))}</span>
+          <small class="mm-status"></small>
+        </div>
+        <span class="mm-eprice">${esc(eur(v.total))}</span>
+      </div>
+      <div class="mm-field">
+        <label>Idioma</label>
+        <select name="language">${opts(META.languages, it.language)}</select>
+      </div>
+      <div class="mm-field">
+        <label>Cantidad</label>
+        <div class="mm-qty">
+          <button type="button" data-d="-1" aria-label="Menos">−</button>
+          <input name="quantity" type="number" min="1" value="${it.quantity}" inputmode="numeric">
+          <button type="button" data-d="1" aria-label="Más">+</button>
+        </div>
+      </div>
+      <div class="mm-field">
+        <label>Condición</label>
+        <div class="mm-chips">${META.conditions.map((c) =>
+          `<button type="button" class="mm-chip${c.key === it.condition ? ' on' : ''}"
+             data-cond="${esc(c.key)}" title="${esc(c.label)}">${esc(c.key)}</button>`).join('')}</div>
+      </div>
+      <div class="mm-erow-actions">
+        <input type="file" accept="image/*" class="mm-ephoto-input" hidden>
+        <button type="button" class="mm-btn mm-ephoto">Foto</button>
+        <button type="button" class="mm-btn danger mm-edel">Borrar variante</button>
+      </div>
+    </div>`;
+  }
+
+  function renderEdit() {
+    const box = $('.mm-edit');
+    if (!items.length) { box.innerHTML = '<div class="mm-note">Sin copias registradas.</div>'; return; }
+    box.innerHTML = items.map(editRow).join('');
+    box.querySelectorAll('.mm-erow').forEach((row) =>
+      wireRow(row, items.find((i) => String(i.id) === row.dataset.item)));
+  }
+
+  // Precio y miniatura de cada fila tras un guardado, sin reconstruirla (perdería el foco).
+  function refreshRows() {
+    items.forEach((it) => {
+      const row = root.querySelector(`.mm-erow[data-item="${it.id}"]`);
+      if (!row) return;
+      row.querySelector('.mm-eprice').textContent = eur((it.value || {}).total);
+      const th = row.querySelector('.mm-ethumb');
+      const want = thumbHtml(it);
+      const m = want.match(/src="([^"]*)"/);
+      if ((th.getAttribute('src') || '') !== (m ? m[1] : '')) th.outerHTML = want;
+    });
+  }
+
+  const collect = (row, it) => ({
+    first_edition: !!it.first_edition,
+    condition: row.querySelector('.mm-chip.on')?.dataset.cond || it.condition,
+    language: row.querySelector('[name=language]').value,
+    quantity: Math.max(1, Number(row.querySelector('[name=quantity]').value) || 1),
+  });
+
+  function setStatus(row, text) {
+    const el = row.querySelector('.mm-status');
+    if (!el) return;
+    el.textContent = text;
+    if (text.startsWith('✓')) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 1800);
+  }
+
+  function queueSave(row) {
+    clearTimeout(row._t); row._t = 0;
+    const it = row._it;
+    const body = collect(row, it);   // se toma ahora: un guardado en cola lleva lo que había al tocar
+    setStatus(row, 'Guardando…');
+    const run = (queues.get(it.id) || Promise.resolve()).then(async () => {
+      try {
+        await api.updateItem(it.id, body);
+        dirty = true; versionsStale = true;
+        if (await refetch()) { paintInfo(); refreshRows(); }
+        setStatus(row, '✓ Guardado');
+      } catch (e) {
+        toast(e.message, true);
+        setStatus(row, '');
+        if (await refetch()) { paintInfo(); renderEdit(); }   // reponer lo que quedó guardado de verdad
+      }
+    });
+    queues.set(it.id, run);
+  }
+
+  function wireRow(row, it) {
+    row._it = it;
+    const qtyIn = row.querySelector('[name=quantity]');
+    const schedule = () => {
+      clearTimeout(row._t);
+      row._t = setTimeout(() => { row._t = 0; queueSave(row); }, 600);
+      setStatus(row, '…');
+    };
+    row.querySelector('[name=language]').onchange = () => queueSave(row);
+    row.querySelectorAll('.mm-chip').forEach((chip) => {
+      chip.onclick = () => {
+        row.querySelectorAll('.mm-chip').forEach((c) => c.classList.remove('on'));
+        chip.classList.add('on');
+        queueSave(row);
+      };
+    });
+    row.querySelectorAll('.mm-qty button').forEach((b) => {
+      b.onclick = () => {
+        qtyIn.value = Math.max(1, (Number(qtyIn.value) || 1) + Number(b.dataset.d));
+        schedule();
+      };
+    });
+    qtyIn.oninput = schedule;
+    qtyIn.onchange = () => queueSave(row);
+
+    const fi = row.querySelector('.mm-ephoto-input');
+    row.querySelector('.mm-ephoto').onclick = () => fi.click();
+    fi.onchange = async () => {
+      const f = fi.files[0];
+      if (!f) return;
+      setStatus(row, 'Subiendo foto…');
+      try {
+        await api.uploadPhoto(it.id, f);
+        dirty = true;
+        if (await refetch()) { paintInfo(); refreshRows(); }
+        setStatus(row, '✓ Foto subida');
+      } catch (e) { toast(e.message, true); setStatus(row, ''); }
+      fi.value = '';
+    };
+
+    // Borrar pide confirmar con un segundo toque: acá no hay Guardar/Cancelar que lo ataje.
+    const del = row.querySelector('.mm-edel');
+    del.onclick = async () => {
+      if (!del.classList.contains('armed')) {
+        del.classList.add('armed');
+        del.textContent = '¿Borrar? Confirmar';
+        clearTimeout(del._t);
+        del._t = setTimeout(() => {
+          del.classList.remove('armed');
+          del.textContent = 'Borrar variante';
+        }, 3000);
+        return;
+      }
+      clearTimeout(del._t); clearTimeout(row._t); row._t = 0;
+      del.disabled = true;
+      try {
+        await api.deleteItem(it.id);
+        dirty = true; versionsStale = true;
+        toast('Variante eliminada');
+        if (await refetch()) { paintInfo(); renderEdit(); }   // sin copias, paintInfo devuelve la carta al frente
+      } catch (e) { toast(e.message, true); del.disabled = false; }
+    };
+  }
+
+  // Al cerrar: lo que quedó esperando el debounce se manda, y la vista de fondo se refresca una vez.
+  onClose(() => {
+    const flush = [];
+    root.querySelectorAll('.mm-erow').forEach((row) => {
+      if (row._t) {
+        clearTimeout(row._t); row._t = 0;
+        flush.push(api.updateItem(row._it.id, collect(row, row._it)).then(() => { dirty = true; }).catch(() => {}));
+      }
+    });
+    if (flush.length || dirty || queues.size) {
+      Promise.all([...flush, ...queues.values()]).then(() => ctx.onChange());
+    }
+  });
 
   let snapTimer = 0;
   function snapBack() {
@@ -373,13 +593,13 @@ export async function openCardMobile(cardId, openOpts = {}) {
   })();
 
   /* ----------------------------------------------------- formulario */
-  const qty = $('[name=quantity]');
-  $$('.mm-qty button').forEach((b) => {
+  const qty = $('.mm-add [name=quantity]');
+  $$('.mm-add .mm-qty button').forEach((b) => {
     b.onclick = () => { qty.value = Math.max(1, (Number(qty.value) || 1) + Number(b.dataset.d)); };
   });
-  $$('.mm-chip').forEach((chip) => {
+  $$('.mm-add .mm-chip').forEach((chip) => {
     chip.onclick = () => {
-      $$('.mm-chip').forEach((c) => c.classList.remove('on'));
+      $$('.mm-add .mm-chip').forEach((c) => c.classList.remove('on'));
       chip.classList.add('on');
       condition = chip.dataset.cond;
     };
@@ -399,7 +619,7 @@ export async function openCardMobile(cardId, openOpts = {}) {
     photoInput.value = '';
     photoBtn.textContent = 'Foto';
     photoBtn.classList.remove('on');
-    $$('.mm-chip').forEach((c, i) => c.classList.toggle('on', i === 0));
+    $$('.mm-add .mm-chip').forEach((c, i) => c.classList.toggle('on', i === 0));
     $$('.mm-ver').forEach((b) => b.classList.remove('picked'));
   }
 
@@ -413,7 +633,7 @@ export async function openCardMobile(cardId, openOpts = {}) {
     try {
       const newItem = await api.addItem({
         card_id: picked.card_id || card.id,
-        language: $('[name=language]').value,
+        language: $('.mm-add [name=language]').value,
         condition,
         quantity: Math.max(1, Number(qty.value) || 1),
         market_product_id: Number(picked.market_product_id),

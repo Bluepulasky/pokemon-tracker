@@ -256,7 +256,8 @@ def delete_item(item_id):
 # ------------------------------------------------------------------- photos
 @bp.post("/<int:item_id>/photos")
 def upload_photo(item_id):
-    if not repo().get_collection_item(item_id):
+    item = repo().get_collection_item(item_id)
+    if not item:
         raise ApiError("registro no encontrado", "not_found", 404)
     f = request.files.get("photo") or request.files.get("file")
     if not f or not f.filename:
@@ -265,7 +266,25 @@ def upload_photo(item_id):
         processed = process_upload(f, cfg())
     except ImageError as e:
         raise ApiError(str(e), "invalid_image", 415) from e
-    return jsonify(repo().add_photo(item_id, processed)), 201
+
+    old = item.get("photos")
+    if old is None:
+        raise ApiError("get_collection_item no incluye las fotos", "server_error", 500)
+
+    # Se inserta la nueva primero: si algo falla acá, las viejas siguen intactas.
+    photo = repo().add_photo(item_id, processed)
+
+    # La nueva hereda las marcas de las que reemplaza.
+    if any(p.get("is_cover") for p in old):
+        repo().set_cover_photo(photo["id"], True)
+    if any(p.get("is_primary") for p in old):
+        repo().set_primary_photo(photo["id"])
+
+    # Recién ahora se borran las viejas, fila y archivo.
+    for p in old:
+        delete_files(repo().delete_photo(p["id"]), cfg())
+
+    return jsonify(repo().get_photo(photo["id"])), 201
 
 
 @bp.put("/photos/<int:photo_id>")

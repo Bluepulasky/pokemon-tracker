@@ -1561,3 +1561,34 @@ html { scrollbar-gutter: stable; }
   pointer-events: none;
 }
 .mm-face-tag[hidden] { display: none; }
+
+/* ---- panel en modo edición ---- */
+.mm-sheet[data-mode="edit"] .mm-add { display: none; }
+.mm-sheet:not([data-mode="edit"]) .mm-edit { display: none; }
+.mm-slide.no-scan { filter: grayscale(1) brightness(.5); }
+
+.mm-erow {
+  margin-bottom: 14px; padding: 12px; border-radius: 16px;
+  background: var(--surface-2, #2c303c);
+}
+.mm-erow-head {
+  display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.mm-ethumb { width: 48px; height: 64px; object-fit: cover; border-radius: 8px; }
+.mm-noimg.mm-ethumb { height: 64px; }
+.mm-erow-title { min-width: 0; }
+.mm-erow-title span { color: var(--muted, #8b90a0); font-size: 14px; }
+.mm-status { display: block; min-height: 15px; font-size: 12px; color: var(--accent, #6ea8ff); }
+.mm-eprice { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* los controles quedan sobre fondo más claro que la fila */
+.mm-erow select, .mm-erow .mm-qty input, .mm-erow .mm-qty button, .mm-erow .mm-chip,
+.mm-erow .mm-btn { background: var(--surface, #22252f); }
+.mm-erow .mm-chip.on { background: var(--accent, #6ea8ff); color: #0d1017; }
+.mm-erow-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.mm-btn.danger { color: #ffb4b4; }
+.mm-erow .mm-btn.danger.armed { background: #c0392b; color: #fff; font-weight: 700; }
+
+/* ---- colores de las pills ---- */
+.mm-goal.met { color: var(--good, #4ade80); }   /* copias >= objetivo */
+.mm-hof.hot { color: #60a5fa; }                 /* Hall of Fame > 1 */
