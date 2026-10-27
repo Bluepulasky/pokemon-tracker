@@ -118,15 +118,15 @@ async function dashboard() {
     ${d.completed.length ? `
     <h2 style="margin-top: 16px;">Sets completos</h2>
     <div class="set-grid">${d.completed.map((s) => setCardHtml(s,
-      `${s.owned} / ${s.target} cartas`)).join('')}</div>` : ''}
+      `${s.owned} / ${s.target}`)).join('')}</div>` : ''}
 
     <h2 style="margin-top: 16px;">Sets más completos</h2>
     <div class="set-grid">${d.most_complete.map((s) => setCardHtml(s,
-      `${s.owned} / ${s.target} cartas`)).join('')}</div>
+      `${s.owned} / ${s.target}`)).join('')}</div>
 
     <h2 style="margin-top: 16px;">Sets con más cartas faltantes</h2>
     <div class="set-grid">${d.most_missing.map((s) => setCardHtml(s,
-      `faltan ${s.missing} ${s.missing === 1 ? 'carta' : 'cartas'}`)).join('')}</div>
+          `faltan ${s.missing}`)).join('')}</div>
 
     <h2 style="margin-top: 16px;">Cartas de mayor valor</h2>
     <div class="missing-list aligned">${

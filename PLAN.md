@@ -1,154 +1,161 @@
-# TomBot — Pokémon card collection tracker
+# TomBot — Plan
 
-Self-hosted, single-user web app to track a Pokémon card collection: which cards
-you own, which you still need to complete a set, and what the collection is worth.
+Qué se decidió y por qué, en qué se desvió el proyecto de la especificación original
+y qué queda por hacer. Cómo funciona hoy está en [`README.md`](README.md).
 
-## Architecture
+_Última revisión: 2026-10-11. Fuentes: `schema.sql`, `docker-compose.yml`,
+`.env.example`, la lista de archivos versionados, el historial de git hasta
+`8136c83` y la especificación original (PDF, borrada en `d52373f` por obsoleta)._
 
-- **Flask app factory** (`tombot/__init__.py`) wiring blueprints under `tombot/api/`.
-- **`PokemonRepo`** (`tombot/services/repository.py`) is the **only** place that
-  writes SQL. Everything else goes through it.
-- **SQLite** (`tombot/services/schema.sql`). WAL, `foreign_keys=ON`, thread-local
-  connections, re-entrant `tx()`.
-- **Frontend** is a small vanilla-JS SPA in `static/js/` (no build step). It is
-  loaded as ES modules — validate with `node --check` on a `.mjs` copy, because
-  `node --check file.js` parses as CommonJS and hides a missing brace.
+## 1. Principios que se mantienen
 
-## The one data source: tcggo
+Vienen de la especificación original y siguen valiendo:
 
-Catalogue, card images, Cardmarket versions **and** prices all come from **tcggo**
-(CardMarket API TCG on RapidAPI). There is no other source — the old pokemontcg.io
-and TCGdex adapters were removed because each mapped a card to one price for all
-its printings, mispricing every reprint.
+- Aplicación personal, de un solo usuario, sin autenticación de usuarios (hay un
+  token opcional para cuando se expone en la LAN).
+- **La colección del usuario es la fuente de verdad** de lo que se posee. El
+  catálogo externo no define la estructura de colección.
+- **Catálogo, meta de colección, colección y precio son cosas separadas.** Un
+  reimport del catálogo no puede destruir registros de colección.
+- Las variantes físicas se conservan en el inventario pero **no crean cartas
+  lógicas distintas** para la completitud.
+- Todo el acceso a SQLite pasa por `PokemonRepo`.
+- Las imágenes viven en el filesystem, no en SQLite.
+- Los precios son estimaciones, no una valoración garantizada.
+- Sin OCR ni reconocimiento automático de cartas: la identificación es manual.
+- Se usa cómodamente desde el teléfono; subir fotos desde el móvil es un caso
+  prioritario.
 
-tcggo is **metered**: the plan bills per request past a daily allowance. Every
-call goes through `RequestBudget` (`services/budget.py`), which counts requests in
-the database over a rolling 24h window and refuses to send one past the cap
-(`TCGGO_DAILY_LIMIT`, default 40). Set the key in `.env` as `TCGGO_API_KEY`.
+## 2. Desviaciones respecto de la especificación original
 
-Sets are imported **one at a time from the Mantenimiento → Sets tab**. There is no
-bootstrap: a fresh install is an empty schema, and importing a set is what fills
-it. Importing stores the set's cards and its Cardmarket products (with prices) in
-`market_products`, and creates a collecting goal for it.
+| Tema | Especificación (PDF) | Hoy | Motivo |
+| --- | --- | --- | --- |
+| Fuente de catálogo y precios | Cardmarket "u otra API compatible" | **tcggo, única** (pasó antes por pokemontcg.io y TCGdex) | Los adaptadores anteriores daban un solo precio a todas las impresiones de una carta y valuaban mal cada reprint. |
+| Importar el catálogo | `POST /api/cards/import` | Import **por set** desde Mantenimiento → Sets, sin bootstrap | tcggo cobra por request pasado un cupo; importar un set entero cuesta pocos requests y después todo es local. |
+| Sets personalizados | tabla `set_cards` (lista explícita) | **Reglas** (`rules_json`) materializadas en **slots** (`set_slots`, `set_slot_cards`) | Permite subconjuntos, exclusiones por rareza o por carta y agrupar reprints como una misma carta lógica, sin dejar de tener el catálogo completo. |
+| Fotos | una imagen por registro (`collection.image`) | tabla `collection_photos` (N por copia), y **subir reemplaza** | "Una foto por variante, con swipe" no cabía en una columna; después se decidió que subir pise lo anterior (ver 3). |
+| Condiciones | NM / LP / MP / HP / Damaged | Escala renombrada (de `M/NM` hacia abajo, ver `config.CONDITIONS`) | _Motivo sin registrar._ El cambio está en `dc14f4b` (27-ago). |
+| Variante | Holo / non-holo / reprints… | La **impresión exacta de Cardmarket** (`market_products`) elegida en un selector de versiones | Es lo que hace que el precio sea una consulta y no una adivinanza. |
+| Precio | `price_cache` por carta y variante | Lectura **local** por id de impresión, con multiplicadores de condición e idioma, ×2 por primera edición y precio manual por impresión | Una fila sin impresión elegida queda sin precio: un número equivocado es peor que ninguno. |
+| Refresco de precios | cron mensual | Igual (mensual), en un contenedor `scheduler` propio, más un botón manual en el dashboard | Un planificador dentro del proceso web se perdería con un reinicio. |
+| Estructura del proyecto | `app.py`, `api/routes.py`, `templates/`, `static/pokemon.js` | Paquete `tombot/` con blueprints por área y `static/js/` modular | Crecimiento natural. |
+| Esquema | seis tablas conceptuales | Unas 25, sin migraciones | Ver README → Convenciones. |
 
-**tcggo quirks worth knowing:**
-- Its names disagree with common ones — it calls Base Set **"Base"**. So the
-  add-set search caches the whole catalogue once (`list_all_episodes`) and then
-  matches **locally and bidirectionally** (a set matches when its name contains
-  the query *or the query contains its name*), which is how "Base Set" finds
-  "Base". `search_episodes` (its raw search) alone misses it.
-- Its `series` field is sparse/inconsistent (blank on most sets) — don't group by
-  it; use the release-date era (`tcg_series.py`).
-- It omits the set `logo` on a few sets at import; the Sets card falls back to the
-  cached episode logo (`COALESCE(NULLIF(os.logo_url,''), me.logo)`).
-- The version picker lists **reprints across all imported sets** by card name;
-  picking one records the item against that reprint's own card/set.
+**Agregado que no estaba en el PDF:** Hall of Fame (0–8) por carta; objetivo de
+copias por carta, con nota; ocultar sets; completitud laxa (experimental); vista de
+Faltantes; reimport de sets; búsqueda global agrupada por reprint; revisión de datos;
+herramientas de CSV para metadatos de carta y objetivos; presupuesto de requests con
+ventana móvil y límite por minuto; sello de versión de la compilación; CI en GitHub
+Actions; modal de carta separado para desktop y mobile.
 
-## Data model
+## 3. Decisiones tomadas
 
-- **`official_sets` + `cards`** — the catalogue, from a tcggo import. Card ids are
-  `{setcode}-{number}` (e.g. `bs-4`). Always the whole set. `supertype`
-  (Pokémon / Trainer / Energy) comes from tcggo; `types_json` (the energy type /
-  colour: Fire, Water, …) does **not** — tcggo has no such field, bulk or detail —
-  so it is filled only by the card-meta CSV (`tombot/data/card_meta.csv`, applied
-  from Mantenimiento or `flask fix-card-meta`), and a reimport must not blank it.
-  The Cartas view filters on both axes independently (`type` and `color`).
-- **`market_products`** — one row per **printing** of a card in an imported set,
-  with its price and its own Cardmarket URL. A card's versions are its printings.
-  Keyed `(episode_id, card_id, version)` on an id of our own; **Cardmarket's
-  `cardmarket_id` is an attribute, nullable and not unique**. It has to be: tcggo
-  stamps different print runs with one id (Base Set Charizard's 1st Edition
-  Shadowless and its Shadowless are both product 660224, at 50,000 and 2,000 EUR)
-  and sends no id at all on others. Keyed on that id, Base Set stored 193 of the
-  307 printings tcggo sends, and 11 Base Set 2 cards vanished from the catalogue
-  because a card with no product is not built (#68). Note the key is `card_id`,
-  not `code`: Celebrations files two different cards under "CEL 2".
-- **`collection_sets` + `set_slots` + `set_slot_cards`** — a *collecting goal*: a
-  **rule** over one or more catalogue sets. A slot is one completion target,
-  satisfied by owning any member card. Rules live in `collection_sets.rules_json`
-  and are materialised into slots by `SetBuilder`. The catalogue stays whole while
-  what you *collect* changes: rarity rules (`exclude_rarities` etc.) plus per-card
-  overrides (`include_cards` / `exclude_cards`) — the ★ toggle and the quick-select
-  bar on the set detail page both write these. A slot's `source` is `rule` or
-  `manual`; a rebuild leaves manual ones alone.
-- **`collection_items`** — what you physically own: `(card_id, variant, condition,
-  language)` unique, plus `market_product_id` — the exact **printing** chosen in
-  the add-card modal, i.e. a `market_products.id`, not a Cardmarket product id.
-- **`card_targets`** — per card: how many copies count as complete (`target`)
-  and a free-text `note` (which printing to chase, #94). The default (1, no
-  note) is stored as absence. `note` is a column added by `init_db`'s
-  `ALTER TABLE` self-heal, the same way `collection_items.first_edition` was.
-- **`price_cache`** — the resolved price per owned printing.
-- **`price_modifiers`** — condition/language/variant multipliers, editable.
-- **`market_episodes`** — the tcggo set catalogue (all ~180 sets), filled by the
-  Mantenimiento "Sincronizar lista de sets" button so the add-set search is local.
-  **`set_episodes`** maps a catalogue set → its tcggo episode (for the logo, etc.).
-- **`set_hidden`** — sets hidden from the Sets page and completion totals (kept,
-  not deleted; un-hide from Mantenimiento). **`set_loose_completion`** — the
-  experimental per-set "any owned printing counts" flag. Both are presence tables.
+1. **tcggo como única fuente** (28-ago). Se eliminaron los demás adaptadores.
+2. **`schema.sql` sin migraciones** (28-ago). Estado nuevo por set va en una tabla
+   nueva, no en una columna.
+3. **`market_products` se clavea por impresión, no por producto de Cardmarket**
+   (#68). tcggo repite el id de producto entre tiradas distintas.
+4. **El Hall of Fame y el objetivo de copias son por carta lógica, no por copia**
+   (#76), y viven en tablas propias para sobrevivir a un reimport.
+5. **El cupo de la API se cuenta en la base**, con ventana móvil de 24 h, así un
+   reinicio no devuelve el cupo y la web y el scheduler comparten uno solo.
+6. **Modal de carta separado para desktop y mobile** (10-oct). Las estructuras y la
+   navegación son tan distintas (flechas de teclado contra swipe) que no se podían
+   reaprovechar ni las clases de CSS. Se elige al abrir, por ancho de ventana.
+7. **Subir una foto pisa de verdad las anteriores de esa copia** (11-oct). Es a
+   propósito; si hace falta volver atrás, se restaura un snapshot. La foto nueva
+   hereda `is_primary` e `is_cover`.
+8. **Modal mobile: tocar la carta la da vuelta** y cambia el panel inferior de
+   "Añadir copia" a "Editar copias", con **guardado en vivo** y sin
+   Guardar/Cancelar. El giro está disponible para toda carta con copias, aunque no
+   haya escaneo (el reverso es la carta apagada). Borrar una variante pide un segundo
+   toque. Para cambiar la impresión de una variante se la borra y se carga de nuevo.
+9. **Colores del modal mobile:** el objetivo se ve en verde cuando las copias lo
+   alcanzan o superan; el Hall of Fame, en azul cuando es mayor a 1.
 
-## Sets view & completion
+## 4. Historia resumida
 
-- The set detail page shows the **whole set** (every card, via
-  `set_cards_with_state`), each tagged `collecting` (is it a slot?) and `owned`.
-  Filters (holo / owned / collecting) are client-side; the ★ per-card toggle and
-  the quick-select bar (`PUT /sets/<id>/collect`) mutate the rule.
-- **`set_progress()` is the single source of completion** — the Sets page,
-  the dashboard totals, and the monthly snapshot all sum it. So changing what
-  counts (hidden, loose) in that one query changes all three at once. Listing all
-  sets (`set_id=None`) skips hidden sets; a single-set query returns one anyway.
-- The Sets page groups by **TCG era**, derived from each set's `release_date`
-  against a small era timeline in `services/tcg_series.py` — **not** tcggo's own
-  `series` field, which is too sparse to group by (it left most sets blank).
+| Fecha | Qué pasó |
+| --- | --- |
+| 25-ago | Proyecto inicial (esquema, catálogo, sets, API, SPA), Docker, Hall of Fame, vista Cartas, impresiones múltiples. |
+| 26-ago | CI y tests de comportamiento; objetivos de copias y filtros; adaptador TCGdex y precios por tirada; se borra la documentación original. |
+| 27-ago | tcggo con presupuesto de requests; selector de versiones de Cardmarket; pestaña Mantenimiento; renombre de condiciones. |
+| 28-ago | Refactor a **tcggo único, sin bootstrap ni migraciones**; metas por reglas; sets agrupados por era; ocultar sets; sincronizar catálogo. |
+| 29-ago | Completitud laxa (experimental). |
+| 1-sep | Selector de versión único; reprints por nombre y artista; CSV de metadatos; límite por minuto; botón Reimportar. |
+| 3-sep | Multiplicador de idioma con vista previa en vivo; el reimport reconstruye las metas. |
+| 6-sep | Filtros separados de supertipo y color. |
+| 8-sep | **`market_products` por impresión (#68)**; arreglos de duplicados y colisiones (#69). |
+| 10-sep | Una ficha por carta, valorada por todas sus copias (#78); un rating por carta (#76). |
+| 12 y 13-sep | Etiqueta de impresión en el modal (#83), una sola respuesta a "¿la tengo?" (#82), precio manual por impresión (#88). |
+| 15-sep a 6-oct | Mucho trabajo de interfaz y dashboard; nota en el objetivo (#94); una foto principal por copia (#93); portada de grupo y borrar foto desde el lightbox (#99); pestaña Faltantes rehecha; búsqueda agrupada por reprint (#104); rareza por primera tirada (#105); clave de nombre normalizada (#102). |
+| 10-oct | **Modal nuevo**: desktop y mobile separados. |
+| 11-oct | Subir foto reemplaza la anterior. |
 
-## Pricing
+## 5. Pendientes
 
-Prices are read **locally** from `market_products` by the printing id on each
-owned row — no per-card network call, no guessing which printing a variant is. A row
-with no chosen product is left unpriced (a wrong number is worse than none).
-Re-importing a set is what refreshes its prices. See `services/pricing.py`.
+Lo de acá sale de lo revisado, no de la lista de issues de GitHub (que no se
+revisó): hay que cruzarlos.
 
-## Conventions
+### Modal mobile
 
-- **`schema.sql` is the single source of truth. There are no migrations.** A
-  schema change is an edit to `schema.sql`; `init_db` just runs it and is
-  idempotent. **Gotcha:** every statement is `CREATE ... IF NOT EXISTS`, so a new
-  **table** appears on an already-populated database on next `init-db`, but a new
-  **column** on an existing table does **not**. To add per-set state that must
-  survive without recreating the DB (e.g. `set_hidden`, `set_loose_completion`),
-  use a small **new table**, not a column. A column is fine only when losing the
-  old DB is acceptable (it is rebuilt from imports). A change to a table's **key**
-  is the one thing `init_db` cannot deliver at all — the old table simply
-  survives — so it needs an explicit drop, and `market_products` is the only
-  table where that is safe (it holds nothing the user typed and a re-import
-  rebuilds it in full; see `_retire_product_keyed_market_products`).
-  A column that an **index** in `schema.sql` depends on (`is_cover`) has to be
-  added by an `ALTER TABLE` that runs **before** `executescript`, or
-  `CREATE INDEX` fails with "no such column" on an existing database; the
-  other `ALTER`s run after it (see `_add_cover_column_to_photos`).
-- **After a schema.sql change, restart runs `init_db` only via the Docker
-  entrypoint.** Running `waitress`/`flask run` directly does not — run
-  `flask init-db` once yourself, or the new table is missing ("no such table").
-- **Silent fallbacks are the enemy.** Most bugs here came from a lookup that missed
-  and returned something plausible (a missing multiplier → 1.00, an unknown set id
-  → "modern set"). Prefer failing or warning over guessing. `services/health.py`
-  (Mantenimiento → Revisión de datos) actively looks for these mismatches.
-- **One local instance.** Run one server, one database; switch branches by
-  checkout + restart. The tcggo key is metered per-key, so several instances
-  against one key overspend it.
-- **CLAUDE reviewers:** the API budget is real money past the daily cap. Do not
-  make live tcggo calls casually; the version picker and pricing read from
-  already-imported local data.
+- Editar **primera edición** y **precio manual** (hoy solo en desktop).
+- El botón "atrás" de Android cambia el hash y cierra la vista entera, no el modal.
+- **Teléfono en horizontal:** pasa de 600 px de ancho y abre el modal de desktop;
+  hace falta un criterio mejor (por ejemplo, táctil con poca altura) y un diseño
+  apaisado para el modal mobile.
+- Afinar en un teléfono real: `--mm-peek`, el espacio `GAP` entre cartas y el límite
+  de `OPEN_FRAC`.
+- Revisar que el escaneo se vea en tamaño completo: se usa `photoUrl(p, false)`, y si
+  ese parámetro significa "miniatura", la foto sale pixelada.
 
-## Commands & run
+### Fotos
 
-```
-flask init-db     # create the schema (idempotent). Startup runs this; no bootstrap.
-flask prices      # re-price the collection from imported products (local, no network)
-flask snapshot    # write a collection snapshot for the history charts
-flask monthly     # prices + snapshot (what cron calls)
-flask scheduler   # run monthly on a schedule, blocking (its own container)
-```
+- Hacer **atómico** el reemplazo (un `replace_photos` en el repositorio, en una sola
+  transacción), en vez de varias operaciones sueltas en la ruta.
+- Con una sola foto por copia, `is_primary` ya no elige nada y **"Marcar como
+  principal" del lightbox de desktop queda sin función**; `is_cover` ("Usar como
+  portada") sí sigue valiendo, porque decide entre los reprints de un grupo.
+- Decidir si el esquema vuelve a **una foto por copia** (hoy sigue permitiendo N).
 
-Docker: `docker compose up -d`. Config is `.env` (see `.env.example`). Port maps
-`8090:8080`. `pytest` runs the suite.
+### Higiene del repositorio
+
+- Están versionados `.cache/tcggo/*.json` y `.coverage`. Deberían estar en
+  `.gitignore` y fuera del índice (`git rm -r --cached .cache .coverage`).
+- `media/tombot_favicon_bg.psd` está versionado: decidir si va.
+- Borrar `CLAUDE.md` y `docs/README.md` ahora que este README los reemplaza.
+- `schema.sql` arrastra comentarios huérfanos de tablas que ya no existen (bloques
+  sobre el episodio de tcggo, el presupuesto y el catálogo de episodios sin tabla
+  debajo), y restos de proveedores viejos: `price_quotes.provider` menciona
+  `tcgdex | pokemontcgio` y `cards.external_ids_json` guarda un id de pokemontcg.io.
+  `api_budget` parece haber sido reemplazada por `api_requests`: **verificar que no
+  se use antes de borrarla**.
+
+### Configuración
+
+- `.env.example` documenta `APP_PORT`, `BIND_ADDR`, `WEB_CONCURRENCY` y
+  `HTTP_MAX_BACKOFF`, pero el `docker-compose.yml` publica `8090:8080` fijo y no pasa
+  esas cuatro variables al contenedor. O se conectan, o se sacan del ejemplo.
+- Confirmar el scheduler real: el compose y el ejemplo lo dejan **mensual** (día 1,
+  04:00, hora de Madrid). Si el `.env` verdadero lo cambia, el README debe decirlo.
+
+### Frontend (a verificar en el `pokemon.js` actual)
+
+- `sorter()` no tenía una clave para "Por pendientes" (`still_needed`), que el menú
+  ofrece, y caía al orden por número.
+- `stampVersion()` crea el elemento con el sello de la compilación, pero no lo inserta
+  en la página.
+- Había manejadores de `#q-collect .qs-btn` (selección por lote) sin HTML que los
+  use en la plantilla.
+
+### Operación
+
+- Documentar el **procedimiento de snapshot y rollback** con el comando y el dataset
+  exactos.
+- Cruzar este plan con los issues abiertos de GitHub.
+
+## 6. Fuera de alcance
+
+- OCR o reconocimiento de cartas por visión.
+- Autenticación de usuarios y multiusuario.
+- Otras fuentes de precios mientras tcggo cubra lo que hace falta.
