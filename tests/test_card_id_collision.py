@@ -10,7 +10,7 @@ import pytest
 
 from tombot.config import Config
 from tombot.services.repository import PokemonRepo
-from tombot.services.tcggo_catalog import (TcggoCatalog, normalized_name,
+from tombot.services.tcggo_catalog import (TcggoCatalog, artist_key, normalized_name,
                                            resolve_collisions)
 
 
@@ -193,3 +193,113 @@ def test_reimport_rebuilds_an_existing_goals_slots(repo, monkeypatch):
         assert again["created"] is False
         assert len(repo.get_set_slots("cel-completo")) == 2, \
             "reimport must rebuild the goal so the de-collided card gets a slot"
+
+
+# Issue #108: Dark Crobat (NDE 2) and 24 other Neo cards came out twice, one
+# card per print run. tcggo credits the CGI studio on the 1st Edition product
+# and not on the Unlimited one, so the whole credit strings differed. The
+# credits below are the ones stored on the live instance.
+NEO_CO_CREDIT_PAIRS = [
+    ("nde-2", "Dark Crobat", "Shin-ichi Yoshikawa, CR CG gangs", "Shin-ichi Yoshikawa"),
+    ("nde-41", "Heracross", "K. Hoshiba, CR CG gangs", "K. Hoshiba"),
+    ("ng-93", "Gold Berry", "Ryuta Kusumi, CR CG gangs", "Ryuta Kusumi"),
+    # The nickname arrives with a different number of quote marks each time.
+    ("nr-10", "Magneton", '"Big Mama"""" Tagawa"', '"Big Mama"""""""" Tagawa""""'),
+]
+
+
+@pytest.mark.parametrize("card_id,name,first,unlimited", NEO_CO_CREDIT_PAIRS)
+def test_a_studio_co_credit_does_not_make_a_second_card(card_id, name, first, unlimited):
+    rows = [_p(1, card_id, name, first), _p(2, card_id, name, unlimited)]
+    resolve_collisions(rows)
+    assert {r["card_id"] for r in rows} == {card_id}
+
+
+def test_artist_key_is_the_lead_illustrator():
+    assert artist_key("Shin-ichi Yoshikawa, CR CG gangs") == "shin-ichi yoshikawa"
+    assert artist_key('"Big Mama" Tagawa & Benimaru Itoh') == "big mama tagawa"
+    assert artist_key("  Ken   Sugimori ") == "ken sugimori"
+    assert artist_key(None) == ""
+
+
+def test_dedupe_keeps_both_print_runs_of_a_co_credited_card():
+    """The dedupe key must agree with the splitter: two print runs are two
+    printings of one card, not one printing to throw away and not two cards."""
+    from tombot.services.market_import import _card_identity
+    a = {"name": "Dark Crobat", "artist": {"name": "Shin-ichi Yoshikawa, CR CG gangs"}}
+    b = {"name": "Dark Crobat", "artist": {"name": "Shin-ichi Yoshikawa"}}
+    assert _card_identity(a) == _card_identity(b)
+
+
+def _neo_product(pid, card_id, version, artist):
+    row = _prod_row(pid, card_id, "NDE 2", "Dark Crobat", "Rare Holo")
+    row.update(episode_id=60, version=version, artist=artist)
+    return row
+
+
+def _build_neo_destiny(repo):
+    TcggoCatalog(repo).build_set({"id": 60, "code": "NDE", "name": "Neo Destiny",
+                                  "released_at": "2002-02-28", "cards_total": 113})
+
+
+def test_startup_rejoins_a_card_an_old_import_split(repo):
+    """The installed database already holds the split; fixing the rule must
+    not need a (metered) re-import to repair it. init_db does it from the
+    stored products, and the set's goal loses the phantom slot."""
+    from tombot.services.setbuilder import SetBuilder
+
+    repo.upsert_market_products([
+        _neo_product(18354, "nde-2", "1st Edition", "Shin-ichi Yoshikawa, CR CG gangs"),
+        _neo_product(49957, "nde-2-dark-crobat", "Unlimited", "Shin-ichi Yoshikawa"),
+    ])
+    _build_neo_destiny(repo)
+    repo.upsert_collection_set({"id": "nde-completo", "name": "Neo Destiny",
+                                "description": "", "group_name": None, "position": 0,
+                                "rules_json": '{"include_sets": ["nde"]}'})
+    SetBuilder(repo).build("nde-completo")
+    assert len(repo.get_set_slots("nde-completo")) == 2          # the bug
+
+    repo.init_db()
+
+    assert repo.get_card("nde-2-dark-crobat") is None
+    assert [p["version"] for p in repo.market_products_for_card("nde-2")] == \
+        ["1st Edition", "Unlimited"]
+    assert len(repo.get_set_slots("nde-completo")) == 1
+    assert repo.rejoin_split_cards()["moved"] == 0               # idempotent
+
+
+def test_startup_leaves_real_collisions_split(repo):
+    """Celebrations' Reshiram and Classic Collection Blastoise share CEL 2 with
+    different illustrators; the repair must not glue them together."""
+    rows = [_prod_row(576747, "cel-2", "CEL 2", "Reshiram", "rare"),
+            _prod_row(576771, "cel-2", "CEL 2", "Blastoise", "Classic Collection")]
+    rows[0]["artist"], rows[1]["artist"] = "Aya Kusube", "Ken Sugimori"
+    resolve_collisions(rows)
+    repo.upsert_market_products(rows)
+    TcggoCatalog(repo).build_set({"id": 35, "code": "CEL", "name": "Celebrations",
+                                  "released_at": "2021-10-08", "cards_total": 25})
+
+    repo.init_db()
+
+    assert repo.get_card("cel-2-blastoise")["name"] == "Blastoise"
+    assert repo.rejoin_split_cards()["moved"] == 0
+
+
+def test_startup_keeps_a_split_half_the_user_owns(repo):
+    """A copy filed under the phantom half keeps that card rather than being
+    deleted under the user; only pure catalogue rows are dropped."""
+    repo.upsert_market_products([
+        _neo_product(18354, "nde-2", "1st Edition", "Shin-ichi Yoshikawa, CR CG gangs"),
+        _neo_product(49957, "nde-2-dark-crobat", "Unlimited", "Shin-ichi Yoshikawa"),
+    ])
+    _build_neo_destiny(repo)
+    unlimited = repo.market_products_for_card("nde-2-dark-crobat")[0]
+    repo.upsert_collection_item({"card_id": "nde-2-dark-crobat", "variant": "holo",
+                                 "condition": "M/NM", "language": "en", "quantity": 1,
+                                 "market_product_id": unlimited["id"]})
+
+    repo.init_db()
+
+    assert repo.get_card("nde-2-dark-crobat") is not None
+    assert [p["version"] for p in repo.market_products_for_card("nde-2")] == \
+        ["1st Edition", "Unlimited"]

@@ -206,6 +206,16 @@ class PokemonRepo:
         # could hold two of them. Resolving it on start is what clears the
         # Blastoise that is a 3 in Base and a 4 in Celebrations (#76).
         self.unify_reprint_ratings()
+        # A card an earlier import split on its illustrator's co-credit is
+        # joined back from the products already stored (#108), and any goal
+        # over its set is rebuilt so the dropped half's slot goes with it.
+        rejoined = self.rejoin_split_cards()
+        if rejoined["moved"]:
+            from .setbuilder import SetBuilder
+            for cset in self.list_collection_sets():
+                rules = json.loads(cset.get("rules_json") or "{}")
+                if set(rules.get("include_sets") or []) & set(rejoined["sets"]):
+                    SetBuilder(self).build(cset["id"])
 
     @staticmethod
     def _retire_product_keyed_market_products(c) -> None:
@@ -2086,6 +2096,77 @@ class PokemonRepo:
             f"SELECT * FROM market_products WHERE id IN ({marks})",
             tuple(ids))
         return {r["id"]: r for r in rows}
+
+    def rejoin_split_cards(self) -> dict:
+        """Put back together cards an earlier import split by mistake (#108).
+
+        resolve_collisions decides once, at import, which products under one
+        code are the same card, and the answer is stored as the product's
+        card_id. A better decision only reaches a set on its next import, which
+        spends the metered allowance. The products it needs are already stored,
+        though, so this re-runs the decision over them for free: every code
+        whose products sit under more than one card_id is reset to the plain
+        id and split again, and any product the new answer files elsewhere is
+        moved there. A card left with no products goes the way any orphan does
+        (drop_orphan_cards): dropped if it is pure catalogue, kept if the user
+        put anything on it.
+
+        Idempotent — once the stored ids agree with the rule nothing moves.
+        """
+        from .tcggo_catalog import resolve_collisions
+
+        rows = self._all(
+            """SELECT id, cardmarket_id, episode_id, card_id, code, name,
+                      version, artist
+                 FROM market_products
+                WHERE (episode_id, code) IN (
+                      SELECT episode_id, code FROM market_products
+                       GROUP BY episode_id, code
+                      HAVING COUNT(DISTINCT card_id) > 1)""")
+        groups: dict[tuple, list[dict]] = {}
+        for r in rows:
+            groups.setdefault((r["episode_id"], r["code"]), []).append(r)
+
+        moves: list[tuple[dict, str]] = []
+        for group in groups.values():
+            plain = min((r["card_id"] for r in group), key=len)
+            # Only a group the splitter made — the plain id plus suffixes of it.
+            if not all(r["card_id"] == plain or r["card_id"].startswith(plain + "-")
+                       for r in group):
+                continue
+            fresh = [{**r, "card_id": plain} for r in group]
+            resolve_collisions(fresh)
+            moves += [(old, new["card_id"]) for old, new in zip(group, fresh)
+                      if new["card_id"] != old["card_id"]]
+        if not moves:
+            return {"moved": 0, "dropped": []}
+
+        vacated = {old["card_id"] for old, _ in moves}
+        sets = set()
+        with self.tx() as c:
+            for old, new_id in moves:
+                twin = c.execute(
+                    "SELECT id FROM market_products "
+                    "WHERE episode_id = ? AND card_id = ? AND version = ?",
+                    (old["episode_id"], new_id, old["version"])).fetchone()
+                if twin:
+                    # Both halves held this print run: keep the one already
+                    # there, and repoint any copy that named the other.
+                    c.execute("UPDATE collection_items SET market_product_id = ? "
+                              "WHERE market_product_id = ?", (twin["id"], old["id"]))
+                    c.execute("DELETE FROM market_products WHERE id = ?", (old["id"],))
+                else:
+                    c.execute("UPDATE market_products SET card_id = ? WHERE id = ?",
+                              (new_id, old["id"]))
+            marks = ",".join("?" * len(vacated))
+            sets = {r["official_set_id"] for r in c.execute(
+                f"SELECT DISTINCT official_set_id FROM cards WHERE id IN ({marks})",
+                tuple(vacated))}
+        dropped = [cid for s in sorted(sets) for cid in self.drop_orphan_cards(s)]
+        log.warning("rejoined %d product(s) split onto the wrong card; dropped %d "
+                    "empty card(s): %s (#108)", len(moves), len(dropped),
+                    ", ".join(dropped[:8]))
+        return {"moved": len(moves), "dropped": dropped, "sets": sorted(sets)}
 
     def drop_orphan_cards(self, set_id: str) -> list[str]:
         """Cards of a fully-imported set that no longer have a single printing.
