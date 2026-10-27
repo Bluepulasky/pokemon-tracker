@@ -151,6 +151,13 @@ details { padding: 8px 20px; }
 .set-card .name { font-weight: 600; margin-bottom: 2px; }
 .set-card .count { color: var(--fg-dim); font-size: 13px; }
 .set-card .pct { float: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* Dashboard form (#109): the count rides on the logo line, left of the %, and
+   the name sits right on the bar. The logo gives up width so both fit. */
+.set-card.compact { padding: 12px 16px; }
+.set-card.compact .set-logo { max-width: 40%; margin-bottom: 6px; }
+.set-card.compact .name { margin-bottom: 6px; }
+.set-card .pct .lead { color: var(--fg-dim); font-size: 13px; font-weight: 400;
+                       margin-right: 10px; }
 
 /* ------------------------------------------------------------ card grid */
 .toolbar {

@@ -115,11 +115,18 @@ async function dashboard() {
     ${lineChart(points)}
     ${points.length < 2 ? '<div class="note">El histórico se acumula con cada snapshot mensual.</div>' : ''}
 
+    ${d.completed.length ? `
+    <h2 style="margin-top: 16px;">Sets completos</h2>
+    <div class="set-grid">${d.completed.map((s) => setCardHtml(s,
+      `${s.owned} / ${s.target} cartas`)).join('')}</div>` : ''}
+
     <h2 style="margin-top: 16px;">Sets más completos</h2>
-    <div class="set-grid">${d.most_complete.map(setCardHtml).join('')}</div>
+    <div class="set-grid">${d.most_complete.map((s) => setCardHtml(s,
+      `${s.owned} / ${s.target} cartas`)).join('')}</div>
 
     <h2 style="margin-top: 16px;">Sets con más cartas faltantes</h2>
-    <div class="set-grid">${d.most_missing.map(setCardHtml).join('')}</div>
+    <div class="set-grid">${d.most_missing.map((s) => setCardHtml(s,
+      `faltan ${s.missing} ${s.missing === 1 ? 'carta' : 'cartas'}`)).join('')}</div>
 
     <h2 style="margin-top: 16px;">Cartas de mayor valor</h2>
     <div class="missing-list aligned">${
@@ -157,15 +164,19 @@ async function dashboard() {
   };
 }
 
-const setCardHtml = (s) => `
-  <div class="set-card" data-set="${esc(s.id)}">
+/* `lead` is the dashboard's compact form (#109): one figure beside the %, in
+   place of the count line, so each card is a row shorter. The Sets page passes
+   none and keeps the full count. */
+const setCardHtml = (s, lead) => `
+  <div class="set-card${lead ? ' compact' : ''}" data-set="${esc(s.id)}">
     <button class="set-hide" data-hide="${esc(s.id)}"
             title="Ocultar de la colección (se puede mostrar desde Mantenimiento)">×</button>
-    <span class="pct">${pct(s.completion_pct)}</span>
+    <span class="pct">${lead ? `<span class="lead">${esc(lead)}</span>` : ''}${
+      pct(s.completion_pct)}</span>
     ${s.logo_url ? `<img class="set-logo" src="${esc(s.logo_url)}" alt="" loading="lazy">` : ''}
     <div class="name">${esc(s.name)}</div>
-    <div class="count">${s.owned} / ${s.target} cartas${
-      s.missing ? ` · faltan ${s.missing}` : ''}</div>
+    ${lead ? '' : `<div class="count">${s.owned} / ${s.target} cartas${
+      s.missing ? ` · faltan ${s.missing}` : ''}</div>`}
     ${progressBar(s.owned, s.target)}
   </div>`;
 
