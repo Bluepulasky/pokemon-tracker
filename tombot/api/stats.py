@@ -29,8 +29,13 @@ def dashboard():
     copies_target = sum(p.get("copies_target") or 0 for p in progress)
     value = svc("pricing").value_collection()
 
-    by_completion = sorted(progress, key=lambda p: p["completion_pct"], reverse=True)
-    by_missing = sorted(progress, key=lambda p: p["missing"], reverse=True)
+    # A set holding every card has its own row (#109). Left in "most complete"
+    # it would sit at the top for good, and a few of them fill the row and push
+    # out the sets still being worked on.
+    completed = [p for p in progress if p["target"] and p["missing"] <= 0]
+    in_progress = [p for p in progress if not (p["target"] and p["missing"] <= 0)]
+    by_completion = sorted(in_progress, key=lambda p: p["completion_pct"], reverse=True)
+    by_missing = sorted(in_progress, key=lambda p: p["missing"], reverse=True)
 
     return jsonify({
         "unique_cards": totals["unique_cards"],
@@ -51,6 +56,7 @@ def dashboard():
         "owned_cards": owned_total,
         "value": value,
         "sets": progress,
+        "completed": completed,
         "most_complete": by_completion[:5],
         "most_missing": by_missing[:5],
         "top_value": _top_value(),

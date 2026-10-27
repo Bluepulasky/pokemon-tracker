@@ -248,3 +248,26 @@ def test_search_leaves_out_cards_from_hidden_sets(client, app):
                                     "rules_json": '{"include_sets": ["sw"]}'})
     cards = client.get("/api/search?q=muk").get_json()["cards"]
     assert [c["id"] for c in cards] == ["fo-13", "sw-56"]
+
+
+def test_a_finished_set_moves_to_its_own_dashboard_row(client, app):
+    """#109: a set holding every card is listed under `completed` and no longer
+    under `most_complete`, where it would sit at the top for good and push the
+    sets still in progress out of a five-wide row."""
+    app.repo.upsert_collection_set({"id": "solo", "name": "Solo Charizard"})
+    app.repo.replace_rule_slots("solo", [
+        {"position": 0, "label": "Charizard", "cards": ["base1-4"],
+         "display_card_id": "base1-4"}])
+    app.repo.upsert_collection_item({"card_id": "base1-4"})
+
+    d = client.get("/api/dashboard").get_json()
+    assert [s["id"] for s in d["completed"]] == ["solo"]
+    assert [s["id"] for s in d["most_complete"]] == ["mine"]
+    assert [s["id"] for s in d["most_missing"]] == ["mine"]
+    assert d["most_complete"][0]["missing"] == 2
+
+
+def test_dashboard_with_nothing_finished_has_an_empty_completed_row(client):
+    d = client.get("/api/dashboard").get_json()
+    assert d["completed"] == []
+    assert [s["id"] for s in d["most_complete"]] == ["mine"]
