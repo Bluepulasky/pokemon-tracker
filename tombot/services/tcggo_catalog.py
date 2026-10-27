@@ -63,6 +63,23 @@ def normalized_name(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", s.lower())
 
 
+def artist_key(artist: str | None) -> str:
+    """The illustrator a credit is about, for telling two products apart.
+
+    tcggo credits one card differently from one print run to the next. Every
+    Neo-era card drawn with a CGI studio reads "Shin-ichi Yoshikawa, CR CG
+    gangs" on its 1st Edition product and plain "Shin-ichi Yoshikawa" on the
+    Unlimited one, and compared whole those are two artists — which split
+    Dark Crobat (NDE 2) and 24 other Neo cards in two, one card per print run
+    (#108). So only the lead illustrator counts: the part before the first
+    "," or "&". The quote marks around a nickname go too, because tcggo sends
+    "Big Mama" Tagawa with a different number of them on every product.
+    """
+    s = (artist or "").replace('"', "")
+    s = re.split(r"[,&]", s, maxsplit=1)[0]
+    return " ".join(s.split()).lower()
+
+
 def _id_order(row: dict) -> tuple:
     """Sort key over Cardmarket ids where a missing one sorts last."""
     pid = row.get("cardmarket_id")
@@ -105,7 +122,7 @@ def resolve_collisions(rows: list[dict]) -> list[dict]:
         by_id[r["card_id"]].append(r)
 
     for cid, group in by_id.items():
-        artists = [(r.get("artist") or "").strip().lower() for r in group]
+        artists = [artist_key(r.get("artist")) for r in group]
         buckets: dict[str, list[dict]] = defaultdict(list)
         if all(artists):
             for r, artist in zip(group, artists):

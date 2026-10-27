@@ -192,10 +192,11 @@ def _card_identity(raw: dict) -> str:
     printings of a card share it and two different cards do not (#69) — and the
     name, normalised for accents and gender signs, where there is not.
     """
-    from .tcggo_catalog import normalized_name
+    from .tcggo_catalog import artist_key, normalized_name
 
-    artist = (_artist_name(raw.get("artist")) or "").strip().lower()
-    return artist or normalized_name(raw.get("name"))
+    # The same key resolve_collisions buckets on (#108), so the two never
+    # disagree about whether a co-credit makes a different card.
+    return artist_key(_artist_name(raw.get("artist"))) or normalized_name(raw.get("name"))
 
 
 def _artist_name(artist) -> str | None:
