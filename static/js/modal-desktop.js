@@ -31,8 +31,22 @@ function clearKeyNav() {
   }
 }
 
+/* Lo que se abrió por última vez, para que guardar, borrar o cambiar una foto
+   vuelva a la misma carta sin perder las flechas ni el modo reprints (#110). */
+let openState = { opts: {} };
+
+/* Reabre una carta después de un cambio. Si la carta está en la lista por la
+   que se venía navegando, vuelve con su posición; si no (se agregó una copia
+   de otra impresión), se abre sola, como antes, sin flechas que no le tocan. */
+function reopen(cardId) {
+  const { navList = [], reprints } = openState.opts;
+  const navIdx = navList.findIndex((c) => c.id === cardId);
+  openCardDesktop(cardId, navIdx >= 0 ? { ...openState.opts, navIdx } : { reprints });
+}
+
 export async function openCardDesktop(cardId, opts = {}) {
   const token = nextToken();
+  openState = { opts };
   const { navList = [], navIdx = -1 } = opts;
   const prev = navIdx > 0 ? navList[navIdx - 1] : null;
   const next = navIdx < navList.length - 1 ? navList[navIdx + 1] : null;
@@ -385,7 +399,7 @@ function wireForm(root, card) {
       }
       toast(`${card.name} añadida`);
       onChange();
-      openCardDesktop(targetCard);
+      reopen(targetCard);
     } catch (err) {
       toast(err.message, true);
       btn.disabled = false;
@@ -406,7 +420,7 @@ function wireVariants(root, cardId) {
         await api.uploadPhoto(id, fileInput.files[0]);
         toast('Foto subida');
         onChange();
-        openCardDesktop(cardId);
+        reopen(cardId);
       } catch (e) { toast(e.message, true); }
     };
 
@@ -416,7 +430,7 @@ function wireVariants(root, cardId) {
         await api.deleteItem(id);
         toast('Registro eliminado');
         onChange();
-        openCardDesktop(cardId);
+        reopen(cardId);
       } catch (e) { toast(e.message, true); }
     };
 
@@ -430,7 +444,7 @@ function wireVariants(root, cardId) {
     vc.querySelectorAll('[data-photo]').forEach((img) => {
       img.onclick = async () => {
         try { await api.setPrimary(Number(img.dataset.photo)); toast('Foto principal actualizada');
-              onChange(); openCardDesktop(cardId); }
+              onChange(); reopen(cardId); }
         catch (e) { toast(e.message, true); }
       };
     });
@@ -521,7 +535,7 @@ function editVariant(vc, id, cardId) {
   vc.querySelector('[name=manual_price]').oninput = updatePreview;
   updatePreview();
 
-  vc.querySelector('.cancel').onclick = () => openCardDesktop(cardId);
+  vc.querySelector('.cancel').onclick = () => reopen(cardId);
 
   vc.querySelector('.save').onclick = async () => {
     const typed = vc.querySelector('[name=manual_price]').value.trim();
@@ -543,7 +557,7 @@ function editVariant(vc, id, cardId) {
       toast(typed !== cur.manual && typed === '' ? 'Precio manual quitado'
                                                  : 'Actualizado');
       onChange();
-      openCardDesktop(cardId);
+      reopen(cardId);
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -687,7 +701,7 @@ function wireLightbox(root, cardId) {
           overlay.remove();
           toast(isCover ? 'Portada quitada' : 'Portada del grupo actualizada');
           onChange();
-          openCardDesktop(cardId);
+          reopen(cardId);
         } catch (e) { toast(e.message, true); }
       };
       const delBtn = overlay.querySelector('.lightbox-delete');
@@ -704,7 +718,7 @@ function wireLightbox(root, cardId) {
           overlay.remove();
           toast('Foto eliminada');
           onChange();
-          openCardDesktop(cardId);
+          reopen(cardId);
         } catch (e) {
           delBtn.disabled = false;
           toast(e.message, true);
