@@ -2138,11 +2138,24 @@ class PokemonRepo:
             resolve_collisions(fresh)
             moves += [(old, new["card_id"]) for old, new in zip(group, fresh)
                       if new["card_id"] != old["card_id"]]
-        if not moves:
+                # Cartas vacías cuyo id es el de otra carta + sufijo: la mitad que quedó
+        # sin productos. Se detectan por estado y no por lo que se movió ahora,
+        # así una limpieza que falló una vez se reintenta en el próximo arranque.
+        phantoms = self._all(
+            """SELECT c.id AS old_id, b.id AS new_id, c.official_set_id AS set_id
+                 FROM cards c
+                 JOIN cards b ON b.official_set_id = c.official_set_id
+                             AND b.name = c.name
+                             AND substr(c.id, 1, length(b.id) + 1) = b.id || '-'
+                WHERE NOT EXISTS (SELECT 1 FROM market_products mp
+                                   WHERE mp.card_id = c.id)
+                  AND EXISTS (SELECT 1 FROM market_products mp
+                               WHERE mp.card_id = b.id)""")
+        if not moves and not phantoms:
             return {"moved": 0, "dropped": []}
 
         vacated = {old["card_id"] for old, _ in moves}
-        sets = set()
+        sets = {p["set_id"] for p in phantoms}
         with self.tx() as c:
             for old, new_id in moves:
                 twin = c.execute(
@@ -2150,18 +2163,24 @@ class PokemonRepo:
                     "WHERE episode_id = ? AND card_id = ? AND version = ?",
                     (old["episode_id"], new_id, old["version"])).fetchone()
                 if twin:
-                    # Both halves held this print run: keep the one already
-                    # there, and repoint any copy that named the other.
                     c.execute("UPDATE collection_items SET market_product_id = ? "
                               "WHERE market_product_id = ?", (twin["id"], old["id"]))
                     c.execute("DELETE FROM market_products WHERE id = ?", (old["id"],))
                 else:
                     c.execute("UPDATE market_products SET card_id = ? WHERE id = ?",
                               (new_id, old["id"]))
-            marks = ",".join("?" * len(vacated))
-            sets = {r["official_set_id"] for r in c.execute(
-                f"SELECT DISTINCT official_set_id FROM cards WHERE id IN ({marks})",
-                tuple(vacated))}
+            if vacated:
+                marks = ",".join("?" * len(vacated))
+                sets |= {r["official_set_id"] for r in c.execute(
+                    f"SELECT DISTINCT official_set_id FROM cards WHERE id IN ({marks})",
+                    tuple(vacated))}
+            # Lo que el usuario puso sobre la mitad fantasma pasa a la carta que
+            # queda. Si la sobreviviente ya tiene el suyo, ese gana.
+            for p in phantoms:
+                for table in ("card_targets", "card_ratings"):
+                    c.execute(f"UPDATE OR IGNORE {table} SET card_id = ? WHERE card_id = ?",
+                              (p["new_id"], p["old_id"]))
+                    c.execute(f"DELETE FROM {table} WHERE card_id = ?", (p["old_id"],))
         dropped = [cid for s in sorted(sets) for cid in self.drop_orphan_cards(s)]
         log.warning("rejoined %d product(s) split onto the wrong card; dropped %d "
                     "empty card(s): %s (#108)", len(moves), len(dropped),
