@@ -94,9 +94,11 @@ class Config:
         "TCGGO_RAPIDAPI_HOST", "cardmarket-api-tcg.p.rapidapi.com")
     TCGGO_GAME = os.environ.get("TCGGO_GAME", "pokemon")
     TCGGO_DAILY_LIMIT = int(os.environ.get("TCGGO_DAILY_LIMIT", "40"))
-    # The freemium plan also caps requests per minute; keep just under it so a
-    # burst (a catalog sync, back-to-back set imports) throttles instead of 429ing.
-    TCGGO_PER_MINUTE_LIMIT = int(os.environ.get("TCGGO_PER_MINUTE_LIMIT", "28"))
+    # The freemium plan also caps requests per minute (30); keep well under it
+    # so a burst (a catalog sync, a price refresh's back-to-back set imports)
+    # throttles instead of 429ing. 28 still drew a 429 — the waits landed a
+    # tenth of a second from the edge — so it is half the plan's figure (#114).
+    TCGGO_PER_MINUTE_LIMIT = int(os.environ.get("TCGGO_PER_MINUTE_LIMIT", "15"))
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
     HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "5"))  # upstream 500s are routine
     HTTP_MAX_BACKOFF = int(os.environ.get("HTTP_MAX_BACKOFF", "30"))

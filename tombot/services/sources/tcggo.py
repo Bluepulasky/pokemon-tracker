@@ -46,6 +46,26 @@ VERSION_TO_KEY = {
 # Cardmarket figures, in the order we would rather have them.
 PRICE_FIELDS = ("30d_average", "7d_average", "lowest_near_mint")
 
+# How long a cached page of a set's cards may be served. Those pages are where
+# the prices come from, so they go stale in a day; everything else (the list of
+# sets, an episode lookup) lives as long as the cache's own TTL (#114).
+PRICE_PAGE_MAX_AGE_DAYS = 1
+
+
+class RateLimited(RuntimeError):
+    """The plan's per-minute cap answered 429.
+
+    Its own type so a set import can stop cleanly on it, as it does when the
+    daily allowance runs out, instead of failing like any other HTTP error. The
+    request was sent and counted, but nothing came back to store.
+    """
+
+
+def _cache_max_age(path: str, params: dict | None) -> float | None:
+    if path.endswith("/cards/search") and (params or {}).get("episode_id") is not None:
+        return PRICE_PAGE_MAX_AGE_DAYS
+    return None
+
 
 class TcggoSource:
     name = "tcggo"
@@ -70,16 +90,18 @@ class TcggoSource:
         return bool(self.api_key)
 
     # ------------------------------------------------------------------ http
-    def _get(self, path: str, params: dict | None = None) -> dict:
+    def _get(self, path: str, params: dict | None = None, fresh: bool = False) -> dict:
         """One metered request. Reserves budget first; never retries blindly.
 
         A retry is a second billable request, so a failure is reported rather
-        than quietly re-sent.
+        than quietly re-sent. `fresh` skips reading the cache — a price refresh
+        exists to fetch what the cache does not have — but still stores the
+        answer.
         """
         # The cache is consulted before the budget: a hit costs nothing, so it
         # must not consume an allowance slot or require a key.
-        if self.cache is not None:
-            hit = self.cache.get(path, params)
+        if self.cache is not None and not fresh:
+            hit = self.cache.get(path, params, max_age_days=_cache_max_age(path, params))
             if hit is not None:
                 return hit
 
@@ -92,7 +114,7 @@ class TcggoSource:
         if r.status_code == 401:
             raise RuntimeError("tcggo: the API key was rejected (401)")
         if r.status_code == 429:
-            raise RuntimeError("tcggo: rate limited by the plan (429)")
+            raise RateLimited("tcggo: rate limited by the plan (429)")
         if r.status_code >= 400:
             raise RuntimeError(f"tcggo: HTTP {r.status_code} for {path}")
         payload = r.json()

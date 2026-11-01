@@ -46,13 +46,15 @@ def create_app(config: type[Config] = Config) -> Flask:
     data_dir = getattr(config, "DATA_DIR", None)
     cache_dir = (data_dir / ".cache-tcggo"
                  if hasattr(data_dir, "__truediv__") else ".cache/tcggo")
+    # Nothing is cached forever: a set's price pages expire after a day (see
+    # TcggoSource), and the rest — set lists, episode lookups — after a month.
     tcggo = TcggoSource(config, budget=budgets["tcggo"],
-                        cache=HttpCache(cache_dir))
+                        cache=HttpCache(cache_dir, ttl_days=30))
     app.extensions["versions_source"] = tcggo
     app.extensions["source"] = tcggo
 
     # Prices are read from the imported products, so pricing needs no live
-    # source — importing a set is what fetches them.
+    # source — importing a set is what fetches them (price_refresh does that).
     app.extensions["pricing"] = PricingService(repo, config)
     app.extensions["setbuilder"] = SetBuilder(repo)
     app.extensions["jobs"] = JobRunner(app)

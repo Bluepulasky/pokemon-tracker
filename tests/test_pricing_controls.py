@@ -243,23 +243,31 @@ def test_background_job_can_reach_app_services(app):
 
 
 def test_price_refresh_job_reports_its_outcome(app, client, monkeypatch):
-    """The async refresh runs the real service and surfaces what it did."""
+    """The async refresh runs the real (networked) refresh and surfaces it.
+
+    It used to call PricingService.refresh, which fetches nothing — the button
+    re-copied September's prices for weeks (#114).
+    """
+    import tombot.services.price_refresh as price_refresh
+
     calls = []
 
-    def fake_refresh(*, all_cards=False, stale_days=None):
+    def fake_refresh(repo, source, budget, pricing):
         # svc() reads current_app: proof the context is live on the thread.
         from flask import current_app
-        calls.append((all_cards, current_app.extensions["config"] is not None))
-        return {"updated": 3}
+        calls.append((source is current_app.extensions["source"],
+                      pricing is current_app.extensions["pricing"]))
+        return {"imported": [{"episode_id": 1}], "requests": 2}
 
-    monkeypatch.setattr(app.extensions["pricing"], "refresh", fake_refresh)
+    monkeypatch.setattr(price_refresh, "refresh_prices", fake_refresh)
+    monkeypatch.setattr(app.extensions["source"], "api_key", "test-key")
 
     r = client.post("/api/prices/refresh-async")
     assert r.status_code == 202
 
     state = _await_job(client)
     assert state["status"] == "done", state["error"]
-    assert state["result"] == {"updated": 3}
+    assert state["result"] == {"imported": [{"episode_id": 1}], "requests": 2}
     assert calls == [(True, True)]
 
 

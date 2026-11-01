@@ -22,7 +22,7 @@ class _Source:
     def __init__(self, rows):
         self.rows = rows
 
-    def _get(self, path, params):
+    def _get(self, path, params, fresh=False):
         assert params["episode_id"] == EPISODE_ID
         return {"data": self.rows if params["page"] == 1 else []}
 

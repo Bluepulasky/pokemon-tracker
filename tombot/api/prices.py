@@ -33,8 +33,12 @@ def card_quotes(card_id):
 
 @bp.post("/refresh")
 def refresh():
-    """Manual trigger for the same code path the scheduler runs — important
-    because the upstream API is flaky and reruns are routine."""
+    """Re-price the collection from the prices already stored. No network.
+
+    Not what the buttons call any more: this fetches nothing, so on its own it
+    only re-copies the last import's numbers (#114). Kept because that copy is
+    still useful after a manual change to the stored products.
+    """
     body = request.get_json(silent=True) or {}
     return jsonify(svc("pricing").refresh(
         stale_days=body.get("stale_days"),
@@ -44,14 +48,24 @@ def refresh():
 
 @bp.post("/refresh-async")
 def refresh_async():
-    """Kick off a price refresh and return immediately.
+    """Fetch new prices from tcggo, as a background job.
 
-    The synchronous endpoint holds a worker for as long as the upstream takes,
-    which is minutes for a full collection.
+    The same code path the scheduler runs. A full pass is ~45 requests at 15 a
+    minute — several minutes — so it runs on the job thread and the page polls
+    for the summary.
     """
-    started, state = svc("jobs").start(
-        "prices", lambda: svc("pricing").refresh(all_cards=True))
+    started, state = svc("jobs").start("prices", _refresh_prices)
     return jsonify({"started": started, **state}), (202 if started else 409)
+
+
+def _refresh_prices() -> dict:
+    from ..services.price_refresh import refresh_prices
+
+    source = svc("versions_source")
+    if source is None or not source.configured:
+        raise RuntimeError("no hay fuente configurada (TCGGO_API_KEY)")
+    budget = (current_app.extensions.get("budgets") or {}).get("tcggo")
+    return refresh_prices(repo(), source, budget, svc("pricing"))
 
 
 @bp.get("/history")

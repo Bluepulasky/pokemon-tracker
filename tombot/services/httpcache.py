@@ -7,6 +7,12 @@ nothing.
 
 Keyed by the full request (path plus sorted params), so changing a page number
 or a filter is a different entry rather than a silent hit on the wrong data.
+
+But an entry must also *expire*. With no TTL, a set's price pages were served
+from September forever: every re-import read the same file, rewrote the same
+numbers with today's date, spent nothing and changed nothing (#114). So there is
+a default age for everything, and a caller can ask for a shorter one for data
+that moves — prices — than for data that barely does, like the list of sets.
 """
 from __future__ import annotations
 
@@ -34,12 +40,20 @@ class HttpCache:
     def _file(self, key: str) -> pathlib.Path:
         return self.dir / f"{key}.json"
 
-    def get(self, path: str, params: dict | None):
+    def get(self, path: str, params: dict | None, max_age_days: float | None = None):
+        """The stored response, or None if there is none or it is too old.
+
+        `max_age_days` can only make an entry expire sooner than the cache's own
+        TTL, never later.
+        """
         f = self._file(self.key(path, params))
         if not f.exists():
             self.misses += 1
             return None
-        if self.ttl is not None and time.time() - f.stat().st_mtime > self.ttl:
+        ttl = self.ttl
+        if max_age_days is not None:
+            ttl = min(ttl, max_age_days * 86400) if ttl is not None else max_age_days * 86400
+        if ttl is not None and time.time() - f.stat().st_mtime > ttl:
             self.misses += 1
             return None
         try:

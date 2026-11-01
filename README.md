@@ -75,8 +75,23 @@ todas las impresiones de una carta, y eso valuaba mal cada reprint.
 tcggo es **medido**: el plan cobra por request pasado un cupo diario. Toda llamada
 pasa por `RequestBudget` (`services/budget.py`), que cuenta los requests en la base
 sobre una ventana móvil de 24 h y se niega a enviar uno pasado el tope
-(`TCGGO_DAILY_LIMIT`, 40 por defecto). Además hay un límite por minuto (#50). La
+(`TCGGO_DAILY_LIMIT`, 40 por defecto). Además hay un límite por minuto (#50),
+`TCGGO_PER_MINUTE_LIMIT`, en 15: el plan permite 30 y con 28 ya hubo un 429 (#114). La
 key va en `.env` como `TCGGO_API_KEY`.
+
+Las respuestas se guardan en disco (`.cache-tcggo`) para no pagar dos veces lo mismo,
+pero **vencen**: las páginas de cartas de un set, que son las que traen precios, a
+los 1 día; el resto (listas de sets, episodios) a los 30 (#114).
+
+**Actualizar precios** (botón del dashboard y de Mantenimiento, `flask prices` y el
+scheduler) reimporta los sets ya importados, **los de precios más viejos primero**,
+saltándose la caché, y después revalúa la colección. Un pase completo de 21 sets son
+~45 consultas. Corta solo: antes de un set si no alcanza la cuota, y a mitad de un set
+si se agota o tcggo responde 429 — en ese caso **ese set no se toca** (ni se escribe
+ni se borra nada). También frena ante cualquier otro error (cada intento se paga) y si
+un set vuelve con muchos productos menos. Lo que
+no llegó queda pendiente y la próxima corrida empieza por ahí. "Última actualización"
+es la fecha del precio más nuevo guardado, no la del último click.
 
 Los sets se importan **de a uno desde Mantenimiento → Sets**. No hay bootstrap: una
 instalación nueva es un esquema vacío, y importar un set es lo que lo llena.
@@ -290,7 +305,7 @@ Todo bajo `/api`. Los blueprints se montan en `/api` (catálogo y estadísticas)
 
 ```
 flask init-db     # crea el esquema (idempotente). El arranque lo corre; no hay bootstrap.
-flask prices      # revalúa la colección desde los productos importados (local, sin red)
+flask prices      # baja precios nuevos de tcggo (reimporta sets, los más viejos primero) y revalúa
 flask snapshot    # escribe un snapshot de la colección para los gráficos de historia
 flask monthly     # precios + snapshot (lo que llama el cron)
 flask scheduler   # corre `monthly` programado, bloqueante (su propio contenedor)
@@ -317,7 +332,7 @@ necesitar edición. El puerto publicado es `8090:8080`.
 | `DATA_PATH`, `MEDIA_PATH` | dónde viven la base y las fotos en el host |
 | `PUID`, `PGID`, `TZ` | dueño de los archivos y zona horaria (`Europe/Madrid`) |
 | `APP_TOKEN` | token de acceso; no hay login. Vacío = sin auth. El navegador lo necesita una vez: `localStorage.setItem('app_token', '<valor>')` |
-| `SCHEDULER_CRON_DAY`, `SCHEDULER_CRON_HOUR` | día del mes y hora del refresco programado (por defecto día 1, 04:00) |
+| `SCHEDULER_CRON_DAY`, `SCHEDULER_CRON_HOUR` | día de la semana (APScheduler: 0 = lunes, o `mon`…`sun`) y hora del refresco programado (por defecto 1 = martes, 04:00) |
 | `SCHEDULER_RUN_ON_START` | `1` = correr también una vez al iniciar |
 | `PRICE_STALE_DAYS` | antigüedad a partir de la cual un precio se considera viejo (25) |
 | `CARDMARKET_LOCALE` | idioma de los links a Cardmarket (`es`) |
@@ -332,8 +347,9 @@ necesitar edición. El puerto publicado es `8090:8080`.
 - **Rollback:** se hace con un snapshot del sistema de archivos del host, anterior al
   cambio. Tomá uno antes de cualquier operación destructiva (reimportar sets, cambios
   de esquema, borrados masivos). _Falta documentar el comando y el dataset exactos._
-- **Refresco programado:** el contenedor `scheduler` corre `flask monthly` (precios +
-  snapshot) una vez por mes, en su propio contenedor a propósito: un planificador
+- **Refresco programado:** el contenedor `scheduler` corre la actualización de precios
+  real (la misma del botón) y un snapshot, una vez por semana (`SCHEDULER_CRON_DAY` es
+  un día de la semana para APScheduler, 0 = lunes), en su propio contenedor a propósito: un planificador
   dentro del proceso web ataría la corrida a la vida del servidor, y un reinicio a
   mitad de un refresco la perdería. Comparte con la web el mismo cupo diario, porque
   el conteo vive en la base.

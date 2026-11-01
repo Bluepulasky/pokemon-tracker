@@ -60,8 +60,13 @@ def dashboard():
         "most_complete": by_completion[:5],
         "most_missing": by_missing[:5],
         "top_value": _top_value(),
-        "last_price_refresh": r.get_meta("last_price_refresh"),
+        # The date of the newest price, not of the last click (#114).
+        "last_price_refresh": _date(r.latest_market_price_at()),
     })
+
+
+def _date(stamp: str | None) -> str | None:
+    return stamp[:10] if stamp else None
 
 
 def _top_value(limit: int = 20):
