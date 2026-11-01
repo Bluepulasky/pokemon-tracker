@@ -38,7 +38,9 @@ class PricingService:
         prices are never touched.
 
         No network: importing a set is what fetches prices, and this reads what
-        that import stored. To get fresher numbers, re-import the set.
+        that import stored. Fetching new ones is price_refresh.refresh_prices,
+        which re-imports the sets and then calls this. It does not stamp
+        last_price_refresh either — copying old numbers is not a refresh (#114).
         """
         pairs = self.repo.owned_card_variants()
         if not pairs:
@@ -73,7 +75,6 @@ class PricingService:
                 prod["price"], today)
             updated += 1
 
-        self.repo.set_meta("last_price_refresh", today)
         return {"checked": len(pairs), "updated": updated,
                 "unpriced": unpriced, "manual_kept": manual_kept}
 

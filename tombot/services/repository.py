@@ -1893,6 +1893,30 @@ class PokemonRepo:
                   "version": (r.get("version") or "").strip()} for r in rows])
         return len(rows)
 
+    def episodes_by_price_age(self) -> list[dict]:
+        """Every imported set, the one with the oldest prices first.
+
+        The order a price refresh works in, so a run the allowance cuts short
+        has still renewed the sets that needed it most, and the next run picks
+        up the rest.
+        """
+        return self._all(
+            """SELECT m.episode_id, e.name, MAX(m.updated_at) AS prices_at,
+                      COUNT(*) AS products
+                 FROM market_products m
+                 LEFT JOIN market_episodes e ON e.episode_id = m.episode_id
+                GROUP BY m.episode_id
+                ORDER BY prices_at ASC, m.episode_id""")
+
+    def latest_market_price_at(self) -> str | None:
+        """When the newest price in the database was fetched (UTC).
+
+        What "Última actualización" means: the date of the prices, not of the
+        last click on a button that may have fetched nothing (#114).
+        """
+        row = self._one("SELECT MAX(updated_at) AS at FROM market_products")
+        return row["at"] if row else None
+
     def link_products_to_cards(self, set_id: str, episode_code: str) -> int:
         """Give every product the id of the card it is a version of."""
         with self.tx() as c:
@@ -2227,7 +2251,8 @@ class PokemonRepo:
                  len(ids), set_id, ", ".join(ids[:8]))
         return ids
 
-    def prune_market_products(self, episode_id: int, keep: list[tuple[str, str]]) -> int:
+    def prune_market_products(self, episode_id: int, keep: list[tuple[str, str]],
+                              dry_run: bool = False) -> int:
         """Delete this episode's products that a fresh import did not send.
 
         An import upserts by (episode, card_id, version), so a product stored
@@ -2236,7 +2261,8 @@ class PokemonRepo:
         re-import and keep a phantom card alive next to the real one.
 
         A product an owned copy points at is kept whatever the import says: the
-        copy's printing must not vanish under it. Returns how many were removed.
+        copy's printing must not vanish under it. Returns how many were removed
+        — or, with `dry_run`, how many would be, deleting nothing.
         """
         if not keep:
             return 0
@@ -2245,7 +2271,7 @@ class PokemonRepo:
             c.execute("DELETE FROM fresh_products")
             c.executemany("INSERT INTO fresh_products VALUES (?, ?)", keep)
             cur = c.execute(
-                """DELETE FROM market_products
+                f"""{"SELECT COUNT(*)" if dry_run else "DELETE"} FROM market_products
                    WHERE episode_id = ?
                      AND NOT EXISTS (SELECT 1 FROM fresh_products f
                                      WHERE f.card_id = market_products.card_id
@@ -2253,8 +2279,9 @@ class PokemonRepo:
                      AND NOT EXISTS (SELECT 1 FROM collection_items i
                                      WHERE i.market_product_id = market_products.id)""",
                 (episode_id,))
+            n = cur.fetchone()[0] if dry_run else cur.rowcount
             c.execute("DELETE FROM fresh_products")
-        return cur.rowcount
+        return n
 
     def relink_collection_products(self) -> dict:
         """Reattach owned rows to their printing after the #68 re-import.

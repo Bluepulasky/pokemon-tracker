@@ -150,18 +150,51 @@ async function dashboard() {
     n.onclick = () => { location.hash = `#/set/${n.dataset.set}`; };
   });
   view().querySelector('#refresh-prices').onclick = async (e) => {
-    e.target.disabled = true;
-    e.target.textContent = 'Actualizando…';
-    try {
-      const r = await api.refreshPrices();
-      toast(`${r.updated} precios actualizados${r.unpriced ? `, ${r.unpriced} sin datos` : ''}`);
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = 'Actualizando…';
+    // A background job: a full pass is ~45 requests at 15 a minute (#114).
+    const done = (msg, isError) => {
+      clearInterval(window.__dashPoll);
+      toast(msg, isError);
       render();
+    };
+    try {
+      await api.refreshAsync();
     } catch (err) {
-      toast(err.message, true);
-      e.target.disabled = false;
-      e.target.textContent = 'Actualizar precios ahora';
+      btn.disabled = false;
+      btn.textContent = 'Actualizar precios ahora';
+      return toast(err.message, true);
     }
+    clearInterval(window.__dashPoll);
+    window.__dashPoll = setInterval(async () => {
+      try {
+        const job = await api.jobStatus();
+        if (job.status === 'running') return;
+        if (job.status === 'failed') return done(`No se pudo actualizar: ${job.error}`, true);
+        done(...priceSummary(job.result));
+      } catch (err) { done(err.message, true); }
+    }, 3000);
   };
+}
+
+/* What a price refresh did, for the toast: [message, isError]. Says plainly
+   when nothing was fetched, which the old button never did (#114). */
+function priceSummary(r) {
+  if (!r || !r.imported) return ['Tarea terminada', false];
+  const why = { budget: 'se acabó la cuota', rate_limited: 'tcggo pidió esperar',
+                prune_held: 'un set vino incompleto, revisalo',
+                error: `falló ${r.failed[0]?.name || 'un set'}` }[r.stopped];
+  if (!r.imported.length) {
+    return [`No se actualizó ningún precio${why ? `: ${why}` : ''}`, true];
+  }
+  const n = r.imported.length;
+  const parts = [n === 1 ? '1 set actualizado' : `${n} sets actualizados`,
+                 `${r.requests} consultas`];
+  if (r.pending.length) parts.push(`${r.pending.length} pendientes`);
+  if (r.failed.length) parts.push(`${r.failed.length} fallaron`);
+  parts.push(`quedan ${r.remaining}`);
+  return [parts.join(' · ') + (why ? ` (${why})` : ''), Boolean(r.stopped || r.failed.length)];
 }
 
 /* `lead` is the dashboard's compact form (#109): one figure beside the %, in
@@ -1153,8 +1186,9 @@ async function mantenimiento() {
     <div class="stat-grid">
       <div class="stat">
         <div class="k">Actualizar precios</div>
-        <div class="note">Vuelve a consultar el precio de cada impresión que tenés.
-          Los precios manuales no se tocan.</div>
+        <div class="note">Baja de tcggo los precios de los sets importados,
+          los más viejos primero. Gasta ~2 consultas por set; si se acaba la
+          cuota, sigue la próxima vez. Los precios manuales no se tocan.</div>
         <div class="btn-row"><button class="btn primary" id="do-prices">Actualizar precios ahora</button></div>
       </div>
       <div class="stat">
@@ -1593,8 +1627,9 @@ function pollJob() {
       renderJob(job);
       if (job.status !== 'running') {
         clearInterval(window.__jobPoll);
-        toast(job.status === 'done' ? 'Tarea terminada' : `Tarea fallida: ${job.error}`,
-              job.status !== 'done');
+        if (job.status === 'done' && job.name === 'prices') toast(...priceSummary(job.result));
+        else toast(job.status === 'done' ? 'Tarea terminada' : `Tarea fallida: ${job.error}`,
+                   job.status !== 'done');
       }
     } catch { clearInterval(window.__jobPoll); }
   }, 3000);

@@ -20,10 +20,25 @@ from __future__ import annotations
 import logging
 
 from .budget import BudgetExhausted
+from .sources.tcggo import RateLimited
 
 log = logging.getLogger(__name__)
 
 PAGE_SIZE = 100          # the documented maximum; the default of 20 is 5x the cost
+
+
+class ImportInterrupted(RuntimeError):
+    """A set stopped partway: the allowance ran out or the plan answered 429.
+
+    Raised before anything is written. Storing the pages that did arrive and
+    then pruning against them would delete every product on the pages that did
+    not — half a set imported is worse than the set left as it was (#114).
+    """
+
+    def __init__(self, episode_id: int, reason: str, page: int, requests: int):
+        self.episode_id, self.reason, self.page, self.requests = (
+            episode_id, reason, page, requests)
+        super().__init__(f"episode {episode_id} stopped at page {page}: {reason}")
 
 
 class MarketImporter:
@@ -32,19 +47,34 @@ class MarketImporter:
         self.source = source
         self.budget = budget
 
-    def import_episode(self, episode_id: int) -> dict:
-        """Every product in one set, 100 per request."""
+    def import_episode(self, episode_id: int, fresh: bool = False,
+                       max_prune: int | None = None) -> dict:
+        """Every product in one set, 100 per request.
+
+        `fresh` fetches past the cache, for a price refresh. `max_prune` holds
+        back the clean-up when a fresh import would remove more products than
+        that: a set that suddenly comes back much shorter is more likely a bad
+        answer upstream than cards leaving Cardmarket, so its prices are stored
+        but nothing is deleted, and `prune_held` says how many would have gone.
+        """
         rows, page, spent_before = [], 1, self._used()
         while page <= 60:                      # a set is never this large
             try:
                 payload = self.source._get(
                     f"/{self.source.game}/cards/search",
                     {"episode_id": episode_id, "page": page,
-                     "per_page": PAGE_SIZE, "sort": "card_number_lowest"})
+                     "per_page": PAGE_SIZE, "sort": "card_number_lowest"},
+                    fresh=fresh)
             except BudgetExhausted:
                 log.warning("episode %s stopped at page %d: allowance spent",
                             episode_id, page)
-                break
+                raise ImportInterrupted(episode_id, "budget", page,
+                                        self._used() - spent_before) from None
+            except RateLimited:
+                log.warning("episode %s stopped at page %d: rate limited (429)",
+                            episode_id, page)
+                raise ImportInterrupted(episode_id, "rate_limited", page,
+                                        self._used() - spent_before) from None
             batch = payload.get("data") or []
             if not batch:
                 break
@@ -69,10 +99,18 @@ class MarketImporter:
         resolve_collisions(product_rows)
         stored = self.repo.upsert_market_products(product_rows)
         # The set arrives whole, so whatever this import did not send is stale.
-        pruned = self.repo.prune_market_products(
-            episode_id, [(r["card_id"], r["version"]) for r in product_rows])
+        keep = [(r["card_id"], r["version"]) for r in product_rows]
+        held = 0
+        if max_prune is not None:
+            would = self.repo.prune_market_products(episode_id, keep, dry_run=True)
+            if would > max_prune:
+                log.warning("episode %s: holding back pruning %d products "
+                            "(more than %d)", episode_id, would, max_prune)
+                held = would
+        pruned = 0 if held else self.repo.prune_market_products(episode_id, keep)
         return {"episode_id": episode_id, "fetched": len(rows), "stored": stored,
-                "pruned": pruned, "requests": self._used() - spent_before}
+                "pruned": pruned, "prune_held": held,
+                "requests": self._used() - spent_before}
 
     def import_sets(self, official_set_ids, episode_for_set) -> dict:
         """Import each set, stopping while there is still allowance to stop with.
@@ -89,7 +127,12 @@ class MarketImporter:
             if self.budget is not None and not self.budget.can_afford(6):
                 skipped.append({"set": set_id, "why": "allowance too low; will resume"})
                 continue
-            result = self.import_episode(episode_id)
+            try:
+                result = self.import_episode(episode_id)
+            except ImportInterrupted as e:
+                requests += e.requests
+                skipped.append({"set": set_id, "why": f"stopped ({e.reason}); will resume"})
+                continue
             requests += result["requests"]
             done.append({"set": set_id, **result})
         return {"imported": done, "skipped": skipped, "requests": requests}

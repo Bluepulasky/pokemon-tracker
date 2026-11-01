@@ -38,7 +38,7 @@ def meta():
         "ratings": [{"value": v, "label": lbl} for v, lbl in
                     sorted(RATING_LABELS.items())],
         "official_sets": r.list_official_sets(),
-        "last_price_refresh": r.get_meta("last_price_refresh"),
+        "last_price_refresh": (r.latest_market_price_at() or "")[:10] or None,
         "version": __import__("tombot.version", fromlist=["get_version"]).get_version(),
     })
 
@@ -390,7 +390,7 @@ def list_episodes():
 @bp.post("/maintenance/episodes/<int:episode_id>/import")
 def import_episode(episode_id):
     """Bring one set in: its products, its cards, and the set itself."""
-    from ..services.market_import import MarketImporter
+    from ..services.market_import import ImportInterrupted, MarketImporter
     from ..services.tcggo_catalog import TcggoCatalog
 
     # What is being asked for is settled before whether we could serve it: both
@@ -421,7 +421,15 @@ def import_episode(episode_id):
             f"Probá de nuevo cuando se libere la cuota.", "budget", 429)
 
     importer = MarketImporter(repo(), source, budget)
-    result = importer.import_episode(episode_id)
+    try:
+        result = importer.import_episode(episode_id)
+    except ImportInterrupted as e:
+        # Nothing was written: the set stays as it was before the click.
+        why = ("se acabó la cuota del día" if e.reason == "budget"
+               else "tcggo pidió esperar un minuto (429)")
+        raise ApiError(f"la importación se cortó en la página {e.page}: {why}. "
+                       f"No se cambió nada del set; probá de nuevo más tarde.",
+                       "budget", 429) from None
     built = TcggoCatalog(repo()).build_set({
         "id": episode_id, "code": episode["code"], "name": episode["name"],
         "released_at": episode["released_at"], "logo": episode["logo"],
