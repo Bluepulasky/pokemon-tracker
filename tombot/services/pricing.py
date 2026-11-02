@@ -78,6 +78,27 @@ class PricingService:
         return {"checked": len(pairs), "updated": updated,
                 "unpriced": unpriced, "manual_kept": manual_kept}
 
+    def price_one(self, card_id: str, variant: str, product_id: int | None) -> bool:
+        """Price one printing from the product it names. No network.
+
+        The single-pair version of what refresh() does in its loop, so a copy
+        saved a minute ago is not "sin precio" until the next full copy runs.
+        """
+        if not product_id or self.repo.get_price(card_id, variant, source="manual"):
+            return False
+        prod = self.repo.market_products_by_ids([product_id]).get(product_id)
+        if not prod or prod.get("price") is None:
+            return False
+        cur = prod.get("currency") or "EUR"
+        self.repo.upsert_price(
+            card_id, variant, "cardmarket", cur, prod["price"], prod.get("price_low"),
+            None, prod.get("price_avg30"), dict(prod),
+            variant_key=prod.get("version"), market_product_id=product_id)
+        self.repo.append_price_history(
+            card_id, variant, "cardmarket", cur, prod["price"],
+            date.today().isoformat())
+        return True
+
     # -------------------------------------------------------------- estimate
     def estimate_item(self, item: dict, modifiers: dict | None = None) -> dict:
         """Estimated value of one collection row, including quantity.

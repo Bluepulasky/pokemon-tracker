@@ -845,7 +845,7 @@ class PokemonRepo:
 
     def update_collection_item(self, item_id: int, fields: dict) -> dict | None:
         allowed = {"variant", "condition", "language", "quantity",
-                   "printing_id", "notes", "first_edition"}
+                   "printing_id", "notes", "first_edition", "market_product_id"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return self.get_collection_item(item_id)
@@ -1893,20 +1893,30 @@ class PokemonRepo:
                   "version": (r.get("version") or "").strip()} for r in rows])
         return len(rows)
 
-    def episodes_by_price_age(self) -> list[dict]:
+    def episodes_by_price_age(self, min_age_hours: float = 0) -> list[dict]:
         """Every imported set, the one with the oldest prices first.
 
         The order a price refresh works in, so a run the allowance cuts short
         has still renewed the sets that needed it most, and the next run picks
         up the rest.
+
+        `min_age_hours` leaves out the sets whose newest price is younger than
+        that: re-fetching them spends requests on numbers that have not moved.
+        With 0 (the default) nothing is left out.
         """
+        having, params = "", []
+        if min_age_hours and min_age_hours > 0:
+            having = "HAVING MAX(m.updated_at) < datetime('now', ?)"
+            params.append(f"-{min_age_hours} hours")
         return self._all(
-            """SELECT m.episode_id, e.name, MAX(m.updated_at) AS prices_at,
-                      COUNT(*) AS products
-                 FROM market_products m
-                 LEFT JOIN market_episodes e ON e.episode_id = m.episode_id
-                GROUP BY m.episode_id
-                ORDER BY prices_at ASC, m.episode_id""")
+            f"""SELECT m.episode_id, e.name, MAX(m.updated_at) AS prices_at,
+                       COUNT(*) AS products
+                  FROM market_products m
+                  LEFT JOIN market_episodes e ON e.episode_id = m.episode_id
+                 GROUP BY m.episode_id
+                 {having}
+                 ORDER BY prices_at ASC, m.episode_id""",
+            params)
 
     def latest_market_price_at(self) -> str | None:
         """When the newest price in the database was fetched (UTC).

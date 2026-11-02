@@ -36,16 +36,11 @@ log = logging.getLogger(__name__)
 SET_COST = 6
 # More removals than this from a single set means something upstream is off.
 MAX_PRUNE = 10
+# price_refresh.py
+MIN_AGE_HOURS = 48
 
-
-def refresh_prices(repo, source, budget, pricing) -> dict:
-    """Re-import every imported set that the allowance reaches, then re-price.
-
-    Returns a summary meant to be read by a person: which sets were imported,
-    the requests spent, what is still pending, the allowance left, and why the
-    run stopped, if it did.
-    """
-    episodes = repo.episodes_by_price_age()
+def refresh_prices(repo, source, budget, pricing, min_age_hours=MIN_AGE_HOURS) -> dict:
+    episodes = repo.episodes_by_price_age(min_age_hours=min_age_hours)
     used_before = budget.used() if budget is not None else 0
     log.info("price refresh: %d sets to renew, %s requests left", len(episodes),
              budget.remaining() if budget is not None else "unlimited")
@@ -83,7 +78,7 @@ def refresh_prices(repo, source, budget, pricing) -> dict:
             pending = episodes[i + 1:]
             break
 
-    priced = pricing.refresh() if imported else None
+    priced = pricing.refresh()                    # sin red: cubre variantes recién agregadas
     if imported:
         # Only a run that actually fetched something counts as a refresh.
         repo.set_meta("last_price_refresh", date.today().isoformat())
@@ -97,9 +92,10 @@ def refresh_prices(repo, source, budget, pricing) -> dict:
         "remaining": budget.remaining() if budget is not None else None,
         "stopped": stopped,
         "priced": priced,
+        "up_to_date": not episodes,        # todo dentro del umbral
+        "min_age_hours": min_age_hours,
     }
-    log.info("price refresh: %d imported, %d failed, %d pending, %s requests "
-             "spent, %s left%s", len(imported), len(failed), len(pending),
-             summary["requests"], summary["remaining"],
-             f", stopped ({stopped})" if stopped else "")
+    log.info("price refresh: %d sets older than %sh to renew, %s requests left",
+             len(episodes), min_age_hours,
+             budget.remaining() if budget is not None else "unlimited")
     return summary

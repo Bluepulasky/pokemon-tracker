@@ -182,6 +182,9 @@ async function dashboard() {
    when nothing was fetched, which the old button never did (#114). */
 function priceSummary(r) {
   if (!r || !r.imported) return ['Tarea terminada', false];
+  if (r.up_to_date) {
+    return [`Todo al día: ningún set tiene precios de más de ${r.min_age_hours ?? 48} h`, false];
+  }
   const why = { budget: 'se acabó la cuota', rate_limited: 'tcggo pidió esperar',
                 prune_held: 'un set vino incompleto, revisalo',
                 error: `falló ${r.failed[0]?.name || 'un set'}` }[r.stopped];

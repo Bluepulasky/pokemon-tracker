@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from . import cfg, paginate_args, repo, svc
 from .. import ApiError
@@ -75,7 +75,17 @@ def _rating_arg(name: str) -> int | None:
         raise ApiError(f"{name} debe estar entre 0 y {MAX_RATING}", "invalid_rating")
     return value
 
-
+def _price_now(item: dict | None) -> None:
+    """Copy the stored price onto a copy that was just saved. Never blocks the save."""
+    if not item:
+        return
+    try:
+        svc("pricing").price_one(item["card_id"], item["variant"],
+                                 item.get("market_product_id"))
+    except Exception:                                    # noqa: BLE001
+        current_app.logger.warning("could not price %s/%s on save",
+                                   item.get("card_id"), item.get("variant"),
+                                   exc_info=True)
 def _priced(rows):
     pricing = svc("pricing")
     mods = repo().get_modifiers()
@@ -223,6 +233,7 @@ def add_item():
     # instead of creating a duplicate that would double the physical count.
     mode = body.get("mode", "add")
     item = repo().upsert_collection_item(body, mode=mode)
+    _price_now(item)
     # The rank belongs to the card, so a rating sent with a collection write is
     # applied there. Kept working rather than rejected: it is a natural thing to
     # send when registering a card you already have an opinion about.
@@ -241,8 +252,12 @@ def update_item(item_id):
     current = repo().get_collection_item(item_id)
     if "_rating" in body:
         repo().set_card_rating(current["card_id"], body["_rating"])
-    return jsonify(repo().update_collection_item(item_id, body))
-
+    updated = repo().update_collection_item(item_id, body)
+    # Quantity and condition do not change the printing's price (the multipliers
+    # apply at valuation time); a new variant or product does.
+    if updated and ("variant" in body or "market_product_id" in body):
+        _price_now(updated)
+    return jsonify(updated)
 
 @bp.delete("/<int:item_id>")
 def delete_item(item_id):
