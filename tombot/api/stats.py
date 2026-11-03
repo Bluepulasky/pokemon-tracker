@@ -28,6 +28,13 @@ def dashboard():
     copies_held = sum(p.get("copies_held") or 0 for p in progress)
     copies_target = sum(p.get("copies_target") or 0 for p in progress)
     value = svc("pricing").value_collection()
+    official_of = {r["id"]: r["official_id"] for r in r._all(
+        "SELECT id, json_extract(rules_json, '$.include_sets[0]') AS official_id "
+        "FROM collection_sets")}
+    by_set = value.get("by_official_set", {})
+    for p in progress:
+        oid = official_of.get(p["id"])
+        p["value_eur"] = by_set.get(oid, 0.0) if oid else None
 
     # A set holding every card has its own row (#109). Left in "most complete"
     # it would sit at the top for good, and a few of them fill the row and push
@@ -43,8 +50,7 @@ def dashboard():
         "unique_pokemon": totals["unique_pokemon"],
         "unique_pokemon_target": totals["unique_pokemon_target"],
         "sets_total": len(progress),
-        "sets_complete": sum(1 for p in progress
-                             if p["target"] and p.get("complete") == p["target"]),
+        "sets_complete": len(completed),
         # Unique completion: do I have the card at all.
         "completion_pct": round(100.0 * owned_total / target_total, 1) if target_total else 0.0,
         # Copy completion: do I have as many as I set out to.

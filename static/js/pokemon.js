@@ -1156,7 +1156,7 @@ function itemHtml(i) {
   // reprint you own, which is the split all over again.
   const grouped = (i.group_card_ids?.length ?? 0) > 1;
   const price = v.total != null ? `${v.partial ? '≥' : ''}${eur(v.total)}` : '';
-  const shortId = (id) => id.split('-').slice(0, 2).join('-').toUpperCase();
+  const shortId = (id) => String(id || '').split('-').slice(0, 2).join('-').toUpperCase();
   return `<div class="card${owned ? '' : ' missing'}" data-card="${esc(i.card_id)}"
      data-name="${esc(i.name || i.label || '')}" data-number="${esc(i.number || '')}"
      ${grouped ? 'data-reprints="1"' : ''}>
