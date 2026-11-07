@@ -703,7 +703,7 @@ async function collection(r) {
     'wp-completo': 'wp',
     'fo-completo': 'fo',
     'tr-completo': 'tr',
-    'gh-completo': 'b2',
+    'gh-completo': 'gh',
     'gc-completo': 'gc',
     'ng-completo': 'ng',
     'nd-completo': 'nd',
